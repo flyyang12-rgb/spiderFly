@@ -173,11 +173,29 @@ class FeishuNotifier:
         duration_ms: int,
         error_summary: str,
         image_bytes: bytes | None,
+        result_code: str = "",
+        manual_action_url: str = "",
+        manual_code: str = "",
     ) -> None:
         content_rows: list[list[dict[str, str]]] = [
             [{"tag": "text", "text": f"❌「{task_name}」运行失败｜耗时 {format_duration(duration_ms)}"}],
             [{"tag": "text", "text": f"错误：{error_summary[:900]}"}],
         ]
+        if result_code:
+            content_rows.append(
+                [{"tag": "text", "text": f"结果编码：{result_code[:64]}"}]
+            )
+        if manual_code:
+            content_rows.append(
+                [{"tag": "text", "text": f"人工处理编码：{manual_code[:200]}"}]
+            )
+        if manual_action_url:
+            content_rows.append(
+                [
+                    {"tag": "text", "text": "人工处理："},
+                    {"tag": "a", "href": manual_action_url[:2000], "text": "打开处理页面"},
+                ]
+            )
         if image_bytes:
             image_key = self._upload_image(image_bytes)
             content_rows.append([{"tag": "img", "image_key": image_key}])
@@ -200,6 +218,9 @@ class FeishuNotifier:
         status: str,
         duration_ms: int,
         error_summary: str = "",
+        result_code: str = "",
+        manual_action_url: str = "",
+        manual_code: str = "",
         image_bytes: bytes | None = None,
     ) -> None:
         if not self.configured:
@@ -214,6 +235,9 @@ class FeishuNotifier:
             duration_ms,
             error_summary or "程序异常结束",
             image_bytes,
+            result_code,
+            manual_action_url,
+            manual_code,
         )
 
 
@@ -246,4 +270,3 @@ def capture_active_window_jpeg() -> bytes | None:
         return value if 0 < len(value) <= 10 * 1024 * 1024 else None
     except Exception:
         return None
-
