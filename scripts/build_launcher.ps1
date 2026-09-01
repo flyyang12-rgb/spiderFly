@@ -8,7 +8,7 @@ $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $sourcePath = Join-Path $projectRoot 'launcher\SpiderFlyLauncher.cs'
 
 if (-not (Test-Path -LiteralPath $sourcePath -PathType Leaf)) {
-    throw "没有找到启动器源码：$sourcePath"
+    throw "Launcher source was not found: $sourcePath"
 }
 
 if ([string]::IsNullOrWhiteSpace($OutputPath)) {
@@ -18,7 +18,7 @@ if ([string]::IsNullOrWhiteSpace($OutputPath)) {
 }
 $OutputPath = [System.IO.Path]::GetFullPath($OutputPath)
 if ((Split-Path -Parent $OutputPath) -ne $projectRoot) {
-    Write-Warning '该 EXE 不在 SpiderFly 项目根目录，只适合编译验证；实际运行时请使用默认输出位置。'
+    Write-Warning 'This EXE is outside the SpiderFly project root and is only suitable for build verification. Use the default output path for normal operation.'
 }
 
 $compilerCandidates = @(
@@ -36,7 +36,7 @@ if (-not $compiler) {
     }
 }
 if (-not $compiler) {
-    throw '本机没有找到可用的 C# 编译器，未生成 SpiderFly.exe。'
+    throw 'No compatible C# compiler was found. SpiderFly.exe was not generated.'
 }
 
 $outputDirectory = Split-Path -Parent $OutputPath
@@ -55,15 +55,15 @@ $compilerArguments = @(
     $sourcePath
 )
 
-Write-Host '[SpiderFly] 正在编译轻量 Windows 启动器……' -ForegroundColor Cyan
+Write-Host '[SpiderFly] Building the lightweight Windows launcher...' -ForegroundColor Cyan
 & $compiler @compilerArguments
 if ($LASTEXITCODE -ne 0) {
-    throw "启动器编译失败，C# 编译器退出码：$LASTEXITCODE"
+    throw "Launcher compilation failed. C# compiler exit code: $LASTEXITCODE"
 }
 if (-not (Test-Path -LiteralPath $OutputPath -PathType Leaf)) {
-    throw "编译器没有生成预期文件：$OutputPath"
+    throw "The compiler did not create the expected file: $OutputPath"
 }
 
 $item = Get-Item -LiteralPath $OutputPath
-Write-Host '[SpiderFly] 启动器已经生成：' -ForegroundColor Green
-Write-Host ("  {0} ({1:N0} 字节)" -f $item.FullName, $item.Length) -ForegroundColor Green
+Write-Host '[SpiderFly] Launcher generated:' -ForegroundColor Green
+Write-Host ("  {0} ({1:N0} bytes)" -f $item.FullName, $item.Length) -ForegroundColor Green

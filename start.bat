@@ -13,16 +13,26 @@ echo [SpiderFly] 正在检查后端依赖...
 ".venv\Scripts\python.exe" -m pip install --disable-pip-version-check -q -r backend\requirements.txt
 if errorlevel 1 goto :failed
 
-pushd frontend
-if not exist "node_modules" (
-  echo [SpiderFly] 正在安装前端依赖...
-  call npm install
+if exist "frontend\dist\index.html" (
+  echo [SpiderFly] 使用仓库自带的已构建管理页面。
+) else (
+  where npm >nul 2>nul
+  if errorlevel 1 (
+    echo [SpiderFly] 未检测到 npm，且 frontend\dist\index.html 不存在。
+    echo [SpiderFly] 请安装 Node.js/npm，或补齐仓库自带的 frontend\dist 后重试。
+    goto :failed
+  )
+  pushd frontend
+  if not exist "node_modules" (
+    echo [SpiderFly] 正在安装前端依赖...
+    call npm install
+    if errorlevel 1 goto :frontend_failed
+  )
+  echo [SpiderFly] 正在构建管理页面...
+  call npm run build
   if errorlevel 1 goto :frontend_failed
+  popd
 )
-echo [SpiderFly] 正在构建管理页面...
-call npm run build
-if errorlevel 1 goto :frontend_failed
-popd
 
 set "ENV_HOST="
 set "ENV_PORT="
