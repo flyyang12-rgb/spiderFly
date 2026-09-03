@@ -36,7 +36,10 @@ def _bounded_int(name: str, default: int, minimum: int, maximum: int) -> int:
 
 
 def _resolved_path(name: str, default: Path) -> Path:
-    return Path(os.getenv(name, str(default))).expanduser().resolve()
+    configured = Path(os.getenv(name, str(default))).expanduser()
+    if not configured.is_absolute():
+        configured = PROJECT_ROOT / configured
+    return configured.resolve()
 
 
 DATA_DIR = _resolved_path("SPIDERFLY_DATA_DIR", PROJECT_ROOT / "data")

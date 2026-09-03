@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import codecs
 import logging
 import os
 import subprocess
@@ -56,12 +57,18 @@ async def _consume_stream(
 ) -> None:
     if stream is None:
         return
+    decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
     while True:
-        chunk = await stream.readline()
+        # A script may print a whole JSON response without any newline.
+        chunk = await stream.read(16 * 1024)
         if not chunk:
             break
-        text = chunk.decode("utf-8", errors="replace")
-        await asyncio.to_thread(append_execution_output, execution_id, field, text)
+        text = decoder.decode(chunk)
+        if text:
+            await asyncio.to_thread(append_execution_output, execution_id, field, text)
+    tail = decoder.decode(b"", final=True)
+    if tail:
+        await asyncio.to_thread(append_execution_output, execution_id, field, tail)
 
 
 def _notification_enabled(task: dict[str, Any], status: str) -> bool:

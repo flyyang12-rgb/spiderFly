@@ -45,6 +45,13 @@ from .environments import (
     runtime_ready,
 )
 from .feishu import FeishuSettings
+from .execution_artifacts import (
+    MAX_PATH_CHARS,
+    TERMINAL_STATUSES,
+    ArtifactDownloadResponse,
+    list_artifacts,
+    open_artifact,
+)
 from .host_runtime import HostRuntimeError, check_host_busy, clear_work_directory
 from .instance_lock import InstanceLock, acquire_instance_lock
 from .runner import run_execution
@@ -884,7 +891,12 @@ def update_task(
             detail="任务不能更换程序；请删除后上传新程序并重新创建",
         )
     try:
-        app_item, script, python_path = app_runtime(final_app_id)
+        if values == {"enabled": False}:
+            # Stopping a schedule must remain possible when its environment is broken.
+            app_item = {"name": current["app_name"]}
+            script, python_path = current["script_path"], current["python_path"]
+        else:
+            app_item, script, python_path = app_runtime(final_app_id)
         final_enabled = bool(values.get("enabled", current["enabled"]))
         final_trigger_type = values.get("trigger_type", current["trigger_type"])
         final_trigger_config = values.get(
@@ -933,7 +945,7 @@ def update_task(
                 raise HTTPException(status_code=409, detail="任务已被其他伙伴修改，请刷新后重试")
             if values.get("enabled") == 0:
                 now = utc_now()
-                conn.execute(
+                cancelled = conn.execute(
                     """
                     UPDATE executions
                     SET status = 'cancelled', ended_at = ?, error_message = '任务停用，已取消排队'
@@ -941,6 +953,11 @@ def update_task(
                     """,
                     (now, task_id),
                 )
+                if cancelled.rowcount:
+                    conn.execute(
+                        "UPDATE tasks SET last_status = 'cancelled' WHERE id = ?",
+                        (task_id,),
+                    )
     except sqlite3.IntegrityError as exc:
         raise HTTPException(status_code=409, detail="任务名称已存在") from exc
 
@@ -1104,7 +1121,48 @@ def get_execution(
     item.pop("python_path_snapshot", None)
     if item.get("retryable") is not None:
         item["retryable"] = bool(item["retryable"])
+    item["artifacts"] = (
+        list_artifacts(execution_id)
+        if item["status"] in TERMINAL_STATUSES
+        else {"files": [], "truncated": False, "error": ""}
+    )
     return item
+
+
+@app.api_route(
+    "/api/executions/{execution_id}/artifacts/download", methods=["GET", "HEAD"]
+)
+def download_execution_artifact(
+    execution_id: int,
+    request: Request,
+    path: str = Query(min_length=1, max_length=MAX_PATH_CHARS),
+    user: dict = Depends(ready_user),
+) -> Response:
+    del user
+    item = fetch_one(
+        """
+        SELECT e.status FROM executions e
+        JOIN tasks t ON t.id = e.task_id WHERE e.id = ?
+        """,
+        (execution_id,),
+    )
+    if not item:
+        raise HTTPException(status_code=404, detail="执行记录不存在")
+    if item["status"] not in TERMINAL_STATUSES:
+        raise HTTPException(status_code=409, detail="运行结束后才可下载文件")
+    try:
+        stream = open_artifact(execution_id, path)
+        try:
+            response = ArtifactDownloadResponse(stream, path.rsplit("/", 1)[-1])
+        except BaseException:
+            stream.close()
+            raise
+    except (ValueError, OSError):
+        raise HTTPException(status_code=404, detail="文件不存在或不可下载") from None
+    if request.method == "HEAD":
+        stream.close()
+        return Response(headers=dict(response.headers))
+    return response
 
 
 FRONTEND_DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"

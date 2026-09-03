@@ -26,4 +26,13 @@ Thumbs.db
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-release/
+/release/*
+!/release/instructions/
+/release/instructions/*
+!/release/instructions/spiderfly_instructions-0.1.0-py3-none-any.whl
+!/release/instructions/spiderfly_instructions-0.1.1-py3-none-any.whl
+!/release/instructions/spiderfly_instructions-0.1.2-py3-none-any.whl
+!/release/instructions/spiderfly_instructions-0.1.3-py3-none-any.whl
+!/release/instructions/spiderfly_instructions-0.1.4-py3-none-any.whl
+/backend/build/
+/backend/*.egg-info/

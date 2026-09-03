@@ -13,7 +13,7 @@ from unittest.mock import patch
 from fastapi import HTTPException
 from starlette.datastructures import UploadFile
 
-from app import database, environments, execution_results, main
+from app import database, environments, execution_artifacts, execution_results, main
 from app.schemas import TaskPayload
 
 
@@ -35,6 +35,7 @@ class ManagedAppApiTests(unittest.TestCase):
                 patch.object(environments, "RPA_APPS_DIR", apps_root),
                 patch.object(environments, "RPA_ENVS_DIR", envs_root),
                 patch.object(execution_results, "EXECUTIONS_DIR", executions_root),
+                patch.object(execution_artifacts, "EXECUTIONS_DIR", executions_root),
             ):
                 database.init_db()
                 now = database.utc_now()

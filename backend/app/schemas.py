@@ -67,6 +67,24 @@ class TaskPatch(BaseModel):
     notify_on_failure: bool | None = None
     version: int | None = Field(default=None, ge=1)
 
+    @field_validator("*", mode="before")
+    @classmethod
+    def reject_explicit_null(cls, value: Any) -> Any:
+        # Omitted fields keep their defaults; none of the stored fields is nullable.
+        if value is None:
+            raise ValueError("修改字段不能为 null；不修改的字段请省略")
+        return value
+
+    @field_validator("name")
+    @classmethod
+    def strip_required(cls, value: str) -> str:
+        return TaskPayload.strip_required(value)
+
+    @field_validator("description")
+    @classmethod
+    def strip_optional(cls, value: str) -> str:
+        return value.strip()
+
     @field_validator("timeout_seconds")
     @classmethod
     def normalize_optional_timeout(cls, value: int | None) -> int | None:

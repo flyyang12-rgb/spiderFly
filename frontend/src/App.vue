@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 
 const API = '/api'
 const baseNavItems = [
@@ -47,6 +47,7 @@ const settings = ref({})
 const taskModalOpen = ref(false)
 const editingTask = ref(null)
 const detail = ref(null)
+const artifactDownload = reactive({ busy: false, path: '', message: '', error: false })
 const deletingTask = ref(null)
 const changePasswordOpen = ref(false)
 const saving = ref(false)
@@ -72,6 +73,8 @@ const taskForm = reactive({
 
 let toastTimer = 0
 let pollTimer = 0
+let artifactDownloadController = null
+let artifactDownloadGeneration = 0
 
 const isAdmin = computed(() => me.value?.role === 'admin')
 const navItems = computed(() => isAdmin.value ? [...baseNavItems, ...adminNavItems] : baseNavItems)
@@ -82,6 +85,8 @@ const queuedExecutions = computed(() => executions.value
   .filter((item) => item.status === 'pending')
   .sort((a, b) => (a.queue_position ?? 999999) - (b.queue_position ?? 999999)))
 const completedExecutions = computed(() => executions.value.filter((item) => !['pending', 'running'].includes(item.status)))
+const detailFinished = computed(() => ['success', 'failed', 'timeout', 'cancelled'].includes(detail.value?.status))
+const artifactFiles = computed(() => Array.isArray(detail.value?.artifacts?.files) ? detail.value.artifacts.files : [])
 const manualTasks = computed(() => tasks.value.filter((task) => task.enabled && task.trigger_type === 'manual'))
 const taskScheduleDays = computed(() => {
   const todayKey = shanghaiDateKey(Date.now())
@@ -100,6 +105,8 @@ const filteredTasks = computed(() => tasks.value.filter((task) => {
   const triggerMatch = filters.trigger_type === 'all' || task.trigger_type === filters.trigger_type
   return nameMatch && enabledMatch && triggerMatch
 }))
+
+watch(() => detail.value?.id, resetArtifactDownload, { flush: 'sync' })
 
 async function request(path, options = {}) {
   const headers = { ...(options.headers || {}) }
@@ -643,6 +650,18 @@ function formatDuration(value) {
   return display + '秒'
 }
 
+function formatFileSize(value) {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return '大小未知'
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  let size = value
+  let unit = 0
+  while (size >= 1024 && unit < units.length - 1) {
+    size /= 1024
+    unit += 1
+  }
+  return size.toLocaleString('zh-CN', { maximumFractionDigits: unit ? 1 : 0 }) + ' ' + units[unit]
+}
+
 function formatTime(value) {
   return value ? new Date(value).toLocaleString('zh-CN', { hour12: false, timeZone: 'Asia/Shanghai' }) : '—'
 }
@@ -769,7 +788,61 @@ async function openExecution(item) {
     const result = await request('/executions/' + item.id)
     if (detail.value?.id === item.id) detail.value = result
   } catch (error) {
-    showToast('error', '无法载入完整日志', error.message)
+    if (error.status === 401) handleSessionExpired()
+    else if (detail.value?.id === item.id) showToast('error', '无法载入完整日志', error.message)
+  }
+}
+
+function resetArtifactDownload() {
+  artifactDownloadGeneration += 1
+  artifactDownloadController?.abort()
+  artifactDownloadController = null
+  Object.assign(artifactDownload, { busy: false, path: '', message: '', error: false })
+}
+
+async function downloadArtifact(file) {
+  if (!detailFinished.value || artifactDownload.busy) return
+  const executionId = detail.value.id
+  const generation = artifactDownloadGeneration
+  const controller = new AbortController()
+  artifactDownloadController = controller
+  Object.assign(artifactDownload, { busy: true, path: file.path, message: '', error: false })
+  const url = API + '/executions/' + executionId + '/artifacts/download?path=' + encodeURIComponent(file.path)
+  try {
+    const response = await fetch(url, {
+      method: 'HEAD', credentials: 'include', cache: 'no-store', signal: controller.signal,
+    })
+    if (generation !== artifactDownloadGeneration || detail.value?.id !== executionId) return
+    if (response.status === 401) {
+      handleSessionExpired()
+      return
+    }
+    if (!response.ok) {
+      throw new Error(({
+        403: '你没有下载这个文件的权限。',
+        404: '文件已不在原位置，请刷新运行记录后查看。',
+        409: '任务还未结束，请在运行结束后下载。',
+      })[response.status] || '文件暂时无法下载，请稍后重试。')
+    }
+    // 交给浏览器直接下载，避免把整个文件读入页面内存。
+    const link = document.createElement('a')
+    link.href = url
+    link.download = file.name || ''
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    artifactDownload.message = '下载请求已交给浏览器，请在浏览器下载列表查看。'
+  } catch (error) {
+    if (generation !== artifactDownloadGeneration || error.name === 'AbortError') return
+    artifactDownload.error = true
+    artifactDownload.message = error instanceof TypeError
+      ? '暂时无法连接服务器，请检查网络后重试。'
+      : error.message
+  } finally {
+    if (generation === artifactDownloadGeneration) {
+      artifactDownload.busy = false
+      artifactDownloadController = null
+    }
   }
 }
 
@@ -791,6 +864,7 @@ onBeforeUnmount(() => {
   document.removeEventListener('keydown', handleKeydown)
   window.clearTimeout(pollTimer)
   window.clearTimeout(toastTimer)
+  resetArtifactDownload()
 })
 </script>
 
@@ -1302,6 +1376,23 @@ onBeforeUnmount(() => {
               <small v-if="detail.manual_code">人工处理编码：{{ detail.manual_code }}</small>
               <small v-if="detail.manual_action_url"><a :href="detail.manual_action_url" target="_blank" rel="noopener noreferrer">打开人工处理链接</a></small>
             </div>
+          </div>
+          <div class="execution-artifacts">
+            <div class="artifact-heading"><span class="log-label">本次文件</span><small v-if="detailFinished && artifactFiles.length">{{ artifactFiles.length }} 个文件</small></div>
+            <p v-if="!detailFinished" class="artifact-empty">运行结束后，可在这里下载本次保存的文件。</p>
+            <template v-else-if="detail.artifacts">
+              <ul v-if="artifactFiles.length" class="artifact-list">
+                <li v-for="file in artifactFiles" :key="file.path" class="artifact-row">
+                  <div class="artifact-info"><span class="artifact-path">{{ file.path }}</span><small>{{ formatFileSize(file.size_bytes) }}</small></div>
+                  <button class="button secondary compact" type="button" :disabled="artifactDownload.busy" :aria-label="'下载 ' + file.path" @click="downloadArtifact(file)">{{ artifactDownload.busy && artifactDownload.path === file.path ? '准备下载…' : '下载' }}</button>
+                </li>
+              </ul>
+              <p v-else-if="!detail.artifacts.error" class="artifact-empty">这次运行没有保存可下载的文件。</p>
+              <p v-if="detail.artifacts.error" class="artifact-message danger-text">暂时无法完整读取本次文件，请稍后刷新。</p>
+              <p v-if="detail.artifacts.truncated" class="artifact-message">文件较多，当前仅显示部分文件。</p>
+            </template>
+            <p v-else class="artifact-empty">正在读取本次文件…</p>
+            <p v-if="artifactDownload.message" class="artifact-message" :class="{ 'danger-text': artifactDownload.error }" role="status">{{ artifactDownload.message }}</p>
           </div>
           <div><span class="log-label">标准输出 stdout</span><pre>{{ detail.stdout || (['pending', 'running'].includes(detail.status) ? '等待程序输出…' : '（无输出）') }}</pre></div>
           <div v-if="detail.stderr || (detail.error_message && detail.status !== 'pending')"><span class="log-label danger-text">错误输出 stderr</span><pre class="error-log">{{ detail.stderr || detail.error_message }}</pre></div>

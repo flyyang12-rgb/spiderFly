@@ -215,7 +215,7 @@ def change_password(user: dict, current_password: str, new_password: str) -> Non
     if not verify_password(current_password, user["password_hash"]):
         raise ValueError("当前密码不正确")
     validate_password_strength(new_password)
-    if hmac.compare_digest(current_password, new_password):
+    if hmac.compare_digest(current_password.encode("utf-8"), new_password.encode("utf-8")):
         raise ValueError("新密码不能与当前密码相同")
     execute(
         """

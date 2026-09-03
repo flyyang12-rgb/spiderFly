@@ -237,12 +237,23 @@ td code { display: inline-block; max-width: 330px; overflow: hidden; color: #4f5
 .weekday-grid button { height: 34px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); color: var(--muted); cursor: pointer; font-size: 10px; }
 .weekday-grid button.active { border-color: var(--brand); background: var(--brand-soft); color: var(--brand-strong); font-weight: 650; }
 
-.log-modal { width: min(880px, 100%); }
+.log-modal { width: min(880px, 100%); grid-template-rows: auto auto minmax(0, 1fr) auto; }
 .execution-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 9px 20px; padding: 11px 22px; border-bottom: 1px solid var(--border-soft); background: var(--surface-subtle); color: var(--muted); font-size: 11px; }
 .execution-summary strong, .execution-summary code { color: var(--text); }
 .log-body { align-content: start; }
 .log-body > div { min-width: 0; }
 .log-label { display: inline-block; margin-bottom: 6px; color: var(--muted); font-size: 11px; font-weight: 650; }
+.artifact-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
+.artifact-heading .log-label { margin: 0; }
+.artifact-heading small, .artifact-info small { color: var(--muted); font-size: 11px; }
+.artifact-list { display: grid; margin: 0; padding: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 9px; list-style: none; }
+.artifact-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 11px 12px; }
+.artifact-row + .artifact-row { border-top: 1px solid var(--border-soft); }
+.artifact-info { display: grid; min-width: 0; gap: 4px; }
+.artifact-path { font-size: 12px; font-weight: 600; line-height: 18px; overflow-wrap: anywhere; }
+.artifact-row .button { flex-shrink: 0; }
+.artifact-empty { margin: 0; padding: 12px; border: 1px dashed var(--border); border-radius: 9px; background: var(--surface-subtle); color: var(--muted); font-size: 12px; line-height: 19px; }
+.artifact-message { margin: 8px 0 0; color: var(--muted); font-size: 11px; line-height: 18px; overflow-wrap: anywhere; }
 pre { max-height: 270px; margin: 0; overflow: auto; padding: 14px; border: 1px solid #2b302c; border-radius: 9px; background: #191d1a; color: #dfe8e0; font-size: 12px; line-height: 20px; white-space: pre-wrap; word-break: break-word; }
 pre.error-log { border-color: #56332d; background: #231a18; color: #f4cbc2; }
 .confirm-modal { width: min(480px, 100%); }
@@ -305,6 +316,7 @@ pre.error-log { border-color: #56332d; background: #231a18; color: #f4cbc2; }
 
 @media (max-width: 440px) {
   .metric-grid { grid-template-columns: 1fr; }
+  .artifact-row { align-items: flex-start; gap: 10px; }
   .workspace-header { align-items: flex-start; flex-direction: column; }
   .workspace-header .button { width: 100%; }
   .toast { right: 14px; bottom: 14px; left: 14px; min-width: 0; }
