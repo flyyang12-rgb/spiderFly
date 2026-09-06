@@ -22,7 +22,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from .database import execute, fetch_all, fetch_one, init_db, transaction, utc_now
+from .database import (
+    TASK_EXECUTION_STATUS_SQL,
+    execute, fetch_all, fetch_one, init_db, transaction, utc_now,
+)
 from .config import (
     DEFAULT_TASK_TIMEOUT_SECONDS,
     HOST_CHECK_INTERVAL_SECONDS,
@@ -62,6 +65,7 @@ from .scheduling import (
     normalize_trigger,
     reconcile_schedules,
     scheduler_loop,
+    shanghai_day_utc_bounds,
 )
 from .schemas import (
     ChangePasswordPayload,
@@ -303,7 +307,7 @@ def _enqueue_task_sync(
                 """,
                 (task_id,),
             ).fetchone()
-            if running:
+            if running and source != "schedule":
                 raise HTTPException(status_code=409, detail="任务已经在排队或运行")
             cursor = conn.execute(
                 """
@@ -322,13 +326,13 @@ def _enqueue_task_sync(
                 ),
             )
             conn.execute(
-                """
+                f"""
                 UPDATE tasks
-                SET last_status = 'pending', app_name = ?, script_path = ?,
+                SET last_status = {TASK_EXECUTION_STATUS_SQL}, app_name = ?, script_path = ?,
                     python_path = ?, updated_at = ?
                 WHERE id = ? AND archived = 0 AND enabled = 1
                 """,
-                (app_item["app_name"], str(script), str(python_path), now, task_id),
+                ("pending", app_item["app_name"], str(script), str(python_path), now, task_id),
             )
             return int(cursor.lastrowid)
     except sqlite3.IntegrityError as exc:
@@ -444,8 +448,8 @@ def _mark_execution_worker_failure(execution_id: int, message: str) -> None:
             (now, summary, execution_id),
         )
         conn.execute(
-            "UPDATE tasks SET last_status = 'failed', last_run_at = ?, updated_at = ? WHERE id = ?",
-            (now, now, item["task_id"]),
+            f"UPDATE tasks SET last_status = {TASK_EXECUTION_STATUS_SQL}, last_run_at = ?, updated_at = ? WHERE id = ?",
+            ("failed", now, now, item["task_id"]),
         )
 
 
@@ -723,6 +727,7 @@ def delete_app(
 @app.get("/api/overview")
 def overview(user: dict = Depends(ready_user)) -> dict:
     del user
+    today_start, tomorrow_start = shanghai_day_utc_bounds(utc_now())
     counts = fetch_one(
         """
         SELECT
@@ -741,8 +746,9 @@ def overview(user: dict = Depends(ready_user)) -> dict:
             SUM(CASE WHEN status IN ('failed', 'timeout') THEN 1 ELSE 0 END) AS failed_runs,
             SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS queued_runs
         FROM executions
-        WHERE date(created_at) = date('now')
-        """
+        WHERE created_at >= ? AND created_at < ?
+        """,
+        (today_start, tomorrow_start),
     ) or {}
     return {**counts, **today}
 
@@ -761,7 +767,7 @@ def settings(user: dict = Depends(ready_user)) -> dict:
         else "stopped",
         "scheduler_timezone": "Asia/Shanghai",
         "concurrency": 1,
-        "collision_policy": "one-active-run-per-task",
+        "collision_policy": "scheduled-runs-queue-manual-deduplicated",
         "task_timeout_seconds": DEFAULT_TASK_TIMEOUT_SECONDS,
         "work_directory_name": WORK_DIR.name,
         "host_preflight": "excel-and-managed-browser-port",
@@ -955,8 +961,8 @@ def update_task(
                 )
                 if cancelled.rowcount:
                     conn.execute(
-                        "UPDATE tasks SET last_status = 'cancelled' WHERE id = ?",
-                        (task_id,),
+                        f"UPDATE tasks SET last_status = {TASK_EXECUTION_STATUS_SQL} WHERE id = ?",
+                        ("cancelled", task_id),
                     )
     except sqlite3.IntegrityError as exc:
         raise HTTPException(status_code=409, detail="任务名称已存在") from exc
@@ -1048,8 +1054,8 @@ def cancel_execution(
             (now, execution_id),
         )
         conn.execute(
-            "UPDATE tasks SET last_status = 'cancelled', updated_at = ? WHERE id = ?",
-            (now, item["task_id"]),
+            f"UPDATE tasks SET last_status = {TASK_EXECUTION_STATUS_SQL}, updated_at = ? WHERE id = ?",
+            ("cancelled", now, item["task_id"]),
         )
     write_audit(
         request,

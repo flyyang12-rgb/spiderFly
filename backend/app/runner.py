@@ -16,7 +16,7 @@ from .config import (
     RPA_ENVS_DIR,
     WORK_DIR,
 )
-from .database import append_execution_output, execute, fetch_one, utc_now
+from .database import TASK_EXECUTION_STATUS_SQL, append_execution_output, execute, fetch_one, utc_now
 from .execution_results import (
     ExecutionWorkspace,
     ResolvedOutcome,
@@ -288,7 +288,7 @@ async def _finalize(
     )
     await asyncio.to_thread(
         execute,
-        "UPDATE tasks SET last_status = ?, last_run_at = ?, updated_at = ? WHERE id = ?",
+        f"UPDATE tasks SET last_status = {TASK_EXECUTION_STATUS_SQL}, last_run_at = ?, updated_at = ? WHERE id = ?",
         (outcome.status, ended_at, ended_at, task_id),
     )
 

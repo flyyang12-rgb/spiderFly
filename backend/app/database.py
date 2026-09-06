@@ -15,6 +15,16 @@ DB_PATH = DATA_DIR / "spiderfly.db"
 _DB_LOCK = threading.RLock()
 MAX_OUTPUT_CHARS = 1_000_000
 
+# Use after changing an execution. Other queued/running executions of this
+# task take precedence over the supplied terminal/fallback status.
+TASK_EXECUTION_STATUS_SQL = """CASE
+    WHEN EXISTS (SELECT 1 FROM executions WHERE task_id = tasks.id AND status = 'running')
+        THEN 'running'
+    WHEN EXISTS (SELECT 1 FROM executions WHERE task_id = tasks.id AND status = 'pending')
+        THEN 'pending'
+    ELSE ?
+END"""
+
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -153,15 +163,15 @@ def _recover_interrupted_work(conn: sqlite3.Connection) -> None:
         task_ids = {int(row["task_id"]) for row in running}
         for task_id in task_ids:
             conn.execute(
-                "UPDATE tasks SET last_status = 'failed', updated_at = ? WHERE id = ?",
-                (now, task_id),
+                f"UPDATE tasks SET last_status = {TASK_EXECUTION_STATUS_SQL}, updated_at = ? WHERE id = ?",
+                ("failed", now, task_id),
             )
 
     duplicate_rows = conn.execute(
         """
         SELECT task_id, MIN(id) AS keep_id
         FROM executions
-        WHERE status = 'pending'
+        WHERE status = 'pending' AND trigger_source != 'schedule'
         GROUP BY task_id
         HAVING COUNT(*) > 1
         """
@@ -172,7 +182,7 @@ def _recover_interrupted_work(conn: sqlite3.Connection) -> None:
             UPDATE executions
             SET status = 'cancelled', ended_at = ?,
                 error_message = '重启恢复时合并了重复排队记录'
-            WHERE task_id = ? AND status = 'pending' AND id != ?
+            WHERE task_id = ? AND status = 'pending' AND trigger_source != 'schedule' AND id != ?
             """,
             (now, row["task_id"], row["keep_id"]),
         )
@@ -388,11 +398,21 @@ def init_db() -> None:
             END;
             """
         )
+        # Older releases allowed only one active execution of any source.
+        # Scheduled occurrences now remain queued alongside manual runs.
+        conn.execute("DROP INDEX IF EXISTS uq_executions_one_active_task")
         conn.execute(
             """
-            CREATE UNIQUE INDEX IF NOT EXISTS uq_executions_one_active_task
+            CREATE UNIQUE INDEX IF NOT EXISTS uq_executions_one_active_manual_task
             ON executions(task_id)
-            WHERE status IN ('pending', 'running')
+            WHERE status IN ('pending', 'running') AND trigger_source != 'schedule'
+            """
+        )
+        conn.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS uq_executions_one_running_task
+            ON executions(task_id)
+            WHERE status = 'running'
             """
         )
         shared_app = conn.execute(

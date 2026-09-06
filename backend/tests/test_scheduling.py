@@ -3,10 +3,18 @@ from __future__ import annotations
 import unittest
 from datetime import datetime, timezone
 
-from app.scheduling import compute_next_run, normalize_trigger
+from app.scheduling import compute_next_run, normalize_trigger, shanghai_day_utc_bounds
 
 
 class SchedulingTests(unittest.TestCase):
+    def test_beijing_day_bounds_are_expressed_in_utc(self) -> None:
+        self.assertEqual(
+            shanghai_day_utc_bounds(
+                datetime(2026, 9, 6, 16, 30, tzinfo=timezone.utc)
+            ),
+            ("2026-09-06T16:00:00+00:00", "2026-09-07T16:00:00+00:00"),
+        )
+
     def test_interval_uses_requested_distance(self) -> None:
         result = compute_next_run(
             "interval",

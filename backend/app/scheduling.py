@@ -27,6 +27,17 @@ def _aware(value: datetime | str | None = None) -> datetime:
     return parsed.astimezone(timezone.utc)
 
 
+def shanghai_day_utc_bounds(value: datetime | str | None = None) -> tuple[str, str]:
+    """Return the UTC bounds of the Beijing calendar day containing value."""
+    local_value = _aware(value).astimezone(CHINA_TZ)
+    local_start = datetime.combine(local_value.date(), time.min, CHINA_TZ)
+    local_end = local_start + timedelta(days=1)
+    return (
+        local_start.astimezone(timezone.utc).isoformat(timespec="seconds"),
+        local_end.astimezone(timezone.utc).isoformat(timespec="seconds"),
+    )
+
+
 def _clock(value: Any, field_name: str = "执行时间") -> time:
     try:
         return time.fromisoformat(str(value))
@@ -158,6 +169,6 @@ async def scheduler_loop(enqueue: Callable[[int, str], Awaitable[int]]) -> None:
             try:
                 await enqueue(task["id"], "schedule")
             except Exception:
-                # 到点时若任务仍在运行，本轮跳过；下一次执行时间已经顺延。
+                # 计划执行可与已有执行一同排队；其他环境/配置错误沿用原处理。
                 continue
         await asyncio.sleep(1)
