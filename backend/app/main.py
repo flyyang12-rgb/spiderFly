@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import sqlite3
+from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 from typing import Annotated
 
@@ -133,6 +134,11 @@ TASK_SELECT = """
     LEFT JOIN users creator ON creator.id = t.created_by
     LEFT JOIN users updater ON updater.id = t.updated_by
 """
+
+EXECUTION_FILTER_STATUSES = {
+    "pending", "running", "success", "failed", "timeout", "cancelled",
+}
+SHANGHAI_TIMEZONE = timezone(timedelta(hours=8), name="Asia/Shanghai")
 
 
 @app.on_event("startup")
@@ -1158,6 +1164,104 @@ def list_executions(
         """,
         params,
     )
+
+
+def _execution_date_boundary(value: date, *, next_day: bool = False) -> str:
+    target = value + timedelta(days=1) if next_day else value
+    local_midnight = datetime.combine(target, time.min, SHANGHAI_TIMEZONE)
+    return local_midnight.astimezone(timezone.utc).isoformat(timespec="seconds")
+
+
+def _contains_pattern(value: str) -> str:
+    escaped = value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{escaped}%"
+
+
+@app.get("/api/executions/history")
+def list_execution_history(
+    task_name: str = Query(default="", max_length=100),
+    status: str = Query(default="", max_length=20),
+    requester: str = Query(default="", max_length=100),
+    date_from: date | None = None,
+    date_to: date | None = None,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=10, ge=1, le=100),
+    user: dict = Depends(ready_user),
+) -> dict:
+    del user
+    normalized_status = status.strip().lower()
+    if normalized_status and normalized_status not in EXECUTION_FILTER_STATUSES:
+        raise HTTPException(status_code=400, detail="运行状态筛选值无效")
+    if date_from and date_to and date_from > date_to:
+        raise HTTPException(status_code=400, detail="开始日期不能晚于结束日期")
+
+    clauses: list[str] = []
+    params: list[object] = []
+    normalized_task_name = task_name.strip()
+    normalized_requester = requester.strip()
+    if normalized_task_name:
+        clauses.append("t.name LIKE ? ESCAPE '\\'")
+        params.append(_contains_pattern(normalized_task_name))
+    if normalized_status:
+        clauses.append("e.status = ?")
+        params.append(normalized_status)
+    if normalized_requester:
+        clauses.append(
+            "COALESCE(u.display_name, u.username, '系统调度') LIKE ? ESCAPE '\\'"
+        )
+        params.append(_contains_pattern(normalized_requester))
+    if date_from:
+        clauses.append("e.created_at >= ?")
+        params.append(_execution_date_boundary(date_from))
+    if date_to:
+        clauses.append("e.created_at < ?")
+        params.append(_execution_date_boundary(date_to, next_day=True))
+
+    where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    total_row = fetch_one(
+        f"""
+        SELECT COUNT(*) AS total
+        FROM executions e
+        JOIN tasks t ON t.id = e.task_id
+        LEFT JOIN users u ON u.id = e.requested_by
+        {where}
+        """,
+        tuple(params),
+    ) or {"total": 0}
+    total = int(total_row["total"] or 0)
+    offset = (page - 1) * page_size
+    items = fetch_all(
+        f"""
+        SELECT
+            e.id, e.task_id, e.status, e.trigger_source, e.requested_by,
+            e.started_at, e.ended_at, e.duration_ms, e.exit_code,
+            e.error_message, e.notification_status, e.notification_error,
+            e.created_at, t.name AS task_name, t.app_name,
+            COALESCE(u.display_name, u.username, '系统调度') AS requested_by_name,
+            CASE WHEN e.status = 'pending' THEN (
+                SELECT COUNT(*) FROM executions q
+                WHERE q.status = 'pending' AND q.id <= e.id
+            ) ELSE NULL END AS queue_position
+        FROM executions e
+        JOIN tasks t ON t.id = e.task_id
+        LEFT JOIN users u ON u.id = e.requested_by
+        {where}
+        ORDER BY
+            CASE e.status WHEN 'running' THEN 0 WHEN 'pending' THEN 1 ELSE 2 END,
+            CASE WHEN e.status = 'pending' THEN e.id END ASC,
+            e.id DESC
+        LIMIT ? OFFSET ?
+        """,
+        (*params, page_size, offset),
+    )
+    total_pages = max(1, (total + page_size - 1) // page_size)
+    return {
+        "items": items,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": total_pages,
+    }
 
 
 @app.get("/api/executions/{execution_id}")

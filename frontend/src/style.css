@@ -138,6 +138,8 @@ code, pre, .code-input { font-family: "SFMono-Regular", Consolas, monospace; }
 .filter-field input:focus, .filter-field select:focus { border-color: var(--brand); box-shadow: 0 0 0 3px rgba(0,145,57,.1); }
 .filter-actions { display: flex; align-items: center; gap: 7px; }
 .toolbar-icon { width: 38px; height: 38px; font-size: 15px; }
+.execution-filter-bar { grid-template-columns: minmax(160px, 1.1fr) minmax(120px, .75fr) minmax(150px, 1fr) repeat(2, minmax(135px, .8fr)) auto; }
+.execution-filter-actions { flex-wrap: nowrap; }
 .table-panel { min-width: 0; }
 .table-wrap { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; font-size: 12px; }
@@ -154,6 +156,9 @@ td code { display: inline-block; max-width: 330px; overflow: hidden; color: #4f5
 .muted { color: var(--muted); font-size: 11px; }
 .align-right { text-align: right; }
 .row-actions { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
+.pagination-bar { display: flex; min-height: 58px; align-items: center; justify-content: space-between; gap: 16px; padding: 10px 14px; border-top: 1px solid var(--border-soft); color: var(--muted); font-size: 11px; }
+.pagination-bar > div { display: flex; align-items: center; gap: 10px; }
+.pagination-bar strong { min-width: 48px; color: var(--text); font-size: 11px; text-align: center; }
 .clickable-row { cursor: pointer; }
 .plan-state { display: inline-flex; align-items: center; gap: 7px; padding: 0; border: 0; background: transparent; color: var(--muted); cursor: pointer; font-size: 11px; }
 .plan-state i { width: 24px; height: 14px; border-radius: 99px; background: #cfd4d0; box-shadow: inset 0 0 0 1px rgba(0,0,0,.04); }
@@ -516,6 +521,8 @@ select:focus-visible, textarea:focus-visible { outline: 2px solid rgba(0, 145, 5
 .field input[type="password"]:focus { border-color: var(--brand); outline: none; box-shadow: 0 0 0 3px rgba(0,145,57,.1); }
 
 @media (max-width: 1180px) {
+  .execution-filter-bar { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .execution-filter-actions { grid-column: 1 / -1; justify-content: flex-end; }
   .app-upload-form { grid-template-areas: "name description" "script requirements" "template manual" "settings settings" "action action"; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .user-create-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .user-create-form > .button { justify-self: start; }
@@ -550,6 +557,8 @@ select:focus-visible, textarea:focus-visible { outline: 2px solid rgba(0, 145, 5
   .upload-actions .button, .user-create-form > .button { width: 100%; }
   .member-grid { grid-template-columns: 1fr; padding: 10px; }
   .queue-summary, .record-summary { align-items: flex-start; flex-direction: column; }
+  .pagination-bar { align-items: stretch; flex-direction: column; }
+  .pagination-bar > div { justify-content: space-between; }
   .login-card { padding: 27px 22px; }
 }
 

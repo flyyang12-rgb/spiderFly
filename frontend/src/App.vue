@@ -31,6 +31,7 @@ const weekdayOptions = [
   { value: 4, label: '四' }, { value: 5, label: '五' }, { value: 6, label: '六' },
   { value: 7, label: '日' },
 ]
+const EXECUTION_PAGE_SIZE = 10
 
 const authChecking = ref(true)
 const me = ref(null)
@@ -41,6 +42,10 @@ const managementTab = ref('apps')
 const loading = ref(false)
 const tasks = ref([])
 const executions = ref([])
+const executionHistory = ref([])
+const executionHistoryTotal = ref(0)
+const executionHistoryPage = ref(1)
+const executionHistoryLoading = ref(false)
 const users = ref([])
 const auditLogs = ref([])
 const overview = ref({})
@@ -64,6 +69,7 @@ const loginBusy = ref(false)
 const uploadKey = ref(0)
 const toast = reactive({ visible: false, type: 'success', title: '', message: '' })
 const filters = reactive({ name: '', enabled: 'all', trigger_type: 'all', owner: 'all' })
+const executionFilters = reactive({ task_name: '', status: 'all', requester: '', date_from: '', date_to: '' })
 const loginForm = reactive({ username: '', password: '' })
 const passwordForm = reactive({ current_password: '', new_password: '', confirm_password: '' })
 const appForm = reactive({
@@ -83,6 +89,7 @@ let toastTimer = 0
 let pollTimer = 0
 let artifactDownloadController = null
 let artifactDownloadGeneration = 0
+let executionHistoryGeneration = 0
 
 const isSuperAdmin = computed(() => me.value?.role === 'super_admin')
 const isAdmin = computed(() => ['super_admin', 'admin'].includes(me.value?.role))
@@ -98,7 +105,13 @@ const completedExecutions = computed(() => executions.value.filter((item) => !['
 const orderedActiveExecutions = computed(() => [
   ...(runningExecution.value ? [runningExecution.value] : []), ...queuedExecutions.value,
 ])
-const runtimeExecutions = computed(() => [...orderedActiveExecutions.value, ...completedExecutions.value])
+const executionHistoryTotalPages = computed(() => Math.max(1, Math.ceil(executionHistoryTotal.value / EXECUTION_PAGE_SIZE)))
+const executionHistoryStart = computed(() => executionHistoryTotal.value ? (executionHistoryPage.value - 1) * EXECUTION_PAGE_SIZE + 1 : 0)
+const executionHistoryEnd = computed(() => Math.min(executionHistoryPage.value * EXECUTION_PAGE_SIZE, executionHistoryTotal.value))
+const executionFiltersActive = computed(() => Boolean(
+  executionFilters.task_name.trim() || executionFilters.status !== 'all' || executionFilters.requester.trim()
+  || executionFilters.date_from || executionFilters.date_to
+))
 const detailFinished = computed(() => ['success', 'failed', 'timeout', 'cancelled'].includes(detail.value?.status))
 const artifactFiles = computed(() => Array.isArray(detail.value?.artifacts?.files) ? detail.value.artifacts.files : [])
 const manualTasks = computed(() => tasks.value.filter((task) => task.enabled && task.trigger_type === 'manual'))
@@ -140,6 +153,11 @@ const filteredTasks = computed(() => tasks.value.filter((task) => {
 }))
 
 watch(() => detail.value?.id, resetArtifactDownload, { flush: 'sync' })
+watch([view, runtimeTab], ([currentView, currentTab]) => {
+  if (currentView === 'runtime' && currentTab === 'executions') {
+    loadExecutionHistory({ quiet: executionHistory.value.length > 0 })
+  }
+})
 
 async function request(path, options = {}) {
   const headers = { ...(options.headers || {}) }
@@ -176,11 +194,70 @@ function clearSharedData() {
   userEditForm.confirm_password = ''
   tasks.value = []
   executions.value = []
+  executionHistory.value = []
+  executionHistoryTotal.value = 0
+  executionHistoryPage.value = 1
+  Object.assign(executionFilters, { task_name: '', status: 'all', requester: '', date_from: '', date_to: '' })
   users.value = []
   auditLogs.value = []
   overview.value = {}
   settings.value = {}
   detail.value = null
+}
+
+async function loadExecutionHistory({ page = executionHistoryPage.value, quiet = false } = {}) {
+  if (!me.value) return
+  const generation = ++executionHistoryGeneration
+  if (!quiet) executionHistoryLoading.value = true
+  const params = new URLSearchParams({
+    page: String(page),
+    page_size: String(EXECUTION_PAGE_SIZE),
+  })
+  if (executionFilters.task_name.trim()) params.set('task_name', executionFilters.task_name.trim())
+  if (executionFilters.status !== 'all') params.set('status', executionFilters.status)
+  if (executionFilters.requester.trim()) params.set('requester', executionFilters.requester.trim())
+  if (executionFilters.date_from) params.set('date_from', executionFilters.date_from)
+  if (executionFilters.date_to) params.set('date_to', executionFilters.date_to)
+  try {
+    const result = await request('/executions/history?' + params.toString())
+    if (generation !== executionHistoryGeneration) return
+    const totalPages = Math.max(1, Number(result.total_pages) || 1)
+    if (page > totalPages) {
+      executionHistoryPage.value = totalPages
+      await loadExecutionHistory({ page: totalPages, quiet })
+      return
+    }
+    executionHistory.value = Array.isArray(result.items) ? result.items : []
+    executionHistoryTotal.value = Number(result.total) || 0
+    executionHistoryPage.value = Number(result.page) || page
+  } catch (error) {
+    if (generation !== executionHistoryGeneration) return
+    if (error.status === 401) handleSessionExpired()
+    else if (!quiet) showToast('error', '运行记录暂时没有载入', error.message)
+  } finally {
+    if (generation === executionHistoryGeneration) executionHistoryLoading.value = false
+  }
+}
+
+async function applyExecutionFilters() {
+  if (executionFilters.date_from && executionFilters.date_to && executionFilters.date_from > executionFilters.date_to) {
+    showToast('error', '开始日期不能晚于结束日期')
+    return
+  }
+  executionHistoryPage.value = 1
+  await loadExecutionHistory({ page: 1 })
+}
+
+async function resetExecutionFilters() {
+  Object.assign(executionFilters, { task_name: '', status: 'all', requester: '', date_from: '', date_to: '' })
+  executionHistoryPage.value = 1
+  await loadExecutionHistory({ page: 1 })
+}
+
+async function goToExecutionPage(page) {
+  const target = Math.min(executionHistoryTotalPages.value, Math.max(1, page))
+  if (target === executionHistoryPage.value || executionHistoryLoading.value) return
+  await loadExecutionHistory({ page: target })
 }
 
 function handleSessionExpired() {
@@ -207,6 +284,9 @@ async function loadAll({ quiet = false, includeAdmin = true } = {}) {
     settings.value = baseResults[1]
     tasks.value = baseResults[2]
     executions.value = baseResults[3]
+    if (view.value === 'runtime' && runtimeTab.value === 'executions') {
+      await loadExecutionHistory({ quiet: true })
+    }
     if (detail.value) {
       const detailId = detail.value.id
       const refreshed = await request('/executions/' + detailId)
@@ -1316,18 +1396,31 @@ onBeforeUnmount(() => {
         <section v-else-if="view === 'runtime' && runtimeTab === 'executions'" class="view-stack">
           <div class="section-summary record-summary">
             <p>查看正在运行、排队和已结束的任务，以及每次运行的状态和日志。</p>
-            <span>{{ runtimeExecutions.length }} 条记录</span>
+            <span>{{ executionHistoryTotal }} 条记录</span>
           </div>
+          <section class="panel scheduler-toolbar">
+            <form class="filter-bar execution-filter-bar" @submit.prevent="applyExecutionFilters">
+              <label class="filter-field"><span>任务名称</span><input v-model="executionFilters.task_name" type="search" maxlength="100" placeholder="输入任务名称" /></label>
+              <label class="filter-field"><span>运行状态</span><select v-model="executionFilters.status"><option value="all">全部状态</option><option value="pending">排队中</option><option value="running">运行中</option><option value="success">成功</option><option value="failed">失败</option><option value="timeout">超时</option><option value="cancelled">已取消</option></select></label>
+              <label class="filter-field"><span>发起人</span><input v-model="executionFilters.requester" type="search" maxlength="100" placeholder="输入发起人" /></label>
+              <label class="filter-field"><span>开始日期</span><input v-model="executionFilters.date_from" type="date" /></label>
+              <label class="filter-field"><span>结束日期</span><input v-model="executionFilters.date_to" type="date" /></label>
+              <div class="filter-actions execution-filter-actions">
+                <button class="button primary compact" type="submit" :disabled="executionHistoryLoading">{{ executionHistoryLoading ? '查询中…' : '查询' }}</button>
+                <button class="button secondary compact" type="button" :disabled="executionHistoryLoading" @click="resetExecutionFilters">重置</button>
+              </div>
+            </form>
+          </section>
           <section class="panel table-panel">
             <header class="panel-heading">
-              <div><h2>运行记录</h2><p>共 {{ runtimeExecutions.length }} 条记录，运行和排队任务置顶，点击任意一行查看日志。</p></div>
-              <button class="button secondary compact" type="button" @click="loadAll({ quiet: true, includeAdmin: false })">刷新记录</button>
+              <div><h2>运行记录</h2><p>每页 10 条，点击任意一行查看日志。</p></div>
+              <button class="button secondary compact" type="button" :disabled="executionHistoryLoading" @click="loadExecutionHistory()">刷新记录</button>
             </header>
-            <div v-if="runtimeExecutions.length" class="table-wrap">
+            <div v-if="executionHistory.length" class="table-wrap">
               <table>
                 <thead><tr><th>状态</th><th>任务</th><th>发起人</th><th>触发来源</th><th>提交时间</th><th>完成时间</th><th>耗时</th><th>通知</th><th class="align-right">操作</th></tr></thead>
                 <tbody>
-                  <tr v-for="item in runtimeExecutions" :key="item.id" class="clickable-row" tabindex="0" @click="openExecution(item)" @keydown.enter="openExecution(item)">
+                  <tr v-for="item in executionHistory" :key="item.id" class="clickable-row" tabindex="0" @click="openExecution(item)" @keydown.enter="openExecution(item)">
                     <td><span class="status-badge"><i class="status-dot" :class="item.status"></i>{{ statusLabel(item.status) }}</span></td>
                     <td><div class="primary-cell"><strong>{{ item.task_name }}</strong><small>运行编号 #{{ item.id }}</small></div></td>
                     <td><span class="person-chip">{{ requesterName(item).slice(0, 1) }}</span>{{ requesterName(item) }}</td>
@@ -1341,7 +1434,17 @@ onBeforeUnmount(() => {
                 </tbody>
               </table>
             </div>
+            <div v-else-if="executionHistoryLoading" class="empty-state compact-empty"><strong>正在读取运行记录…</strong></div>
+            <div v-else-if="executionFiltersActive" class="empty-state compact-empty"><strong>没有匹配的运行记录</strong><p>调整筛选条件后再试。</p><button class="button secondary" type="button" @click="resetExecutionFilters">清空筛选</button></div>
             <div v-else class="empty-state"><strong>还没有运行记录</strong><p>提交运行后即可在这里查看进度。</p><button class="button secondary" type="button" @click="navigateTo('tasks')">打开任务中心</button></div>
+            <footer v-if="executionHistoryTotal" class="pagination-bar">
+              <span>第 {{ executionHistoryStart }}–{{ executionHistoryEnd }} 条，共 {{ executionHistoryTotal }} 条</span>
+              <div>
+                <button class="button secondary compact" type="button" :disabled="executionHistoryPage <= 1 || executionHistoryLoading" @click="goToExecutionPage(executionHistoryPage - 1)">上一页</button>
+                <strong>{{ executionHistoryPage }} / {{ executionHistoryTotalPages }}</strong>
+                <button class="button secondary compact" type="button" :disabled="executionHistoryPage >= executionHistoryTotalPages || executionHistoryLoading" @click="goToExecutionPage(executionHistoryPage + 1)">下一页</button>
+              </div>
+            </footer>
           </section>
         </section>
 
