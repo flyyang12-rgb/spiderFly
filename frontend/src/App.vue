@@ -1203,7 +1203,7 @@ onBeforeUnmount(() => {
             <header class="panel-heading"><div><h2>任务列表</h2><p>{{ filteredTasks.length }} 项</p></div></header>
             <div v-if="filteredTasks.length" class="table-wrap">
               <table>
-                <thead><tr><th>任务</th><th>启用</th><th>触发方式</th><th>下次运行</th><th>最近状态</th><th class="align-right">操作</th></tr></thead>
+                <thead><tr><th>任务</th><th>启用</th><th>触发方式</th><th>下次运行</th><th>最近状态</th><th>归属人</th><th class="align-right">操作</th></tr></thead>
                 <tbody>
                   <tr v-for="task in filteredTasks" :key="task.id">
                     <td>
@@ -1218,6 +1218,7 @@ onBeforeUnmount(() => {
                     <td><div class="primary-cell"><strong>{{ triggerLabel(task.trigger_type) }}</strong><small>{{ triggerDetail(task) }}</small></div></td>
                     <td><span :class="{ muted: !task.next_run_at }">{{ task.enabled ? formatTime(task.next_run_at) : '停用后不调度' }}</span></td>
                     <td><span class="status-badge"><i class="status-dot" :class="task.last_status"></i>{{ statusLabel(task.last_status) }}</span></td>
+                    <td><span class="person-chip">{{ (task.created_by_name || '系统迁移').slice(0, 1) }}</span>{{ task.created_by_name || '系统迁移' }}</td>
                     <td class="align-right">
                       <div class="row-actions">
                         <button v-if="taskIsActive(task)" class="button primary compact" type="button" @click="viewTaskExecution(task)">查看运行</button>
