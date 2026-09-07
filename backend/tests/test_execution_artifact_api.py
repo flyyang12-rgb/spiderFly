@@ -124,15 +124,11 @@ class ExecutionArtifactApiTests(unittest.TestCase):
         self.assertTrue(opened[0].closed)
         self.assertEqual(head_headers, self.request()[1])
 
-    def test_unauthenticated_and_password_change_users_cannot_read_files(self):
+    def test_unauthenticated_users_cannot_read_files(self):
         with patch.object(main, "list_artifacts") as listing, patch.object(main, "open_artifact") as opening:
             for method in ("GET", "HEAD"):
                 self.assertEqual(self.request(method=method, logged_in=False)[0], 401)
             self.assertEqual(self.request(download=False, logged_in=False)[0], 401)
-            database.execute("UPDATE users SET must_change_password = 1 WHERE id = ?", (self.user_id,))
-            for method in ("GET", "HEAD"):
-                self.assertEqual(self.request(method=method)[0], 403)
-            self.assertEqual(self.request(download=False)[0], 403)
             listing.assert_not_called()
             opening.assert_not_called()
 

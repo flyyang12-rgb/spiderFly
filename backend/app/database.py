@@ -199,7 +199,7 @@ def init_db() -> None:
                 password_hash TEXT NOT NULL,
                 role TEXT NOT NULL DEFAULT 'operator',
                 active INTEGER NOT NULL DEFAULT 1,
-                must_change_password INTEGER NOT NULL DEFAULT 1,
+                must_change_password INTEGER NOT NULL DEFAULT 0,
                 last_login_at TEXT,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
@@ -245,6 +245,7 @@ def init_db() -> None:
                 timeout_seconds INTEGER NOT NULL DEFAULT 600,
                 notify_on_success INTEGER NOT NULL DEFAULT 1,
                 notify_on_failure INTEGER NOT NULL DEFAULT 1,
+                failure_screenshot INTEGER NOT NULL DEFAULT 0,
                 last_status TEXT NOT NULL DEFAULT 'idle',
                 last_run_at TEXT,
                 archived INTEGER NOT NULL DEFAULT 0,
@@ -320,6 +321,19 @@ def init_db() -> None:
             """
         )
 
+        user_columns = _column_names(conn, "users")
+        if "deleted_at" not in user_columns:
+            conn.execute("ALTER TABLE users ADD COLUMN deleted_at TEXT")
+        if "version" not in user_columns:
+            conn.execute("ALTER TABLE users ADD COLUMN version INTEGER NOT NULL DEFAULT 1")
+        # Retain the legacy column for compatibility; first-login changes are optional.
+        conn.execute("UPDATE users SET must_change_password = 0, version = version + 1 WHERE must_change_password != 0")
+        # Only the original bootstrap account receives the permanent owner role.
+        owner = conn.execute("SELECT id FROM users WHERE id = 1 AND username = 'admin' AND role = 'admin' AND active = 1 AND deleted_at IS NULL").fetchone()
+        if owner and not conn.execute("SELECT 1 FROM users WHERE role = 'super_admin'").fetchone():
+            conn.execute("UPDATE users SET role = 'super_admin', version = version + 1 WHERE id = ?", (owner["id"],))
+            conn.execute("DELETE FROM sessions WHERE user_id = ?", (owner["id"],))
+        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_single_super_admin ON users(role) WHERE role = 'super_admin'")
         app_columns = _column_names(conn, "rpa_apps")
         app_migrations = {
             "archived": "ALTER TABLE rpa_apps ADD COLUMN archived INTEGER NOT NULL DEFAULT 0",
@@ -333,6 +347,7 @@ def init_db() -> None:
 
         task_columns = _column_names(conn, "tasks")
         task_migrations = {
+            "failure_screenshot": "ALTER TABLE tasks ADD COLUMN failure_screenshot INTEGER NOT NULL DEFAULT 0",
             "app_name": "ALTER TABLE tasks ADD COLUMN app_name TEXT NOT NULL DEFAULT ''",
             "app_id": "ALTER TABLE tasks ADD COLUMN app_id INTEGER",
             "trigger_type": "ALTER TABLE tasks ADD COLUMN trigger_type TEXT NOT NULL DEFAULT 'manual'",

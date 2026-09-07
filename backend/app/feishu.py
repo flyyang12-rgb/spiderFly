@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
 import io
 import json
 import os
@@ -32,6 +35,8 @@ class FeishuSettings:
     receiver_id: str
     receiver_id_type: str = "open_id"
     base_url: str = "https://open.feishu.cn"
+    webhook_url: str = ""
+    webhook_secret: str = ""
 
     @classmethod
     def from_env(cls) -> "FeishuSettings":
@@ -44,11 +49,13 @@ class FeishuSettings:
             receiver_id=os.getenv("FEISHU_RECEIVER_ID", "").strip(),
             receiver_id_type=receiver_type,
             base_url=os.getenv("FEISHU_BASE_URL", "https://open.feishu.cn").rstrip("/"),
+            webhook_url=os.getenv("FEISHU_WEBHOOK_URL", "").strip(),
+            webhook_secret=os.getenv("FEISHU_WEBHOOK_SECRET", "").strip(),
         )
 
     @property
     def configured(self) -> bool:
-        return bool(self.app_id and self.app_secret and self.receiver_id)
+        return bool(self.webhook_url or (self.app_id and self.app_secret and self.receiver_id))
 
 
 class FeishuError(RuntimeError):
@@ -155,14 +162,54 @@ class FeishuNotifier:
         return image_key
 
     def _send_text(self, open_id: str, text: str) -> None:
+        if self.settings.webhook_url:
+            text = "SpiderFly\n" + text
+        self._send_message(open_id, "text", {"text": text})
+
+    def _send_message(self, open_id: str, msg_type: str, content: dict[str, Any]) -> None:
+        if self.settings.webhook_url:
+            body: dict[str, Any] = {
+                "msg_type": msg_type,
+                "content": {"post": content} if msg_type == "post" else content,
+            }
+            if self.settings.webhook_secret:
+                timestamp = str(int(time.time()))
+                signing_key = f"{timestamp}\n{self.settings.webhook_secret}".encode("utf-8")
+                body["timestamp"] = timestamp
+                body["sign"] = base64.b64encode(
+                    hmac.new(signing_key, b"", hashlib.sha256).digest()
+                ).decode("ascii")
+            # Do not retry or fall back to a personal recipient: a timeout may
+            # happen after delivery, and the selected audience must not change.
+            try:
+                response = self._session.post(
+                    self.settings.webhook_url,
+                    json=body,
+                    timeout=20,
+                    allow_redirects=False,
+                )
+            except requests.RequestException:
+                # requests errors may contain the secret webhook URL.
+                raise FeishuError("飞书群机器人网络请求失败，请检查网络后查看群内是否已送达") from None
+            try:
+                payload = response.json()
+            except ValueError:
+                raise FeishuError(f"飞书群机器人返回了非 JSON 响应（HTTP {response.status_code}）") from None
+            code = payload.get("code", payload.get("StatusCode")) if isinstance(payload, dict) else None
+            if not 200 <= response.status_code < 300 or type(code) is not int or code != 0:
+                safe_code = code if type(code) is int else "unknown"
+                if safe_code == 19021:
+                    raise FeishuError("飞书群机器人签名校验失败（code=19021），请检查 FEISHU_WEBHOOK_SECRET 和本机时间")
+                raise FeishuError(f"飞书群机器人发送失败（HTTP {response.status_code}，code={safe_code}）")
+            return
         self._request(
             "POST",
             "/open-apis/im/v1/messages",
             params={"receive_id_type": "open_id"},
             json_body={
                 "receive_id": open_id,
-                "msg_type": "text",
-                "content": json.dumps({"text": text}, ensure_ascii=False),
+                "msg_type": msg_type,
+                "content": json.dumps(content, ensure_ascii=False),
             },
         )
 
@@ -176,10 +223,12 @@ class FeishuNotifier:
         result_code: str = "",
         manual_action_url: str = "",
         manual_code: str = "",
+        screenshot_note: str = "",
     ) -> None:
+        error_excerpt = error_summary if len(error_summary) <= 900 else "…" + error_summary[-899:]
         content_rows: list[list[dict[str, str]]] = [
             [{"tag": "text", "text": f"❌「{task_name}」运行失败｜耗时 {format_duration(duration_ms)}"}],
-            [{"tag": "text", "text": f"错误：{error_summary[:900]}"}],
+            [{"tag": "text", "text": f"错误：{error_excerpt}"}],
         ]
         if result_code:
             content_rows.append(
@@ -197,19 +246,20 @@ class FeishuNotifier:
                 ]
             )
         if image_bytes:
-            image_key = self._upload_image(image_bytes)
-            content_rows.append([{"tag": "img", "image_key": image_key}])
+            if not (self.settings.app_id and self.settings.app_secret):
+                screenshot_note = "；".join(filter(None, [screenshot_note, "飞书附图需要配置应用 App ID、App Secret 和图片上传权限，请查看本次文件。"]))
+            else:
+                try:
+                    image_key = self._upload_image(image_bytes)
+                    content_rows.append([{"tag": "img", "image_key": image_key}])
+                except Exception:
+                    # Upload happens before sending the one final message. Do not retry
+                    # a message after an ambiguous send failure or change its recipient.
+                    screenshot_note = "；".join(filter(None, [screenshot_note, "截图上传失败，请查看运行记录的本次文件。"]))
+        if screenshot_note:
+            content_rows.append([{"tag": "text", "text": screenshot_note}])
         content = {"zh_cn": {"title": "SpiderFly 任务通知", "content": content_rows}}
-        self._request(
-            "POST",
-            "/open-apis/im/v1/messages",
-            params={"receive_id_type": "open_id"},
-            json_body={
-                "receive_id": open_id,
-                "msg_type": "post",
-                "content": json.dumps(content, ensure_ascii=False),
-            },
-        )
+        self._send_message(open_id, "post", content)
 
     def send_final_result(
         self,
@@ -222,10 +272,11 @@ class FeishuNotifier:
         manual_action_url: str = "",
         manual_code: str = "",
         image_bytes: bytes | None = None,
+        screenshot_note: str = "",
     ) -> None:
         if not self.configured:
-            raise FeishuError("未配置飞书应用或收件人")
-        open_id = self._resolve_open_id()
+            raise FeishuError("未配置飞书群 Webhook 或应用收件人")
+        open_id = "" if self.settings.webhook_url else self._resolve_open_id()
         if status == "success":
             self._send_text(open_id, f"✅「{task_name}」运行成功｜耗时 {format_duration(duration_ms)}")
             return
@@ -238,6 +289,7 @@ class FeishuNotifier:
             result_code,
             manual_action_url,
             manual_code,
+            screenshot_note,
         )
 
 

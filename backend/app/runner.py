@@ -6,6 +6,8 @@ import logging
 import os
 import subprocess
 import time
+import uuid
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -23,7 +25,7 @@ from .execution_results import (
     create_execution_workspace,
     resolve_execution_outcome,
 )
-from .feishu import FeishuNotifier
+from .feishu import FeishuNotifier, capture_active_window_jpeg
 from .host_runtime import cleanup_after_run, prepare_work_directory
 
 
@@ -31,6 +33,59 @@ FINAL_STATUSES = {"success", "failed", "timeout", "cancelled"}
 PROCESS_TERMINATION_SECONDS = 8
 STREAM_DRAIN_SECONDS = 5
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ExecutionControl:
+    stop_event: asyncio.Event = field(default_factory=asyncio.Event)
+    reason: str = ""
+    accepting: bool = True
+
+
+_execution_controls: dict[int, ExecutionControl] = {}
+
+
+class ForceStopRequested(Exception):
+    pass
+
+
+def request_execution_stop(execution_id: int, actor: str) -> bool:
+    """Called on the event loop; the runner owns all process termination and cleanup."""
+    control = _execution_controls.get(execution_id)
+    if control and control.stop_event.is_set():
+        return False
+    if not control or not control.accepting:
+        raise ValueError("任务已结束或正在收尾，请刷新运行记录")
+    control.reason = f"由管理员 {actor} 强制停止"
+    control.stop_event.set()
+    return True
+
+
+def execution_stop_requested(execution_id: int) -> bool:
+    control = _execution_controls.get(execution_id)
+    return bool(control and control.stop_event.is_set())
+
+
+def _check_stop(control: ExecutionControl) -> None:
+    if control.stop_event.is_set():
+        raise ForceStopRequested(control.reason)
+
+
+async def _wait_for_process(process, control: ExecutionControl, timeout: float) -> None:
+    process_wait = asyncio.create_task(process.wait())
+    stop_wait = asyncio.create_task(control.stop_event.wait())
+    try:
+        done, _ = await asyncio.wait({process_wait, stop_wait}, timeout=timeout, return_when=asyncio.FIRST_COMPLETED)
+        # An accepted stop wins even if the process exits in the same event-loop turn.
+        _check_stop(control)
+        if process_wait not in done:
+            raise asyncio.TimeoutError
+    finally:
+        control.accepting = False
+        for waiter in (process_wait, stop_wait):
+            if not waiter.done():
+                waiter.cancel()
+        await asyncio.gather(process_wait, stop_wait, return_exceptions=True)
 
 
 def validate_script(script_path: str, python_path: str) -> tuple[Path, str]:
@@ -82,6 +137,35 @@ def _notification_summary(outcome: ResolvedOutcome) -> str:
     return outcome.error_message or outcome.result_message
 
 
+async def _capture_failure_image(
+    execution_id: int, task: dict[str, Any], workspace: ExecutionWorkspace | None,
+) -> tuple[bytes | None, str]:
+    if not (task.get("notify_on_failure") and task.get("failure_screenshot")):
+        return None, ""
+    try:
+        image = await asyncio.to_thread(capture_active_window_jpeg)
+    except Exception:
+        image = None
+    note = ""
+    if image is None:
+        note = "未能获取前台窗口截图，请查看错误日志。"
+    elif workspace is not None:
+        try:
+            destination = workspace.artifacts_dir / f"failure-{uuid.uuid4().hex}.jpg"
+            # A new filename never overwrites a script's output or follows its file symlink.
+            def save() -> None:
+                if workspace.artifacts_dir.is_symlink() or workspace.artifacts_dir.resolve().parent != workspace.root.resolve():
+                    raise OSError("产物目录无效")
+                with destination.open("xb") as stream:
+                    stream.write(image)
+            await asyncio.to_thread(save)
+        except Exception:
+            note = "截图未能保存到本次文件，仍尝试附图通知。"
+    if note:
+        await asyncio.to_thread(append_execution_output, execution_id, "stderr", f"截图提示：{note}\n")
+    return image, note
+
+
 async def _send_notification(
     execution_id: int,
     task: dict[str, Any],
@@ -91,6 +175,8 @@ async def _send_notification(
     result_code: str = "",
     manual_action_url: str = "",
     manual_code: str = "",
+    image_bytes: bytes | None = None,
+    screenshot_note: str = "",
 ) -> None:
     if not _notification_enabled(task, status):
         await asyncio.to_thread(
@@ -106,7 +192,7 @@ async def _send_notification(
             execute,
             """
             UPDATE executions
-            SET notification_status = 'skipped', notification_error = '未配置飞书应用或收件人'
+            SET notification_status = 'skipped', notification_error = '未配置飞书群 Webhook 或应用收件人'
             WHERE id = ?
             """,
             (execution_id,),
@@ -123,7 +209,8 @@ async def _send_notification(
             result_code=result_code,
             manual_action_url=manual_action_url,
             manual_code=manual_code,
-            image_bytes=None,
+            image_bytes=image_bytes,
+            screenshot_note=screenshot_note,
         )
         await asyncio.to_thread(
             execute,
@@ -234,6 +321,14 @@ async def _terminate_process(process: asyncio.subprocess.Process) -> None:
             logger.error("任务进程 PID %s 在终止预算内未确认退出", process.pid)
 
 
+async def _stop_process_confirmed(process, execution_id: int) -> None:
+    await _terminate_process(process)
+    if process.returncode is None:
+        await asyncio.to_thread(append_execution_output, execution_id, "stderr", "强制停止尚未确认进程退出，队列继续等待。\n")
+        # Never release the serial worker while this process is still alive.
+        await process.wait()
+
+
 async def _finish_stream_tasks(*tasks: asyncio.Task | None) -> None:
     active = [task for task in tasks if task is not None]
     if not active:
@@ -294,6 +389,17 @@ async def _finalize(
 
 
 async def run_execution(execution_id: int) -> None:
+    if execution_id in _execution_controls:
+        raise RuntimeError("同一执行记录已由执行器接管")
+    control = ExecutionControl()
+    _execution_controls[execution_id] = control
+    try:
+        await _run_execution(execution_id, control)
+    finally:
+        _execution_controls.pop(execution_id, None)
+
+
+async def _run_execution(execution_id: int, control: ExecutionControl) -> None:
     task = await asyncio.to_thread(
         fetch_one,
         """
@@ -312,6 +418,7 @@ async def run_execution(execution_id: int) -> None:
     started = time.monotonic()
 
     status = "failed"
+    shutdown_requested = False
     exit_code: int | None = None
     error_message = ""
     process: asyncio.subprocess.Process | None = None
@@ -320,8 +427,13 @@ async def run_execution(execution_id: int) -> None:
     workspace: ExecutionWorkspace | None = None
     public_work_dir: Path | None = None
     staged_template: Path | None = None
+    failure_image: bytes | None = None
+    screenshot_note = ""
+    screenshot_attempted = False
     try:
+        _check_stop(control)
         workspace = await asyncio.to_thread(create_execution_workspace, execution_id)
+        _check_stop(control)
         script, interpreter = validate_script(
             task["script_path_snapshot"], task["python_path_snapshot"]
         )
@@ -331,6 +443,7 @@ async def run_execution(execution_id: int) -> None:
             template_path=task.get("template_path") or None,
             template_name=task.get("template_filename") or None,
         )
+        _check_stop(control)
         started = time.monotonic()
         started_at = utc_now()
         await asyncio.to_thread(
@@ -347,6 +460,7 @@ async def run_execution(execution_id: int) -> None:
             """,
             (started_at, started_at, task_id),
         )
+        _check_stop(control)
         creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
         process = await asyncio.create_subprocess_exec(
             interpreter,
@@ -367,8 +481,10 @@ async def run_execution(execution_id: int) -> None:
         stderr_task = asyncio.create_task(_consume_stream(process.stderr, execution_id, "stderr"))
         timeout = DEFAULT_TASK_TIMEOUT_SECONDS
         try:
-            await asyncio.wait_for(process.wait(), timeout=timeout)
+            await _wait_for_process(process, control, timeout)
         except asyncio.TimeoutError:
+            failure_image, screenshot_note = await _capture_failure_image(execution_id, task, workspace)
+            screenshot_attempted = True
             await _terminate_process(process)
             status = "timeout"
             error_message = f"运行超过任务设置的 {timeout} 秒，已终止"
@@ -387,6 +503,20 @@ async def run_execution(execution_id: int) -> None:
                     or (record or {}).get("stdout")
                     or f"退出码 {exit_code}"
                 ).strip()
+    except ForceStopRequested:
+        control.accepting = False
+        if process:
+            termination = asyncio.create_task(_stop_process_confirmed(process, execution_id))
+            try:
+                await asyncio.shield(termination)
+            except asyncio.CancelledError:
+                # Shutdown must not abandon a stop already in progress.
+                await termination
+                shutdown_requested = True
+        await _finish_stream_tasks(stdout_task, stderr_task)
+        exit_code = process.returncode if process else None
+        status = "cancelled"
+        error_message = control.reason
     except asyncio.CancelledError:
         if process:
             await _terminate_process(process)
@@ -411,6 +541,8 @@ async def run_execution(execution_id: int) -> None:
         )
         raise
     except Exception as exc:
+        failure_image, screenshot_note = await _capture_failure_image(execution_id, task, workspace)
+        screenshot_attempted = True
         if process and process.returncode is None:
             await _terminate_process(process)
         await _finish_stream_tasks(stdout_task, stderr_task)
@@ -418,6 +550,18 @@ async def run_execution(execution_id: int) -> None:
             exit_code = process.returncode
         error_message = str(exc)
         await asyncio.to_thread(append_execution_output, execution_id, "stderr", f"{exc}\n")
+    finally:
+        control.accepting = False
+
+    # Resolve business failures as well as nonzero exits before cleaning the UI/workspace.
+    if status != "cancelled" and not screenshot_attempted:
+        before_cleanup = await asyncio.to_thread(
+            resolve_execution_outcome, process_status=status, exit_code=exit_code,
+            legacy_error=error_message, result_file=workspace.result_file if workspace else None,
+        )
+        if before_cleanup.status in {"failed", "timeout"}:
+            failure_image, screenshot_note = await _capture_failure_image(execution_id, task, workspace)
+            screenshot_attempted = True
 
     cleanup_error = await _cleanup_public_work_directory(execution_id)
     if cleanup_error:
@@ -428,13 +572,17 @@ async def run_execution(execution_id: int) -> None:
         )
 
     duration_ms = int((time.monotonic() - started) * 1000)
-    outcome = await asyncio.to_thread(
-        resolve_execution_outcome,
-        process_status=status,
-        exit_code=exit_code,
-        legacy_error=error_message,
-        result_file=workspace.result_file if workspace else None,
-    )
+    if status == "cancelled" and control.stop_event.is_set():
+        outcome = ResolvedOutcome(status="cancelled", error_message=error_message,
+                                  result_code="FORCE_STOPPED", result_message=control.reason, retryable=False)
+    else:
+        outcome = await asyncio.to_thread(
+            resolve_execution_outcome,
+            process_status=status,
+            exit_code=exit_code,
+            legacy_error=error_message,
+            result_file=workspace.result_file if workspace else None,
+        )
     if outcome.result_code == "RESULT_INVALID":
         await asyncio.to_thread(
             append_execution_output,
@@ -442,6 +590,8 @@ async def run_execution(execution_id: int) -> None:
             "stderr",
             f"{outcome.result_message}\n",
         )
+    if outcome.status in {"failed", "timeout"} and not screenshot_attempted:
+        failure_image, screenshot_note = await _capture_failure_image(execution_id, task, workspace)
     await _finalize(execution_id, task_id, outcome, duration_ms, exit_code)
     await _send_notification(
         execution_id,
@@ -452,4 +602,9 @@ async def run_execution(execution_id: int) -> None:
         outcome.result_code,
         outcome.manual_action_url,
         outcome.manual_code,
+        image_bytes=failure_image,
+        screenshot_note=screenshot_note,
     )
+
+    if shutdown_requested:
+        raise asyncio.CancelledError

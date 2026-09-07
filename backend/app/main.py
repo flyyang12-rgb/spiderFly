@@ -57,7 +57,7 @@ from .execution_artifacts import (
 )
 from .host_runtime import HostRuntimeError, check_host_busy, clear_work_directory
 from .instance_lock import InstanceLock, acquire_instance_lock
-from .runner import run_execution
+from .runner import run_execution, request_execution_stop, execution_stop_requested
 from .scheduling import (
     compute_next_run,
     decode_trigger_config,
@@ -74,14 +74,17 @@ from .schemas import (
     TaskPatch,
     TaskPayload,
     UserCreatePayload,
+    UserUpdatePayload,
 )
 from .security import (
-    admin_user,
+    admin_user, super_admin_user,
     authenticate_user,
     change_password,
     clear_session,
     create_session,
     create_user,
+    update_user,
+    delete_user,
     current_user,
     ensure_bootstrap_admin,
     list_users,
@@ -189,7 +192,7 @@ def _public_task(task: dict) -> dict:
             "env_path": item.get("app_env_path") or "",
         }
     )
-    for key in ("enabled", "notify_on_success", "notify_on_failure", "archived"):
+    for key in ("enabled", "notify_on_success", "notify_on_failure", "failure_screenshot", "archived"):
         item[key] = bool(item.get(key))
     for key in ("script_path", "python_path", "app_script_path", "app_env_path"):
         item.pop(key, None)
@@ -555,7 +558,7 @@ def users_list(user: dict = Depends(admin_user)) -> list[dict]:
 def users_create(
     payload: UserCreatePayload,
     request: Request,
-    user: dict = Depends(admin_user),
+    user: dict = Depends(super_admin_user),
 ) -> dict:
     try:
         created = create_user(
@@ -574,6 +577,37 @@ def users_create(
         summary=f"创建用户 {created['username']}（{created['role']}）",
     )
     return created
+
+
+@app.patch("/api/users/{user_id}")
+def users_update(
+    user_id: int, payload: UserUpdatePayload, request: Request,
+    user: dict = Depends(super_admin_user),
+) -> dict:
+    changes = payload.model_dump(exclude_unset=True, exclude={"version"})
+    try:
+        updated = update_user(user, user_id, changes, payload.version)
+    except sqlite3.IntegrityError as exc:
+        raise HTTPException(status_code=409, detail="用户名已存在") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    fields = {"username": "账号", "display_name": "显示名称", "role": "角色", "active": "启用状态", "password": "重置密码"}
+    write_audit(request, user, "update_user", target_type="user", target_id=user_id,
+                summary=f"修改成员 {updated['username']}：" + "、".join(fields[key] for key in changes))
+    return updated
+
+
+@app.delete("/api/users/{user_id}", status_code=204)
+def users_delete(
+    user_id: int, request: Request, version: int = Query(ge=1),
+    user: dict = Depends(super_admin_user),
+) -> None:
+    try:
+        deleted = delete_user(user, user_id, version)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    write_audit(request, user, "delete_user", target_type="user", target_id=user_id,
+                summary=f"删除成员 {deleted['username']}，保留历史记录")
 
 
 @app.get("/api/audit-logs")
@@ -607,7 +641,7 @@ def list_apps(user: dict = Depends(ready_user)) -> list[dict]:
         """
     )
     return [
-        _public_app(item, include_private=user["role"] == "admin") for item in rows
+        _public_app(item, include_private=user["role"] in {"super_admin", "admin"}) for item in rows
     ]
 
 
@@ -624,6 +658,7 @@ async def create_app(
     enabled: Annotated[bool, Form()] = True,
     notify_on_success: Annotated[bool, Form()] = True,
     notify_on_failure: Annotated[bool, Form()] = True,
+    failure_screenshot: Annotated[bool, Form()] = False,
     user: dict = Depends(admin_user),
 ) -> dict:
     try:
@@ -655,6 +690,7 @@ async def create_app(
             enabled=enabled,
             notify_on_success=notify_on_success,
             notify_on_failure=notify_on_failure,
+            failure_screenshot=failure_screenshot,
         )
     except sqlite3.IntegrityError as exc:
         raise HTTPException(status_code=409, detail="这个任务名称已经存在") from exc
@@ -773,8 +809,8 @@ def settings(user: dict = Depends(ready_user)) -> dict:
         "host_preflight": "excel-and-managed-browser-port",
         "managed_browser_port": MANAGED_BROWSER_PORT,
         "feishu_configured": value.configured,
-        "receiver_id_type": value.receiver_id_type,
-        "receiver_masked": ("***" + value.receiver_id[-4:]) if value.receiver_id else "",
+        "receiver_id_type": "webhook" if value.webhook_url else value.receiver_id_type,
+        "receiver_masked": "群机器人" if value.webhook_url else (("***" + value.receiver_id[-4:]) if value.receiver_id else ""),
         "notification_policy": "one-final-message",
     }
 
@@ -827,9 +863,9 @@ def create_task(
                 INSERT INTO tasks (
                     name, description, app_id, app_name, script_path, python_path,
                     enabled, trigger_type, trigger_config, next_run_at,
-                    timeout_seconds, notify_on_success, notify_on_failure,
+                    timeout_seconds, notify_on_success, notify_on_failure, failure_screenshot,
                     created_by, updated_by, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     payload.name,
@@ -845,6 +881,7 @@ def create_task(
                     payload.timeout_seconds,
                     int(payload.notify_on_success),
                     int(payload.notify_on_failure),
+                    int(payload.failure_screenshot),
                     user["id"],
                     user["id"],
                     now,
@@ -1025,6 +1062,29 @@ async def run_task(
     )
 
 
+@app.post("/api/executions/{execution_id}/stop", status_code=202)
+async def force_stop_execution(
+    execution_id: int, request: Request, user: dict = Depends(admin_user),
+) -> dict:
+    item = await asyncio.to_thread(fetch_one,
+        "SELECT e.status, t.name AS task_name FROM executions e JOIN tasks t ON t.id=e.task_id WHERE e.id=?",
+        (execution_id,))
+    if not item:
+        raise HTTPException(status_code=404, detail="执行记录不存在")
+    if item["status"] != "running":
+        raise HTTPException(status_code=409, detail="只能强制停止正在运行的任务")
+    try:
+        accepted = request_execution_stop(execution_id, user["username"])
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if accepted:
+        await asyncio.to_thread(write_audit, request, user, "force_stop_execution",
+            target_type="execution", target_id=execution_id,
+            summary=f"请求强制停止 {item['task_name']}，执行记录 #{execution_id}")
+    return {"id": execution_id, "status": "running", "stop_requested": True,
+            "message": "已请求强制停止，正在等待进程退出和清理完成"}
+
+
 @app.post("/api/executions/{execution_id}/cancel")
 def cancel_execution(
     execution_id: int,
@@ -1123,6 +1183,7 @@ def get_execution(
     )
     if not item:
         raise HTTPException(status_code=404, detail="执行记录不存在")
+    item["stop_requested"] = item["status"] == "running" and execution_stop_requested(execution_id)
     item.pop("script_path_snapshot", None)
     item.pop("python_path_snapshot", None)
     if item.get("retryable") is not None:

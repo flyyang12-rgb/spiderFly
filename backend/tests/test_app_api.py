@@ -14,7 +14,7 @@ from fastapi import HTTPException
 from starlette.datastructures import UploadFile
 
 from app import database, environments, execution_artifacts, execution_results, main
-from app.schemas import TaskPayload
+from app.schemas import TaskPayload, TaskPatch
 
 
 class ManagedAppApiTests(unittest.TestCase):
@@ -85,6 +85,22 @@ class ManagedAppApiTests(unittest.TestCase):
         with patch.object(main, "write_audit"):
             return main.create_task(payload, request=object(), user=user)
 
+    def test_screenshot_setting_roundtrip_and_legacy_default(self):
+        with self.fixture() as item, patch.object(main, "write_audit"):
+            task = self.create_task(item["app_id"], item["user"])
+            self.assertIs(task["failure_screenshot"], False)
+            task = main.update_task(task["id"], TaskPatch(failure_screenshot=True), object(), item["user"])
+            self.assertIs(task["failure_screenshot"], True)
+            task = main.update_task(task["id"], TaskPatch(notify_on_failure=False), object(), item["user"])
+            self.assertIs(task["failure_screenshot"], True)
+            self.assertIs(task["notify_on_failure"], False)
+            database.init_db()
+            self.assertEqual(database.fetch_one("SELECT failure_screenshot FROM tasks WHERE id = ?", (task["id"],))["failure_screenshot"], 1)
+            with database.connection() as conn:
+                conn.execute("ALTER TABLE tasks DROP COLUMN failure_screenshot")
+            database.init_db()
+            self.assertEqual(database.fetch_one("SELECT failure_screenshot FROM tasks WHERE id = ?", (task["id"],))["failure_screenshot"], 0)
+
     def test_one_app_can_only_bind_one_task(self) -> None:
         with self.fixture() as item:
             self.create_task(item["app_id"], item["user"])
@@ -121,6 +137,7 @@ class ManagedAppApiTests(unittest.TestCase):
             self.assertEqual(created["task"]["trigger_type"], "manual")
             self.assertTrue(created["task"]["enabled"])
             self.assertFalse(created["task"]["runtime_ready"])
+            self.assertIs(created["task"]["failure_screenshot"], False)
             stored = database.fetch_one(
                 "SELECT app_id, python_path, trigger_type FROM tasks WHERE id = ?",
                 (created["task"]["id"],),
@@ -152,6 +169,7 @@ class ManagedAppApiTests(unittest.TestCase):
                         enabled=True,
                         notify_on_success=False,
                         notify_on_failure=True,
+                        failure_screenshot=True,
                         user=item["user"],
                     )
                 )
@@ -164,6 +182,7 @@ class ManagedAppApiTests(unittest.TestCase):
             self.assertTrue(task["enabled"])
             self.assertFalse(task["notify_on_success"])
             self.assertTrue(task["notify_on_failure"])
+            self.assertIs(task["failure_screenshot"], True)
 
     def test_upload_saves_complete_weekly_task_settings(self) -> None:
         with self.fixture() as item:

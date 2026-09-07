@@ -627,6 +627,7 @@ def create_managed_task_bundle(
     enabled: bool = True,
     notify_on_success: bool = True,
     notify_on_failure: bool = True,
+    failure_screenshot: bool = False,
 ) -> dict:
     """Atomically create one managed program and its one-to-one configured task."""
     with _APP_STORAGE_LOCK:
@@ -646,6 +647,7 @@ def create_managed_task_bundle(
             task_enabled=enabled,
             task_notify_on_success=notify_on_success,
             task_notify_on_failure=notify_on_failure,
+            task_failure_screenshot=failure_screenshot,
         )
 
 
@@ -666,6 +668,7 @@ def _create_managed_app_locked(
     task_enabled: bool = True,
     task_notify_on_success: bool = True,
     task_notify_on_failure: bool = True,
+    task_failure_screenshot: bool = False,
 ) -> dict:
     name = name.strip()
     if not name or len(name) > 100:
@@ -782,9 +785,9 @@ def _create_managed_app_locked(
                     INSERT INTO tasks (
                         name, description, app_id, app_name, script_path, python_path,
                         enabled, trigger_type, trigger_config, next_run_at,
-                        timeout_seconds, notify_on_success, notify_on_failure,
+                        timeout_seconds, notify_on_success, notify_on_failure, failure_screenshot,
                         created_by, updated_by, created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         name,
@@ -799,6 +802,7 @@ def _create_managed_app_locked(
                         DEFAULT_TASK_TIMEOUT_SECONDS,
                         int(task_notify_on_success),
                         int(task_notify_on_failure),
+                        int(task_failure_screenshot),
                         user_id,
                         user_id,
                         now,

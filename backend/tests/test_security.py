@@ -68,12 +68,12 @@ class PasswordHashTests(unittest.TestCase):
 
 class PasswordStrengthTests(unittest.TestCase):
     def test_accepts_password_at_minimum_and_maximum_lengths(self) -> None:
-        self.assertIsNone(security.validate_password_strength("abcdefghij"))
+        self.assertIsNone(security.validate_password_strength("123321"))
         self.assertIsNone(security.validate_password_strength("x" * 200))
 
-    def test_rejects_password_shorter_than_ten_characters(self) -> None:
-        with self.assertRaisesRegex(ValueError, "至少需要 10 个字符"):
-            security.validate_password_strength("abcdefghi")
+    def test_rejects_password_shorter_than_six_characters(self) -> None:
+        with self.assertRaisesRegex(ValueError, "至少需要 6 个字符"):
+            security.validate_password_strength("12345")
 
     def test_rejects_password_longer_than_two_hundred_characters(self) -> None:
         with self.assertRaisesRegex(ValueError, "不能超过 200 个字符"):

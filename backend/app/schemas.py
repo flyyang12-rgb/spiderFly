@@ -2,26 +2,44 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .config import DEFAULT_TASK_TIMEOUT_SECONDS
 
 
 class LoginPayload(BaseModel):
     username: str = Field(min_length=1, max_length=50)
+    # Existing credentials may be shorter than the policy for newly set passwords.
     password: str = Field(min_length=1, max_length=200)
 
 
 class ChangePasswordPayload(BaseModel):
     current_password: str = Field(min_length=1, max_length=200)
-    new_password: str = Field(min_length=10, max_length=200)
+    new_password: str = Field(min_length=6, max_length=200)
 
 
 class UserCreatePayload(BaseModel):
     username: str = Field(min_length=1, max_length=50)
     display_name: str = Field(min_length=1, max_length=100)
     role: Literal["admin", "operator"] = "operator"
-    password: str = Field(min_length=10, max_length=200)
+    password: str = Field(default="123321", min_length=6, max_length=200)
+
+
+class UserUpdatePayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    version: int = Field(ge=1)
+    username: str | None = Field(default=None, min_length=1, max_length=50)
+    display_name: str | None = Field(default=None, min_length=1, max_length=100)
+    role: Literal["admin", "operator"] | None = None
+    active: bool | None = None
+    password: str | None = Field(default=None, min_length=6, max_length=200)
+
+    @field_validator("*", mode="before")
+    @classmethod
+    def reject_null(cls, value: Any) -> Any:
+        if value is None:
+            raise ValueError("不修改的字段请省略，不能传 null")
+        return value
 
 
 class TaskPayload(BaseModel):
@@ -34,6 +52,7 @@ class TaskPayload(BaseModel):
     timeout_seconds: int = Field(default=DEFAULT_TASK_TIMEOUT_SECONDS, ge=0, le=604800)
     notify_on_success: bool = True
     notify_on_failure: bool = True
+    failure_screenshot: bool = False
 
     @field_validator("name")
     @classmethod
@@ -65,6 +84,7 @@ class TaskPatch(BaseModel):
     timeout_seconds: int | None = Field(default=None, ge=0, le=604800)
     notify_on_success: bool | None = None
     notify_on_failure: bool | None = None
+    failure_screenshot: bool | None = None
     version: int | None = Field(default=None, ge=1)
 
     @field_validator("*", mode="before")

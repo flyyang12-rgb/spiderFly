@@ -9,7 +9,7 @@ from pathlib import Path
 from fastapi import Depends, HTTPException, Request, Response, status
 
 from .config import COOKIE_SECURE, DATA_DIR, SESSION_COOKIE_NAME, SESSION_HOURS
-from .database import execute, fetch_all, fetch_one, utc_now
+from .database import execute, fetch_all, fetch_one, transaction, utc_now
 
 
 PASSWORD_ITERATIONS = 600_000
@@ -40,8 +40,8 @@ def verify_password(password: str, encoded: str) -> bool:
 
 
 def validate_password_strength(password: str) -> None:
-    if len(password) < 10:
-        raise ValueError("密码至少需要 10 个字符")
+    if len(password) < 6:
+        raise ValueError("密码至少需要 6 个字符")
     if len(password) > 200:
         raise ValueError("密码长度不能超过 200 个字符")
     if password.isspace():
@@ -55,23 +55,24 @@ def _public_user(user: dict) -> dict:
         "display_name": user["display_name"],
         "role": user["role"],
         "active": bool(user["active"]),
-        "must_change_password": bool(user["must_change_password"]),
+        "must_change_password": False,
         "last_login_at": user.get("last_login_at"),
         "created_at": user.get("created_at"),
+        "version": int(user.get("version", 1)),
     }
 
 
 def ensure_bootstrap_admin() -> Path | None:
     if fetch_one("SELECT id FROM users LIMIT 1"):
         return BOOTSTRAP_FILE if BOOTSTRAP_FILE.exists() else None
-    password = secrets.token_urlsafe(15)
+    password = "admin"
     now = utc_now()
     execute(
         """
         INSERT INTO users (
             username, display_name, password_hash, role, active,
             must_change_password, created_at, updated_at
-        ) VALUES ('admin', '系统管理员', ?, 'admin', 1, 1, ?, ?)
+        ) VALUES ('admin', '系统管理员', ?, 'super_admin', 1, 0, ?, ?)
         """,
         (_hash_password(password), now, now),
     )
@@ -80,8 +81,8 @@ def ensure_bootstrap_admin() -> Path | None:
         "SpiderFly 首次登录信息\n"
         "======================\n"
         "用户名：admin\n"
-        f"临时密码：{password}\n\n"
-        "首次登录后必须修改密码；修改成功后此文件会自动删除。\n",
+        f"初始密码：{password}\n\n"
+        "登录后可直接使用；可通过右上角修改密码，修改成功后此文件会自动删除。\n",
         encoding="utf-8",
     )
     return BOOTSTRAP_FILE
@@ -89,7 +90,7 @@ def ensure_bootstrap_admin() -> Path | None:
 
 def authenticate_user(username: str, password: str) -> dict | None:
     user = fetch_one(
-        "SELECT * FROM users WHERE lower(username) = lower(?)", (username.strip(),)
+        "SELECT * FROM users WHERE lower(username) = lower(?) AND deleted_at IS NULL", (username.strip(),)
     )
     if not user or not user["active"] or not verify_password(password, user["password_hash"]):
         return None
@@ -142,7 +143,7 @@ def _session_user(token: str | None) -> dict | None:
         SELECT u.*
         FROM sessions s
         JOIN users u ON u.id = s.user_id
-        WHERE s.token_hash = ? AND s.expires_at > ? AND u.active = 1
+        WHERE s.token_hash = ? AND s.expires_at > ? AND u.active = 1 AND u.deleted_at IS NULL
         """,
         (token_hash, datetime.now(timezone.utc).isoformat()),
     )
@@ -157,14 +158,18 @@ def current_user(request: Request) -> dict:
 
 
 def ready_user(user: dict = Depends(current_user)) -> dict:
-    if user["must_change_password"]:
-        raise HTTPException(status_code=403, detail="首次登录请先修改密码")
     return user
 
 
 def admin_user(user: dict = Depends(ready_user)) -> dict:
-    if user["role"] != "admin":
+    if user["role"] not in {"super_admin", "admin"}:
         raise HTTPException(status_code=403, detail="需要管理员权限")
+    return user
+
+
+def super_admin_user(user: dict = Depends(ready_user)) -> dict:
+    if user["role"] != "super_admin":
+        raise HTTPException(status_code=403, detail="只有超级管理员可以管理成员")
     return user
 
 
@@ -175,7 +180,7 @@ def public_user(user: dict) -> dict:
 def list_users() -> list[dict]:
     return [
         _public_user(item)
-        for item in fetch_all("SELECT * FROM users ORDER BY active DESC, id ASC")
+        for item in fetch_all("SELECT * FROM users WHERE deleted_at IS NULL ORDER BY active DESC, id ASC")
     ]
 
 
@@ -183,48 +188,113 @@ def create_user(
     username: str,
     display_name: str,
     role: str,
-    password: str,
+    password: str = "123321",
 ) -> dict:
-    username = username.strip().lower()
-    display_name = display_name.strip()
+    username, display_name = _validate_user_identity(username, display_name)
+    if role not in {"admin", "operator"}:
+        raise ValueError("角色只能是管理员或普通成员")
+    validate_password_strength(password)
+    now = utc_now()
+    password_hash = _hash_password(password)
+    with transaction() as conn:
+        _check_username_available(conn, username)
+        cursor = conn.execute(
+            """INSERT INTO users (
+                username, display_name, password_hash, role, active,
+                must_change_password, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, 1, 0, ?, ?)""",
+            (username, display_name, password_hash, role, now, now),
+        )
+        user = conn.execute("SELECT * FROM users WHERE id = ?", (cursor.lastrowid,)).fetchone()
+    return _public_user(dict(user))
+
+
+def _validate_user_identity(username: str, display_name: str) -> tuple[str, str]:
+    username, display_name = username.strip().lower(), display_name.strip()
     if not username or len(username) > 50 or not all(
         character.isalnum() or character in {"_", "-", "."} for character in username
     ):
         raise ValueError("用户名只能包含字母、数字、点、下划线和短横线")
     if not display_name or len(display_name) > 100:
         raise ValueError("显示名称不能为空且不能超过 100 个字符")
-    if role not in {"admin", "operator"}:
-        raise ValueError("角色只能是管理员或操作员")
-    validate_password_strength(password)
-    now = utc_now()
-    user_id = execute(
-        """
-        INSERT INTO users (
-            username, display_name, password_hash, role, active,
-            must_change_password, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, 1, 1, ?, ?)
-        """,
-        (username, display_name, _hash_password(password), role, now, now),
-    )
-    user = fetch_one("SELECT * FROM users WHERE id = ?", (user_id,))
-    assert user is not None
-    return _public_user(user)
+    return username, display_name
+
+
+def _check_username_available(conn, username: str, exclude_id: int = -1) -> None:
+    if conn.execute("SELECT 1 FROM users WHERE lower(username) = lower(?) AND id != ?", (username, exclude_id)).fetchone():
+        raise HTTPException(status_code=409, detail="用户名已存在或已被历史账号保留")
+
+
+def _managed_target(conn, actor: dict, user_id: int, version: int) -> dict:
+    current_actor = conn.execute("SELECT * FROM users WHERE id = ?", (actor["id"],)).fetchone()
+    if not current_actor or current_actor["role"] != "super_admin" or not current_actor["active"] or current_actor["deleted_at"]:
+        raise HTTPException(status_code=403, detail="只有超级管理员可以管理成员")
+    row = conn.execute("SELECT * FROM users WHERE id = ? AND deleted_at IS NULL", (user_id,)).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="成员不存在或已删除")
+    if row["version"] != version:
+        raise HTTPException(status_code=409, detail="成员信息已更新，请刷新后重试")
+    return dict(row)
+
+
+def update_user(actor: dict, user_id: int, changes: dict, version: int) -> dict:
+    if not changes or set(changes) - {"username", "display_name", "role", "active", "password"}:
+        raise ValueError("请提供有效的成员修改字段")
+    password_hash = None
+    if "password" in changes:
+        validate_password_strength(changes["password"])
+        password_hash = _hash_password(changes["password"])
+    with transaction() as conn:
+        target = _managed_target(conn, actor, user_id, version)
+        if user_id == actor["id"]:
+            if changes.get("role", "super_admin") != "super_admin" or changes.get("active") is False:
+                raise ValueError("不能给当前登录账号降权或停用")
+            if password_hash:
+                raise ValueError("请通过右上角“修改密码”修改自己的密码")
+        if "role" in changes and changes["role"] not in {"admin", "operator"}:
+            raise ValueError("角色只能是管理员或普通成员")
+        username, display_name = _validate_user_identity(changes.get("username", target["username"]), changes.get("display_name", target["display_name"]))
+        _check_username_available(conn, username, user_id)
+        role = changes.get("role", target["role"])
+        active = int(changes.get("active", target["active"]))
+        conn.execute(
+            """UPDATE users SET username = ?, display_name = ?, role = ?, active = ?,
+            password_hash = ?, must_change_password = ?, updated_at = ?, version = version + 1 WHERE id = ?""",
+            (username, display_name, role, active, password_hash or target["password_hash"],
+             0, utc_now(), user_id),
+        )
+        if password_hash or username != target["username"] or role != target["role"] or active != target["active"]:
+            conn.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
+        updated = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+    return _public_user(dict(updated))
+
+
+def delete_user(actor: dict, user_id: int, version: int) -> dict:
+    with transaction() as conn:
+        target = _managed_target(conn, actor, user_id, version)
+        if user_id == actor["id"]:
+            raise ValueError("不能删除当前登录账号")
+        now = utc_now()
+        conn.execute("UPDATE users SET active = 0, deleted_at = ?, updated_at = ?, version = version + 1 WHERE id = ?", (now, now, user_id))
+        conn.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
+    return _public_user(target)
 
 
 def change_password(user: dict, current_password: str, new_password: str) -> None:
-    if not verify_password(current_password, user["password_hash"]):
-        raise ValueError("当前密码不正确")
     validate_password_strength(new_password)
     if hmac.compare_digest(current_password.encode("utf-8"), new_password.encode("utf-8")):
         raise ValueError("新密码不能与当前密码相同")
-    execute(
-        """
-        UPDATE users
-        SET password_hash = ?, must_change_password = 0, updated_at = ?
-        WHERE id = ?
-        """,
-        (_hash_password(new_password), utc_now(), user["id"]),
-    )
+    with transaction() as conn:
+        current = conn.execute("SELECT * FROM users WHERE id = ? AND active = 1 AND deleted_at IS NULL", (user["id"],)).fetchone()
+        if current and current["role"] == "admin":
+            raise HTTPException(status_code=403, detail="管理员不能自行修改密码，请联系超级管理员重置")
+        if not current or not verify_password(current_password, current["password_hash"]):
+            raise ValueError("当前密码不正确或账号状态已变更，请重新登录")
+        conn.execute(
+            """UPDATE users SET password_hash = ?, must_change_password = 0,
+            updated_at = ?, version = version + 1 WHERE id = ?""",
+            (_hash_password(new_password), utc_now(), user["id"]),
+        )
     if user["username"] == "admin" and BOOTSTRAP_FILE.exists():
         BOOTSTRAP_FILE.unlink(missing_ok=True)
 

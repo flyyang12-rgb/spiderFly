@@ -11,6 +11,7 @@ const adminNavItems = [
   { id: 'management', label: '管理中心', mark: 'M' },
 ]
 const runtimeTabs = [
+  { id: 'active', label: '运行队列' },
   { id: 'queue', label: '任务时间表' },
   { id: 'executions', label: '运行记录' },
 ]
@@ -34,7 +35,7 @@ const weekdayOptions = [
 const authChecking = ref(true)
 const me = ref(null)
 const view = ref('overview')
-const runtimeTab = ref('queue')
+const runtimeTab = ref('active')
 const scheduleScope = ref('today')
 const managementTab = ref('apps')
 const loading = ref(false)
@@ -49,10 +50,16 @@ const editingTask = ref(null)
 const detail = ref(null)
 const artifactDownload = reactive({ busy: false, path: '', message: '', error: false })
 const deletingTask = ref(null)
+const stoppingExecution = ref(null)
+const stoppingBusy = ref(false)
 const changePasswordOpen = ref(false)
 const saving = ref(false)
 const uploading = ref(false)
 const creatingUser = ref(false)
+const editingUser = ref(null)
+const deletingUser = ref(null)
+const savingUser = ref(false)
+const deletingUserBusy = ref(false)
 const loginBusy = ref(false)
 const uploadKey = ref(0)
 const toast = reactive({ visible: false, type: 'success', title: '', message: '' })
@@ -61,13 +68,14 @@ const loginForm = reactive({ username: '', password: '' })
 const passwordForm = reactive({ current_password: '', new_password: '', confirm_password: '' })
 const appForm = reactive({
   name: '', description: '', requirements_text: '', requirements_filename: '', script: null, template: null,
-  enabled: true, notify_on_success: true, notify_on_failure: true, trigger_type: 'manual',
+  enabled: true, notify_on_success: true, notify_on_failure: true, failure_screenshot: false, trigger_type: 'manual',
   daily_time: '09:00', weekly_days: [1], weekly_time: '09:00',
 })
-const userForm = reactive({ username: '', display_name: '', role: 'operator', password: '' })
+const userForm = reactive({ username: '', display_name: '', role: 'operator', password: '123321' })
+const userEditForm = reactive({ username: '', display_name: '', role: 'operator', active: true, password: '', confirm_password: '' })
 const taskForm = reactive({
   name: '', description: '', app_id: '', timeout_seconds: 600, enabled: true,
-  notify_on_success: true, notify_on_failure: true, trigger_type: 'manual',
+  notify_on_success: true, notify_on_failure: true, failure_screenshot: false, trigger_type: 'manual',
   daily_time: '09:00', weekly_days: [1], weekly_time: '09:00',
 })
 
@@ -76,7 +84,9 @@ let pollTimer = 0
 let artifactDownloadController = null
 let artifactDownloadGeneration = 0
 
-const isAdmin = computed(() => me.value?.role === 'admin')
+const isSuperAdmin = computed(() => me.value?.role === 'super_admin')
+const isAdmin = computed(() => ['super_admin', 'admin'].includes(me.value?.role))
+const canChangePassword = computed(() => Boolean(me.value) && me.value.role !== 'admin')
 const navItems = computed(() => isAdmin.value ? [...baseNavItems, ...adminNavItems] : baseNavItems)
 const pageTitle = computed(() => navItems.value.find((item) => item.id === view.value)?.label || 'SpiderFly')
 const activeExecutions = computed(() => executions.value.filter((item) => ['pending', 'running'].includes(item.status)))
@@ -85,6 +95,10 @@ const queuedExecutions = computed(() => executions.value
   .filter((item) => item.status === 'pending')
   .sort((a, b) => (a.queue_position ?? 999999) - (b.queue_position ?? 999999)))
 const completedExecutions = computed(() => executions.value.filter((item) => !['pending', 'running'].includes(item.status)))
+const orderedActiveExecutions = computed(() => [
+  ...(runningExecution.value ? [runningExecution.value] : []), ...queuedExecutions.value,
+])
+const runtimeExecutions = computed(() => [...orderedActiveExecutions.value, ...completedExecutions.value])
 const detailFinished = computed(() => ['success', 'failed', 'timeout', 'cancelled'].includes(detail.value?.status))
 const artifactFiles = computed(() => Array.isArray(detail.value?.artifacts?.files) ? detail.value.artifacts.files : [])
 const manualTasks = computed(() => tasks.value.filter((task) => task.enabled && task.trigger_type === 'manual'))
@@ -136,6 +150,11 @@ function showToast(type, title, message = '') {
 }
 
 function clearSharedData() {
+  stoppingExecution.value = null
+  editingUser.value = null
+  deletingUser.value = null
+  userEditForm.password = ''
+  userEditForm.confirm_password = ''
   tasks.value = []
   executions.value = []
   users.value = []
@@ -153,7 +172,7 @@ function handleSessionExpired() {
 }
 
 async function loadAll({ quiet = false, includeAdmin = true } = {}) {
-  if (!me.value || me.value.must_change_password) {
+  if (!me.value) {
     loading.value = false
     return
   }
@@ -193,7 +212,7 @@ async function loadAll({ quiet = false, includeAdmin = true } = {}) {
 
 function schedulePoll() {
   window.clearTimeout(pollTimer)
-  if (!me.value || me.value.must_change_password) return
+  if (!me.value) return
   const delay = activeExecutions.value.length || buildingTasks.value.length ? 1200 : 5000
   pollTimer = window.setTimeout(async () => {
     await loadAll({ quiet: true, includeAdmin: false })
@@ -204,8 +223,8 @@ async function checkAuth() {
   authChecking.value = true
   try {
     me.value = await request('/auth/me')
-    changePasswordOpen.value = Boolean(me.value.must_change_password)
-    if (!me.value.must_change_password) await loadAll()
+    changePasswordOpen.value = false
+    await loadAll()
   } catch (error) {
     if (error.status !== 401) showToast('error', '无法连接 SpiderFly', error.message)
     me.value = null
@@ -228,8 +247,8 @@ async function login() {
     me.value = await request('/auth/me')
     loginForm.password = ''
     view.value = 'overview'
-    changePasswordOpen.value = Boolean(me.value.must_change_password)
-    if (!me.value.must_change_password) await loadAll()
+    changePasswordOpen.value = false
+    await loadAll()
     showToast('success', '欢迎回来', me.value.display_name || me.value.username)
   } catch (error) {
     showToast('error', '登录失败', error.message)
@@ -252,6 +271,7 @@ async function logout() {
 }
 
 async function changePassword() {
+  if (!canChangePassword.value) return
   if (!passwordForm.current_password || !passwordForm.new_password) {
     showToast('error', '请填写当前密码和新密码')
     return
@@ -289,7 +309,7 @@ function navigateTo(target, tab = null) {
     showToast('error', '此区域仅管理员可用', '普通成员可使用工作台、任务中心和运行中心')
     return
   }
-  if (target === 'runtime' && runtimeTabs.some((item) => item.id === tab)) runtimeTab.value = tab
+  if (target === 'runtime') runtimeTab.value = runtimeTabs.some((item) => item.id === tab) ? tab : 'active'
   if (target === 'management' && managementTabs.some((item) => item.id === tab)) managementTab.value = tab
   view.value = target
 }
@@ -317,6 +337,7 @@ function openEdit(task) {
     enabled: Boolean(task.enabled),
     notify_on_success: Boolean(task.notify_on_success),
     notify_on_failure: Boolean(task.notify_on_failure),
+    failure_screenshot: Boolean(task.failure_screenshot),
     trigger_type: triggerOptions.some((item) => item.value === task.trigger_type) ? task.trigger_type : 'manual',
     daily_time: config.time || '09:00',
     weekly_days: config.weekdays || [1],
@@ -339,6 +360,7 @@ function taskPayload() {
     enabled: taskForm.enabled,
     notify_on_success: taskForm.notify_on_success,
     notify_on_failure: taskForm.notify_on_failure,
+    failure_screenshot: taskForm.failure_screenshot,
     trigger_type: taskForm.trigger_type,
     trigger_config: triggerConfig(taskForm),
   }
@@ -381,7 +403,7 @@ async function runTask(task) {
     const result = await request('/tasks/' + task.id + '/run', { method: 'POST' })
     const position = result?.queue_position
     showToast('success', position ? '任务已加入队列' : '运行请求已提交', position ? '当前排在第 ' + position + ' 位' : '共享电脑会按顺序执行')
-    navigateTo('runtime', 'queue')
+    navigateTo('runtime', 'active')
     await loadAll({ quiet: true, includeAdmin: false })
     detail.value = executions.value.find((item) => item.id === result?.execution_id) || null
   } catch (error) {
@@ -425,6 +447,25 @@ async function cancelExecution(item) {
     await loadAll({ quiet: true, includeAdmin: false })
   } catch (error) {
     showToast('error', '无法取消', error.message)
+  }
+}
+
+async function forceStopExecution() {
+  if (!isAdmin.value || !stoppingExecution.value || stoppingBusy.value) return
+  const target = stoppingExecution.value
+  stoppingBusy.value = true
+  try {
+    await request('/executions/' + target.id + '/stop', { method: 'POST' })
+    if (detail.value?.id === target.id) detail.value.stop_requested = true
+    stoppingExecution.value = null
+    showToast('success', '已请求强制停止', '进程退出并完成清理后，队列会继续运行')
+    await loadAll({ quiet: true, includeAdmin: false })
+  } catch (error) {
+    stoppingExecution.value = null
+    showToast('error', '无法强制停止', error.message)
+    await loadAll({ quiet: true, includeAdmin: false })
+  } finally {
+    stoppingBusy.value = false
   }
 }
 
@@ -506,12 +547,13 @@ async function uploadApp() {
     form.append('enabled', String(appForm.enabled))
     form.append('notify_on_success', String(appForm.notify_on_success))
     form.append('notify_on_failure', String(appForm.notify_on_failure))
+    form.append('failure_screenshot', String(appForm.failure_screenshot))
     form.append('script', appForm.script)
     if (appForm.template) form.append('template', appForm.template)
     await request('/apps', { method: 'POST', body: form })
     Object.assign(appForm, {
       name: '', description: '', requirements_text: '', requirements_filename: '', script: null, template: null,
-      enabled: true, notify_on_success: true, notify_on_failure: true, trigger_type: 'manual',
+      enabled: true, notify_on_success: true, notify_on_failure: true, failure_screenshot: false, trigger_type: 'manual',
       daily_time: '09:00', weekly_days: [1], weekly_time: '09:00',
     })
     uploadKey.value += 1
@@ -537,7 +579,7 @@ async function rebuildTaskEnvironment(task) {
 }
 
 async function createUser() {
-  if (!isAdmin.value) return
+  if (!isSuperAdmin.value) return
   if (!userForm.username.trim() || !userForm.display_name.trim() || !userForm.password) {
     showToast('error', '请完整填写成员信息')
     return
@@ -553,7 +595,7 @@ async function createUser() {
         password: userForm.password,
       }),
     })
-    Object.assign(userForm, { username: '', display_name: '', role: 'operator', password: '' })
+    Object.assign(userForm, { username: '', display_name: '', role: 'operator', password: '123321' })
     showToast('success', '成员账号已创建')
     const results = await Promise.all([request('/users'), request('/audit-logs?limit=100')])
     users.value = results[0]
@@ -562,6 +604,76 @@ async function createUser() {
     showToast('error', '账号创建失败', error.message)
   } finally {
     creatingUser.value = false
+  }
+}
+
+function openUserEditor(user) {
+  if (!isSuperAdmin.value) return
+  editingUser.value = { ...user }
+  Object.assign(userEditForm, { username: user.username, display_name: user.display_name,
+    role: user.role, active: user.active, password: '', confirm_password: '' })
+}
+
+function closeUserEditor() {
+  if (savingUser.value) return
+  editingUser.value = null
+  userEditForm.password = ''
+  userEditForm.confirm_password = ''
+}
+
+async function refreshMembers() {
+  if (!isAdmin.value) return
+  const result = await Promise.all([request('/users'), request('/audit-logs?limit=100')])
+  users.value = result[0]
+  auditLogs.value = result[1]
+}
+
+async function saveUser() {
+  if (!editingUser.value || savingUser.value || !isSuperAdmin.value) return
+  if (userEditForm.password !== userEditForm.confirm_password) {
+    showToast('error', '两次输入的密码不一致')
+    return
+  }
+  const target = editingUser.value
+  const payload = { version: target.version, username: userEditForm.username.trim(), display_name: userEditForm.display_name.trim() }
+  if (target.id !== me.value.id) {
+    payload.role = userEditForm.role
+    payload.active = userEditForm.active
+    if (userEditForm.password) payload.password = userEditForm.password
+  }
+  savingUser.value = true
+  try {
+    const updated = await request('/users/' + target.id, { method: 'PATCH', body: JSON.stringify(payload) })
+    editingUser.value = null
+    userEditForm.password = ''
+    userEditForm.confirm_password = ''
+    if (target.id === me.value.id && updated.username !== me.value.username) {
+      await logout()
+      showToast('success', '账号已修改', '请使用新账号和原密码重新登录')
+      return
+    }
+    if (target.id === me.value.id) me.value = updated
+    showToast('success', '成员信息已保存', payload.password ? '密码已重置，该成员可直接使用新密码登录' : '')
+    await refreshMembers()
+  } catch (error) {
+    showToast('error', '成员修改失败', error.message)
+  } finally {
+    savingUser.value = false
+  }
+}
+
+async function confirmDeleteUser() {
+  if (!deletingUser.value || deletingUserBusy.value || !isSuperAdmin.value) return
+  deletingUserBusy.value = true
+  try {
+    await request('/users/' + deletingUser.value.id + '?version=' + deletingUser.value.version, { method: 'DELETE' })
+    deletingUser.value = null
+    showToast('success', '成员已删除', '账号已禁止登录，历史记录保留')
+    await refreshMembers()
+  } catch (error) {
+    showToast('error', '成员删除失败', error.message)
+  } finally {
+    deletingUserBusy.value = false
   }
 }
 
@@ -627,14 +739,15 @@ function notificationLabel(status) {
 }
 
 function roleLabel(role) {
-  return role === 'admin' ? '管理员' : '普通成员'
+  return { super_admin: '超级管理员', admin: '管理员', operator: '普通成员' }[role] || role
 }
 
 function auditActionLabel(action) {
   const map = {
     login: '登录系统', login_failed: '登录失败', logout: '退出登录', change_password: '修改密码',
+    update_user: '修改成员', delete_user: '删除成员',
     create_task: '创建任务', update_task: '修改任务', delete_task: '删除任务',
-    archive_task: '删除任务', run_task: '发起运行', cancel_execution: '取消执行',
+    archive_task: '删除任务', run_task: '发起运行', cancel_execution: '取消执行', force_stop_execution: '强制停止',
     create_app: '创建任务', delete_app: '清理旧任务', remove_app: '清理旧任务', rebuild_app: '修复运行环境',
     rebuild_environment: '修复运行环境', create_user: '创建成员',
   }
@@ -765,6 +878,13 @@ function taskIsActive(task) {
   return activeExecutions.value.some((item) => Number(item.task_id) === Number(task.id))
 }
 
+function viewTaskExecution(task) {
+  const execution = orderedActiveExecutions.value.find((item) => Number(item.task_id) === Number(task.id))
+  if (execution) return openExecution(execution)
+  showToast('info', '本次运行已结束', '请到运行记录查看结果')
+  navigateTo('runtime', 'executions')
+}
+
 function requesterName(item) {
   return item.requested_by_name || item.requested_by_username || '系统调度'
 }
@@ -851,7 +971,7 @@ function handleKeydown(event) {
   taskModalOpen.value = false
   detail.value = null
   deletingTask.value = null
-  if (!me.value?.must_change_password) changePasswordOpen.value = false
+  changePasswordOpen.value = false
   toast.visible = false
 }
 
@@ -941,7 +1061,7 @@ onBeforeUnmount(() => {
         <span class="avatar">{{ (me.display_name || me.username).slice(0, 1) }}</span>
         <div><strong>{{ me.display_name || me.username }}</strong><small>{{ roleLabel(me.role) }}</small></div>
         <span class="account-actions">
-          <button type="button" aria-label="修改密码" title="修改密码" @click="changePasswordOpen = true">✎</button>
+          <button v-if="canChangePassword" type="button" aria-label="修改密码" title="修改密码" @click="changePasswordOpen = true">✎</button>
           <button type="button" aria-label="退出登录" title="退出登录" @click="logout">↪</button>
         </span>
       </div>
@@ -965,7 +1085,7 @@ onBeforeUnmount(() => {
       <nav v-if="view === 'runtime'" class="center-tabs" aria-label="运行中心功能">
         <button v-for="tab in runtimeTabs" :key="tab.id" type="button" :class="{ active: runtimeTab === tab.id }" @click="runtimeTab = tab.id">
           {{ tab.label }}
-          <i v-if="tab.id === 'queue' && activeExecutions.length">{{ activeExecutions.length }}</i>
+          <i v-if="tab.id === 'active' && activeExecutions.length">{{ activeExecutions.length }}</i>
         </button>
       </nav>
       <nav v-else-if="view === 'management' && isAdmin" class="center-tabs" aria-label="管理中心功能">
@@ -977,6 +1097,20 @@ onBeforeUnmount(() => {
       </div>
 
       <template v-else>
+        <section v-if="view === 'runtime' && runtimeTab === 'active'" class="panel runtime-active-panel" aria-label="当前运行与排队">
+          <header class="panel-heading">
+            <div><h2>运行队列</h2><p>{{ runningExecution ? '1 项正在运行' : '当前没有运行任务' }} · {{ queuedExecutions.length }} 项排队。{{ isAdmin ? '点击查看日志、强制停止或取消排队。' : '点击查看日志和排队进度。' }}</p></div>
+            <button class="button secondary compact" type="button" @click="loadAll({ quiet: true, includeAdmin: false })">刷新队列</button>
+          </header>
+          <div v-if="orderedActiveExecutions.length" class="queue-list">
+            <button v-for="item in orderedActiveExecutions" :key="item.id" type="button" class="queue-row" :class="{ current: item.status === 'running' }" @click="openExecution(item)">
+              <span class="queue-number"><i v-if="item.status === 'running'" class="status-dot running"></i><template v-else>{{ item.queue_position || '·' }}</template></span>
+              <span class="run-copy"><strong>{{ item.task_name }}</strong><small>{{ item.status === 'running' ? '运行中' : '排队第 ' + (item.queue_position || '—') + ' 位' }} · #{{ item.id }} · 查看日志{{ item.status === 'running' && isAdmin ? ' / 强制停止' : '' }}</small></span>
+              <span class="run-result"><strong>{{ item.status === 'running' ? '正在运行' : '排队中' }}</strong><small>{{ requesterName(item) }} 发起</small></span>
+            </button>
+          </div>
+          <div v-else class="empty-state"><strong>当前没有运行或排队的任务</strong><p>提交任务后，运行进度和等待顺序会显示在这里。</p><button class="button secondary" type="button" @click="navigateTo('tasks')">打开任务中心</button></div>
+        </section>
         <section v-if="view === 'overview'" class="view-stack">
           <div class="metric-grid">
             <article class="metric-card">
@@ -1015,7 +1149,7 @@ onBeforeUnmount(() => {
             <section class="panel">
               <header class="panel-heading">
                 <div><h2>当前队列</h2><p>一个运行，其余按顺序等待，不会抢占共享电脑。</p></div>
-                <button class="text-button" type="button" @click="navigateTo('runtime', 'queue')">查看时间表</button>
+                <button class="text-button" type="button" @click="navigateTo('runtime', 'active')">查看运行队列</button>
               </header>
               <div v-if="runningExecution || queuedExecutions.length" class="queue-list">
                 <button v-if="runningExecution" type="button" class="queue-row current" @click="openExecution(runningExecution)">
@@ -1086,7 +1220,8 @@ onBeforeUnmount(() => {
                     <td><span class="status-badge"><i class="status-dot" :class="task.last_status"></i>{{ statusLabel(task.last_status) }}</span></td>
                     <td class="align-right">
                       <div class="row-actions">
-                        <button class="button primary compact" type="button" :disabled="!task.enabled || task.environment_status !== 'ready' || taskIsActive(task)" @click="runTask(task)">{{ taskIsActive(task) ? '进行中' : '运行' }}</button>
+                        <button v-if="taskIsActive(task)" class="button primary compact" type="button" @click="viewTaskExecution(task)">查看运行</button>
+                        <button v-else class="button primary compact" type="button" :disabled="!task.enabled || task.environment_status !== 'ready'" @click="runTask(task)">运行</button>
                         <button class="icon-button" type="button" :disabled="taskIsActive(task)" aria-label="编辑任务" :title="taskIsActive(task) ? '任务完成后才能编辑' : '编辑任务'" @click="openEdit(task)">✎</button>
                         <button v-if="isAdmin && task.environment_status === 'failed'" class="button secondary compact" type="button" @click="rebuildTaskEnvironment(task)">修复环境</button>
                         <button v-if="isAdmin" class="button ghost compact archive-button" type="button" aria-label="删除任务" title="同时删除程序、独立环境和运行记录" @click="deletingTask = task">删除</button>
@@ -1154,19 +1289,19 @@ onBeforeUnmount(() => {
 
         <section v-else-if="view === 'runtime' && runtimeTab === 'executions'" class="view-stack">
           <div class="section-summary record-summary">
-            <p>这里保留每次 Python 运行的最终状态、发起人、耗时、通知结果以及 stdout / stderr 日志。</p>
-            <span>{{ completedExecutions.length }} 条记录</span>
+            <p>查看正在运行、排队和已结束的任务，以及每次运行的状态和日志。</p>
+            <span>{{ runtimeExecutions.length }} 条记录</span>
           </div>
           <section class="panel table-panel">
             <header class="panel-heading">
-              <div><h2>运行记录</h2><p>最近 {{ completedExecutions.length }} 条已完成记录，点击任意一行查看完整日志。</p></div>
+              <div><h2>运行记录</h2><p>共 {{ runtimeExecutions.length }} 条记录，运行和排队任务置顶，点击任意一行查看日志。</p></div>
               <button class="button secondary compact" type="button" @click="loadAll({ quiet: true, includeAdmin: false })">刷新记录</button>
             </header>
-            <div v-if="completedExecutions.length" class="table-wrap">
+            <div v-if="runtimeExecutions.length" class="table-wrap">
               <table>
-                <thead><tr><th>最终状态</th><th>任务</th><th>发起人</th><th>触发来源</th><th>提交时间</th><th>完成时间</th><th>耗时</th><th>通知</th><th class="align-right">操作</th></tr></thead>
+                <thead><tr><th>状态</th><th>任务</th><th>发起人</th><th>触发来源</th><th>提交时间</th><th>完成时间</th><th>耗时</th><th>通知</th><th class="align-right">操作</th></tr></thead>
                 <tbody>
-                  <tr v-for="item in completedExecutions" :key="item.id" class="clickable-row" tabindex="0" @click="openExecution(item)" @keydown.enter="openExecution(item)">
+                  <tr v-for="item in runtimeExecutions" :key="item.id" class="clickable-row" tabindex="0" @click="openExecution(item)" @keydown.enter="openExecution(item)">
                     <td><span class="status-badge"><i class="status-dot" :class="item.status"></i>{{ statusLabel(item.status) }}</span></td>
                     <td><div class="primary-cell"><strong>{{ item.task_name }}</strong><small>运行编号 #{{ item.id }}</small></div></td>
                     <td><span class="person-chip">{{ requesterName(item).slice(0, 1) }}</span>{{ requesterName(item) }}</td>
@@ -1180,7 +1315,7 @@ onBeforeUnmount(() => {
                 </tbody>
               </table>
             </div>
-            <div v-else class="empty-state"><strong>还没有运行记录</strong><p>任务完成后会自动归档到这里。</p><button class="button secondary" type="button" @click="navigateTo('tasks')">打开任务中心</button></div>
+            <div v-else class="empty-state"><strong>还没有运行记录</strong><p>提交运行后即可在这里查看进度。</p><button class="button secondary" type="button" @click="navigateTo('tasks')">打开任务中心</button></div>
           </section>
         </section>
 
@@ -1225,9 +1360,10 @@ onBeforeUnmount(() => {
                     <button class="switch-row" type="button" role="switch" :aria-checked="appForm.enabled" @click="appForm.enabled = !appForm.enabled"><i :class="{ active: appForm.enabled }"><b></b></i><span>{{ appForm.enabled ? '创建后启用' : '暂不启用' }}</span></button>
                   </div>
                   <div class="notification-options">
-                    <div><strong>最终通知</strong><small>每次运行结束后最多发送一条。</small></div>
+                    <div><strong>最终通知</strong><small>每次运行结束后最多发送一条；失败包含错误原因，可选附带前台窗口截图。</small></div>
                     <label><input v-model="appForm.notify_on_success" type="checkbox" />成功时通知</label>
                     <label><input v-model="appForm.notify_on_failure" type="checkbox" />失败时通知</label>
+                    <label :class="{ disabled: !appForm.notify_on_failure }" title="失败或超时时尝试截取宿主机前台窗口；错误日志始终保存。"><input v-model="appForm.failure_screenshot" :disabled="!appForm.notify_on_failure" type="checkbox" />失败附带截图</label>
                   </div>
                 </div>
               </section>
@@ -1256,7 +1392,8 @@ onBeforeUnmount(() => {
               <div><strong>{{ me.display_name || me.username }}</strong><small>@{{ me.username }}</small></div>
             </div>
             <div class="profile-actions">
-              <button class="button secondary" type="button" @click="changePasswordOpen = true">修改密码</button>
+              <button v-if="canChangePassword" class="button secondary" type="button" @click="changePasswordOpen = true">修改密码</button>
+              <small v-else>如需修改密码，请联系超级管理员重置。</small>
               <button class="button ghost" type="button" @click="logout">退出登录</button>
             </div>
           </section>
@@ -1271,23 +1408,28 @@ onBeforeUnmount(() => {
         </section>
 
         <section v-else-if="view === 'management' && managementTab === 'users' && isAdmin" class="view-stack">
-          <section class="panel">
-            <header class="panel-heading"><div><h2>创建成员账号</h2><p>每个人使用独立账号，运行和修改操作都会留下记录。</p></div><span class="mini-badge neutral-badge">管理员区域</span></header>
+          <section v-if="isSuperAdmin" class="panel">
+            <header class="panel-heading"><div><h2>创建成员账号</h2><p>仅超级管理员可管理成员；管理员负责管理任务，普通成员可运行任务和查看结果。</p></div><span class="mini-badge neutral-badge">超级管理员区域</span></header>
             <form class="user-create-form" @submit.prevent="createUser">
               <label class="field"><span>登录账号</span><input v-model="userForm.username" type="text" autocomplete="off" maxlength="50" placeholder="例如：xiaoming" /></label>
               <label class="field"><span>显示名称</span><input v-model="userForm.display_name" type="text" maxlength="100" placeholder="例如：小明" /></label>
               <label class="field"><span>成员角色</span><select v-model="userForm.role"><option value="operator">普通成员</option><option value="admin">管理员</option></select></label>
-              <label class="field"><span>初始密码</span><input v-model="userForm.password" type="password" minlength="10" autocomplete="new-password" placeholder="至少 10 个字符" /></label>
+              <label class="field"><span>初始密码</span><input v-model="userForm.password" type="password" minlength="6" autocomplete="new-password" placeholder="至少 6 个字符" /><small>默认初始密码：123321，登录后可直接使用。</small></label>
               <button class="button primary" type="submit" :disabled="creatingUser">{{ creatingUser ? '正在创建…' : '创建成员' }}</button>
             </form>
           </section>
           <section class="panel table-panel">
-            <header class="panel-heading"><div><h2>团队成员</h2><p>共 {{ users.length }} 个账号</p></div></header>
+            <header class="panel-heading"><div><h2>团队成员</h2><p>共 {{ users.length }} 个账号。{{ isSuperAdmin ? '可编辑资料、角色和密码。' : '仅可查看，成员及密码由超级管理员管理。' }}</p></div><button type="button" class="button secondary compact" @click="refreshMembers().catch(error => showToast('error', '刷新失败', error.message))">刷新成员</button></header>
             <div v-if="users.length" class="member-grid">
               <article v-for="user in users" :key="user.id" class="member-card">
                 <span class="avatar">{{ (user.display_name || user.username).slice(0, 1) }}</span>
                 <div><strong>{{ user.display_name || user.username }}</strong><small>@{{ user.username }}</small></div>
-                <span class="mini-badge" :class="user.role === 'admin' ? 'success-badge' : 'neutral-badge'">{{ roleLabel(user.role) }}</span>
+                <span class="mini-badge" :class="user.role !== 'operator' ? 'success-badge' : 'neutral-badge'">{{ roleLabel(user.role) }}</span>
+                <div class="member-actions">
+                  <small>{{ !user.active ? '已停用' : '正常' }}{{ user.id === me.id ? ' · 当前账号' : '' }}</small>
+                  <button v-if="isSuperAdmin" type="button" class="button secondary compact" @click="openUserEditor(user)">编辑</button>
+                  <button v-if="isSuperAdmin && user.id !== me.id" type="button" class="button danger compact" @click="deletingUser = { ...user }">删除</button>
+                </div>
               </article>
             </div>
             <div v-else class="empty-state compact-empty"><strong>暂无成员记录</strong></div>
@@ -1343,9 +1485,10 @@ onBeforeUnmount(() => {
             <div class="field"><span>计划状态</span><button class="switch-row" type="button" role="switch" :aria-checked="taskForm.enabled" @click="taskForm.enabled = !taskForm.enabled"><i :class="{ active: taskForm.enabled }"><b></b></i><span>{{ taskForm.enabled ? '保存后立即启用' : '暂不启用' }}</span></button></div>
           </div>
           <div class="notification-options">
-            <div><strong>最终通知</strong><small>每次运行结束后最多发送一条。</small></div>
+            <div><strong>最终通知</strong><small>每次运行结束后最多发送一条；失败包含错误原因，可选附带前台窗口截图。</small></div>
             <label><input v-model="taskForm.notify_on_success" type="checkbox" />成功时通知</label>
             <label><input v-model="taskForm.notify_on_failure" type="checkbox" />失败时通知</label>
+            <label :class="{ disabled: !taskForm.notify_on_failure }" title="失败或超时时尝试截取宿主机前台窗口；错误日志始终保存。"><input v-model="taskForm.failure_screenshot" :disabled="!taskForm.notify_on_failure" type="checkbox" />失败附带截图</label>
           </div>
           <div v-if="editingTask" class="edit-version-note">当前版本 {{ editingTask.version }} · 如果其他成员已经修改，保存时会提醒你刷新。</div>
         </div>
@@ -1400,8 +1543,17 @@ onBeforeUnmount(() => {
         </div>
         <footer>
           <button v-if="detail.status === 'pending'" class="button danger" type="button" @click="cancelExecution(detail)">取消排队</button>
+          <button v-if="detail.status === 'running' && isAdmin" class="button danger" type="button" :disabled="detail.stop_requested || stoppingBusy" @click="stoppingExecution = { ...detail }">{{ detail.stop_requested ? '正在停止…' : '强制停止' }}</button>
           <button class="button secondary" type="button" @click="detail = null">关闭日志</button>
         </footer>
+      </section>
+    </div>
+
+    <div v-if="stoppingExecution && isAdmin" class="modal-layer" @mousedown.self="!stoppingBusy && (stoppingExecution = null)">
+      <section class="modal confirm-modal" role="alertdialog" aria-modal="true" aria-label="强制停止任务">
+        <header><h2>强制停止“{{ stoppingExecution.task_name }}”</h2><button class="modal-close" type="button" aria-label="关闭" :disabled="stoppingBusy" @click="stoppingExecution = null">×</button></header>
+        <div class="modal-body confirm-copy"><p>将终止本次 Python 进程及其子进程，未保存的内容可能丢失，已经完成的业务操作不会撤销。</p><p>保留运行记录和日志；进程退出并清理完成后，队列继续执行下一项。</p></div>
+        <footer><button class="button ghost" type="button" :disabled="stoppingBusy" @click="stoppingExecution = null">返回</button><button class="button danger" type="button" :disabled="stoppingBusy" @click="forceStopExecution">{{ stoppingBusy ? '正在提交…' : '确认强制停止' }}</button></footer>
       </section>
     </div>
 
@@ -1416,30 +1568,59 @@ onBeforeUnmount(() => {
       </section>
     </div>
 
-    <div v-if="changePasswordOpen" class="modal-layer mandatory-layer" @mousedown.self="!me.must_change_password && (changePasswordOpen = false)">
+    <div v-if="editingUser && isSuperAdmin" class="modal-layer" @mousedown.self="closeUserEditor">
+      <section class="modal password-modal" role="dialog" aria-modal="true" aria-label="编辑成员">
+        <header><div><span class="eyebrow">MEMBER</span><h2>编辑成员</h2></div><button type="button" class="modal-close" aria-label="关闭" :disabled="savingUser" @click="closeUserEditor">×</button></header>
+        <form @submit.prevent="saveUser">
+          <div class="modal-body">
+            <div class="field-grid">
+              <label class="field"><span>登录账号</span><input v-model="userEditForm.username" required maxlength="50" autocomplete="off" /></label>
+              <label class="field"><span>显示名称</span><input v-model="userEditForm.display_name" required maxlength="100" /></label>
+              <label class="field"><span>成员角色</span><select v-model="userEditForm.role" :disabled="editingUser.id === me.id"><option v-if="editingUser.role === 'super_admin'" value="super_admin">超级管理员</option><option value="admin">管理员</option><option value="operator">普通成员</option></select></label>
+              <label class="field"><span>账号状态</span><select v-model="userEditForm.active" :disabled="editingUser.id === me.id"><option :value="true">启用</option><option :value="false">停用</option></select></label>
+            </div>
+            <template v-if="editingUser.id !== me.id">
+              <label class="field"><span>重置密码</span><input v-model="userEditForm.password" type="password" minlength="6" maxlength="200" autocomplete="new-password" placeholder="留空则保留原密码" /><small>至少 6 个字符，重置后可直接使用新密码登录，无需再次修改。</small></label>
+              <label class="field"><span>确认密码</span><input v-model="userEditForm.confirm_password" type="password" maxlength="200" autocomplete="new-password" placeholder="重置密码时再次输入" /></label>
+            </template>
+            <p v-else>当前账号不能降权、停用或删除。自己的密码请通过右上角“修改密码”调整。</p>
+          </div>
+          <footer><button type="button" class="button ghost" :disabled="savingUser" @click="closeUserEditor">取消</button><button type="submit" class="button primary" :disabled="savingUser">{{ savingUser ? '正在保存…' : '保存成员' }}</button></footer>
+        </form>
+      </section>
+    </div>
+
+    <div v-if="deletingUser && isSuperAdmin" class="modal-layer" @mousedown.self="!deletingUserBusy && (deletingUser = null)">
+      <section class="modal confirm-modal" role="alertdialog" aria-modal="true" aria-label="删除成员">
+        <header><h2>删除成员“{{ deletingUser.display_name }}”</h2><button type="button" class="modal-close" aria-label="关闭" :disabled="deletingUserBusy" @click="deletingUser = null">×</button></header>
+        <div class="modal-body confirm-copy"><p>账号 <strong>{{ deletingUser.username }}</strong> 将立即禁止登录，并从成员列表移除。</p><p>历史任务、执行记录和审计记录保留；原账号名继续保留，不能重新注册。</p></div>
+        <footer><button type="button" class="button ghost" :disabled="deletingUserBusy" @click="deletingUser = null">取消</button><button type="button" class="button danger" :disabled="deletingUserBusy" @click="confirmDeleteUser">{{ deletingUserBusy ? '正在删除…' : '确认删除成员' }}</button></footer>
+      </section>
+    </div>
+
+    <div v-if="changePasswordOpen && canChangePassword" class="modal-layer mandatory-layer" @mousedown.self="changePasswordOpen = false">
       <section class="modal password-modal" role="dialog" aria-modal="true" aria-label="修改密码">
         <header>
-          <div><span class="eyebrow">ACCOUNT SECURITY</span><h2>{{ me.must_change_password ? '首次登录，请设置新密码' : '修改登录密码' }}</h2></div>
-          <button v-if="!me.must_change_password" class="modal-close" type="button" aria-label="关闭" @click="changePasswordOpen = false">×</button>
+          <div><span class="eyebrow">ACCOUNT SECURITY</span><h2>修改登录密码</h2></div>
+          <button class="modal-close" type="button" aria-label="关闭" @click="changePasswordOpen = false">×</button>
         </header>
         <div class="modal-body">
-          <div v-if="me.must_change_password" class="notice info"><span class="notice-icon">i</span><div><strong>为了账号安全，需要先修改初始密码</strong><small>完成后即可正常使用共享任务中心。</small></div></div>
           <label class="field"><span>当前密码</span><input v-model="passwordForm.current_password" type="password" autocomplete="current-password" /></label>
-          <label class="field"><span>新密码</span><input v-model="passwordForm.new_password" type="password" minlength="10" autocomplete="new-password" /><small>至少 10 个字符。</small></label>
-          <label class="field"><span>再次输入新密码</span><input v-model="passwordForm.confirm_password" type="password" minlength="10" autocomplete="new-password" /></label>
+          <label class="field"><span>新密码</span><input v-model="passwordForm.new_password" type="password" minlength="6" autocomplete="new-password" /><small>至少 6 个字符。</small></label>
+          <label class="field"><span>再次输入新密码</span><input v-model="passwordForm.confirm_password" type="password" minlength="6" autocomplete="new-password" /></label>
         </div>
         <footer>
-          <button v-if="me.must_change_password" class="button ghost" type="button" @click="logout">退出登录</button>
-          <button v-else class="button ghost" type="button" @click="changePasswordOpen = false">取消</button>
+          <button class="button ghost" type="button" @click="changePasswordOpen = false">取消</button>
           <button class="button primary" type="button" :disabled="saving" @click="changePassword">{{ saving ? '正在保存…' : '保存新密码' }}</button>
         </footer>
       </section>
     </div>
 
-    <div v-if="toast.visible" class="toast" :class="toast.type" role="status">
-      <span class="toast-icon">{{ toast.type === 'success' ? '✓' : '!' }}</span>
-      <span><strong>{{ toast.title }}</strong><small v-if="toast.message">{{ toast.message }}</small></span>
-      <button type="button" aria-label="关闭通知" @click="toast.visible = false">×</button>
-    </div>
+  </div>
+
+  <div v-if="toast.visible" class="toast" :class="toast.type" role="status">
+    <span class="toast-icon">{{ toast.type === 'success' ? '✓' : '!' }}</span>
+    <span><strong>{{ toast.title }}</strong><small v-if="toast.message">{{ toast.message }}</small></span>
+    <button type="button" aria-label="关闭通知" @click="toast.visible = false">×</button>
   </div>
 </template>

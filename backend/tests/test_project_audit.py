@@ -60,11 +60,13 @@ class ConfigPathTests(unittest.TestCase):
 class PasswordChangeTests(unittest.TestCase):
     def test_chinese_password_can_be_changed(self):
         current, new = "原密码中文abcdefgh", "新密码中文abcdefgh"
-        with patch.object(security, "PASSWORD_ITERATIONS", 1000):
-            user = {"id": 1, "username": "audit-user", "password_hash": security._hash_password(current)}
-            with patch.object(security, "execute") as execute:
-                security.change_password(user, current, new)
-            self.assertTrue(security.verify_password(new, execute.call_args.args[1][0]))
+        with api_helpers.ManagedAppApiTests().fixture(), patch.object(security, "PASSWORD_ITERATIONS", 1000):
+            created = security.create_user("audit-user", "中文密码测试", "operator", current)
+            user = database.fetch_one("SELECT * FROM users WHERE id=?", (created["id"],))
+            security.change_password(user, current, new)
+            updated = database.fetch_one("SELECT * FROM users WHERE id=?", (created["id"],))
+            self.assertTrue(security.verify_password(new, updated["password_hash"]))
+            self.assertFalse(updated["must_change_password"])
 
     def test_same_chinese_password_is_a_validation_error(self):
         current = "原密码中文abcdefgh"
