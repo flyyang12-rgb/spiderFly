@@ -63,7 +63,7 @@ const deletingUserBusy = ref(false)
 const loginBusy = ref(false)
 const uploadKey = ref(0)
 const toast = reactive({ visible: false, type: 'success', title: '', message: '' })
-const filters = reactive({ name: '', enabled: 'all', trigger_type: 'all' })
+const filters = reactive({ name: '', enabled: 'all', trigger_type: 'all', owner: 'all' })
 const loginForm = reactive({ username: '', password: '' })
 const passwordForm = reactive({ current_password: '', new_password: '', confirm_password: '' })
 const appForm = reactive({
@@ -112,12 +112,31 @@ const recentExecutions = computed(() => completedExecutions.value.slice(0, 6))
 const attentionTasks = computed(() => tasks.value.filter((item) => ['failed', 'timeout'].includes(item.last_status)))
 const readyTasks = computed(() => tasks.value.filter((item) => item.environment_status === 'ready'))
 const buildingTasks = computed(() => tasks.value.filter((item) => ['pending', 'building', 'not_built'].includes(item.environment_status)))
+const ownerOptions = computed(() => {
+  const owners = new Map()
+  for (const task of tasks.value) {
+    const value = taskOwnerKey(task)
+    if (owners.has(value)) continue
+    const name = String(task.created_by_name || '').trim() || '系统迁移'
+    const isCurrentUser = Number(task.created_by) === Number(me.value?.id)
+    owners.set(value, { value, label: isCurrentUser ? `${name}（我）` : name })
+  }
+  const currentUserValue = me.value?.id ? `user:${me.value.id}` : ''
+  return [...owners.values()].sort((left, right) => {
+    if (left.value === currentUserValue) return -1
+    if (right.value === currentUserValue) return 1
+    if (left.value === 'legacy') return 1
+    if (right.value === 'legacy') return -1
+    return left.label.localeCompare(right.label, 'zh-CN')
+  })
+})
 const filteredTasks = computed(() => tasks.value.filter((task) => {
   const taskName = String(task.name || '').toLowerCase()
   const nameMatch = !filters.name.trim() || taskName.includes(filters.name.trim().toLowerCase())
   const enabledMatch = filters.enabled === 'all' || Boolean(task.enabled) === (filters.enabled === 'enabled')
   const triggerMatch = filters.trigger_type === 'all' || task.trigger_type === filters.trigger_type
-  return nameMatch && enabledMatch && triggerMatch
+  const ownerMatch = filters.owner === 'all' || taskOwnerKey(task) === filters.owner
+  return nameMatch && enabledMatch && triggerMatch && ownerMatch
 }))
 
 watch(() => detail.value?.id, resetArtifactDownload, { flush: 'sync' })
@@ -690,7 +709,12 @@ function toggleCreateWeekday(day) {
 }
 
 function resetFilters() {
-  Object.assign(filters, { name: '', enabled: 'all', trigger_type: 'all' })
+  Object.assign(filters, { name: '', enabled: 'all', trigger_type: 'all', owner: 'all' })
+}
+
+function taskOwnerKey(task) {
+  const ownerId = Number(task?.created_by)
+  return Number.isInteger(ownerId) && ownerId > 0 ? `user:${ownerId}` : 'legacy'
 }
 
 function triggerLabel(type) {
@@ -1192,6 +1216,7 @@ onBeforeUnmount(() => {
               <label class="filter-field"><span>任务名称</span><input v-model="filters.name" type="search" placeholder="输入任务名称" /></label>
               <label class="filter-field"><span>启用状态</span><select v-model="filters.enabled"><option value="all">全部状态</option><option value="enabled">已启用</option><option value="disabled">已停用</option></select></label>
               <label class="filter-field"><span>触发方式</span><select v-model="filters.trigger_type"><option value="all">全部触发方式</option><option v-for="option in triggerOptions" :key="option.value" :value="option.value">{{ option.label }}</option></select></label>
+              <label class="filter-field"><span>归属人</span><select v-model="filters.owner"><option value="all">全部归属人</option><option v-for="owner in ownerOptions" :key="owner.value" :value="owner.value">{{ owner.label }}</option></select></label>
               <div class="filter-actions">
                 <button class="icon-button toolbar-icon" type="button" title="刷新任务" aria-label="刷新任务" @click="loadAll({ quiet: true, includeAdmin: false })">↻</button>
                 <button class="icon-button toolbar-icon" type="button" title="清空筛选" aria-label="清空筛选" @click="resetFilters">···</button>
