@@ -22,6 +22,7 @@ from fastapi import (
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from . import ai_agent, maintenance
 
 from .database import (
     TASK_EXECUTION_STATUS_SQL,
@@ -110,6 +111,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.include_router(ai_agent.router)
+app.include_router(maintenance.router)
 
 _scheduler_task: asyncio.Task | None = None
 _queue_worker_task: asyncio.Task | None = None
@@ -152,6 +155,8 @@ async def startup() -> None:
         if bootstrap_file:
             print(f"[SpiderFly] 首次登录信息：{bootstrap_file}")
         reconcile_schedules()
+        maintenance.init_tables()
+        ai_agent.start()
         _scheduler_task = asyncio.create_task(scheduler_loop(_enqueue_task))
         _queue_worker_task = asyncio.create_task(_queue_worker_loop())
         _environment_worker_task = asyncio.create_task(_environment_worker_loop())
@@ -164,6 +169,7 @@ async def startup() -> None:
 
 async def _stop_background_tasks() -> None:
     global _scheduler_task, _queue_worker_task, _environment_worker_task
+    await ai_agent.stop()
     tasks = [
         item
         for item in (_scheduler_task, _environment_worker_task, _queue_worker_task)
@@ -334,6 +340,8 @@ def _enqueue_task_sync(
                     now,
                 ),
             )
+            conn.execute('UPDATE executions SET maintenance_snapshot=? WHERE id=?',
+                         (maintenance.capture_snapshot(conn, task_id), cursor.lastrowid))
             conn.execute(
                 f"""
                 UPDATE tasks
@@ -410,6 +418,14 @@ def _claim_next_execution() -> int | None:
 
 async def _queue_worker_loop() -> None:
     while True:
+        # Finish a ready repair at the serial boundary before starting queued code.
+        try:
+            await asyncio.to_thread(maintenance.reconcile_reruns)
+            if await maintenance.run_next_trial():
+                continue
+        except asyncio.CancelledError: raise
+        except Exception:
+            logger.exception('读取自动维护试跑队列失败')
         pending_id = await asyncio.to_thread(_next_pending_execution_id)
         if pending_id is None:
             await asyncio.sleep(0.5)
@@ -436,6 +452,11 @@ async def _queue_worker_loop() -> None:
             except Exception:
                 logger.exception("执行记录 %s 的兜底失败状态写入失败", execution_id)
             await asyncio.sleep(0.1)
+
+        try:
+            await asyncio.to_thread(maintenance.record_failure, execution_id)
+        except Exception:
+            logger.exception('执行记录 %s 的自动维护入队失败', execution_id)
 
 
 def _mark_execution_worker_failure(execution_id: int, message: str) -> None:
@@ -498,6 +519,7 @@ def health() -> dict:
         "environment_worker": "running"
         if _environment_worker_task and not _environment_worker_task.done()
         else "stopped",
+        "ai_worker": "running" if ai_agent.is_running() else "stopped",
     }
 
 
@@ -1289,6 +1311,8 @@ def get_execution(
         raise HTTPException(status_code=404, detail="执行记录不存在")
     item["stop_requested"] = item["status"] == "running" and execution_stop_requested(execution_id)
     item.pop("script_path_snapshot", None)
+    item.pop("maintenance_snapshot", None)
+    item["maintenance"] = maintenance.execution_note(execution_id)
     item.pop("python_path_snapshot", None)
     if item.get("retryable") is not None:
         item["retryable"] = bool(item["retryable"])

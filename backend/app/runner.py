@@ -234,7 +234,7 @@ def _runtime_environment(
     environment = {
         key: value
         for key, value in os.environ.items()
-        if not key.upper().startswith(("SPIDERFLY_", "FEISHU_"))
+        if not key.upper().startswith(("SPIDERFLY_", "FEISHU_", "DEEPSEEK_"))
     }
     environment["PYTHONIOENCODING"] = "utf-8"
     environment["PYTHONUNBUFFERED"] = "1"
@@ -403,7 +403,7 @@ async def _run_execution(execution_id: int, control: ExecutionControl) -> None:
     task = await asyncio.to_thread(
         fetch_one,
         """
-        SELECT t.*, e.script_path_snapshot, e.python_path_snapshot,
+        SELECT t.*, e.script_path_snapshot, e.python_path_snapshot, e.maintenance_snapshot,
                a.template_filename, a.template_path
         FROM executions e
         JOIN tasks t ON t.id = e.task_id
@@ -414,6 +414,13 @@ async def _run_execution(execution_id: int, control: ExecutionControl) -> None:
     )
     if not task:
         return
+    if task.get('maintenance_snapshot'):
+        import json
+        snapshot = json.loads(task['maintenance_snapshot'])
+        if snapshot['policy']['runtime'] == 'readonly-v1':
+            from .maintenance import run_managed_execution
+            await run_managed_execution(execution_id, task, control)
+            return
     task_id = int(task["id"])
     started = time.monotonic()
 

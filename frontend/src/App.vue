@@ -1,5 +1,10 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import AiAssistant from './AiAssistant.vue'
+import AiSettings from './AiSettings.vue'
+import MaintenanceNotices from './MaintenanceNotices.vue'
+import MaintenanceLog from './MaintenanceLog.vue'
+import { maintenanceResult } from './maintenanceSummary'
 
 const API = '/api'
 const baseNavItems = [
@@ -17,6 +22,7 @@ const runtimeTabs = [
 ]
 const managementTabs = [
   { id: 'apps', label: '创建任务' },
+  { id: 'ai', label: 'AI 模型' },
   { id: 'users', label: '成员管理' },
   { id: 'settings', label: '系统设置' },
   { id: 'audit', label: '操作审计' },
@@ -51,6 +57,9 @@ const auditLogs = ref([])
 const overview = ref({})
 const settings = ref({})
 const taskModalOpen = ref(false)
+const aiOpen = ref(false)
+const aiTaskId = ref(null)
+const aiSourceThread = ref(null)
 const editingTask = ref(null)
 const detail = ref(null)
 const artifactDownload = reactive({ busy: false, path: '', message: '', error: false })
@@ -187,6 +196,8 @@ function showToast(type, title, message = '') {
 }
 
 function clearSharedData() {
+  aiOpen.value = false
+  aiSourceThread.value = null
   stoppingExecution.value = null
   editingUser.value = null
   deletingUser.value = null
@@ -569,6 +580,7 @@ async function forceStopExecution() {
 }
 
 function selectScript(event) {
+  aiSourceThread.value = null
   appForm.script = event.target.files?.[0] || null
   if (!appForm.name && appForm.script) appForm.name = appForm.script.name.replace(/\.py$/i, '')
 }
@@ -607,6 +619,28 @@ async function selectRequirementsFile(event) {
     appForm.requirements_filename = ''
     showToast('error', '无法读取依赖文件', error.message || '请确认文件使用 UTF-8 编码')
   }
+}
+
+function openAi(task = null) {
+  aiTaskId.value = task?.id || null
+  aiOpen.value = true
+}
+
+function prepareAiDraft(draft) {
+  Object.assign(appForm, {
+    name: (draft.name + (draft.task_id ? ' · AI试运行' : '')).slice(0, 100),
+    description: draft.description.slice(0, 500),
+    requirements_text: draft.requirements,
+    requirements_filename: 'AI 生成的 requirements.txt',
+    script: new File([draft.source], 'main.py', { type: 'text/x-python' }),
+    template: null, trigger_type: 'manual', enabled: true,
+    notify_on_success: false, notify_on_failure: false, failure_screenshot: false,
+  })
+  aiSourceThread.value = draft.task_id ? null : draft.thread_id
+  uploadKey.value += 1
+  aiOpen.value = false
+  navigateTo('management', 'apps')
+  showToast('success', 'Python 草稿已带入', '语法已检查，请先创建手动任务验证实际结果')
 }
 
 async function uploadApp() {
@@ -649,7 +683,16 @@ async function uploadApp() {
     form.append('failure_screenshot', String(appForm.failure_screenshot))
     form.append('script', appForm.script)
     if (appForm.template) form.append('template', appForm.template)
-    await request('/apps', { method: 'POST', body: form })
+    const created = await request('/apps', { method: 'POST', body: form })
+    let aiBindingError = ''
+    if (aiSourceThread.value && created.task?.id) {
+      try {
+        await request(`/ai/threads/${aiSourceThread.value}/bind`, { method: 'POST', body: JSON.stringify({ task_id: created.task.id }) })
+      } catch (error) {
+        aiBindingError = error.message
+      }
+    }
+    aiSourceThread.value = null
     Object.assign(appForm, {
       name: '', description: '', requirements_text: '', requirements_filename: '', script: null, template: null,
       enabled: true, notify_on_success: true, notify_on_failure: true, failure_screenshot: false, trigger_type: 'manual',
@@ -658,7 +701,8 @@ async function uploadApp() {
     uploadKey.value += 1
     await loadAll({ quiet: true, includeAdmin: false })
     navigateTo('tasks')
-    showToast('success', '任务已一次创建完成', '运行设置已保存，正在准备独立环境')
+    if (aiBindingError) showToast('error', '任务已创建，AI 对话关联未完成', aiBindingError)
+    else showToast('success', '任务已一次创建完成', '运行设置已保存，正在准备独立环境')
   } catch (error) {
     showToast('error', '创建任务失败', error.message)
   } finally {
@@ -812,7 +856,7 @@ function triggerDetail(task) {
 }
 
 function sourceLabel(source) {
-  return source === 'schedule' ? '定时调度' : '手动运行'
+  return ({ schedule: '定时调度', maintenance: '修复重跑' })[source] || '手动运行'
 }
 
 function statusLabel(status) {
@@ -1110,9 +1154,9 @@ onBeforeUnmount(() => {
         <div><strong>SpiderFly</strong><small>团队 Python 自动化控制台</small></div>
       </div>
       <div class="login-copy">
-        <span class="eyebrow">SHARED AUTOMATION</span>
+
         <h1>欢迎回来</h1>
-        <p>统一管理任务、运行队列和历史记录。</p>
+
       </div>
       <form class="login-form" @submit.prevent="login">
         <label class="field">
@@ -1127,7 +1171,7 @@ onBeforeUnmount(() => {
           {{ loginBusy ? '正在登录…' : '登录共享任务中心' }}
         </button>
       </form>
-      <div class="login-footnote"><span class="status-dot success"></span>Python、依赖和脚本都由共享电脑统一管理</div>
+
     </section>
   </div>
 
@@ -1175,10 +1219,12 @@ onBeforeUnmount(() => {
     <main class="workspace">
       <header class="workspace-header">
         <div>
-          <span class="eyebrow">SPIDERFLY / PYTHON CONTROL CENTER</span>
+
           <h1>{{ pageTitle }}</h1>
         </div>
         <div class="header-actions">
+          <MaintenanceNotices :key="me.id" :can-manage="isAdmin" @open-task="id => { aiTaskId = id; aiOpen = true }" @open-execution="id => openExecution({ id })" @notify="(title, message) => showToast('info', title, message)" />
+          <button v-if="view === 'tasks' && isAdmin" class="button ghost" type="button" @click="openAi()">AI 创建</button>
           <span class="live-state"><i class="status-dot" :class="runningExecution ? 'running' : 'success'"></i>{{ runningExecution ? '正在运行 1 项' : '执行器空闲' }}</span>
           <button v-if="view === 'tasks'" class="button primary" type="button" @click="openCreate">
             <span aria-hidden="true">＋</span> 新建任务
@@ -1203,7 +1249,7 @@ onBeforeUnmount(() => {
       <template v-else>
         <section v-if="view === 'runtime' && runtimeTab === 'active'" class="panel runtime-active-panel" aria-label="当前运行与排队">
           <header class="panel-heading">
-            <div><h2>运行队列</h2><p>{{ runningExecution ? '1 项正在运行' : '当前没有运行任务' }} · {{ queuedExecutions.length }} 项排队。{{ isAdmin ? '点击查看日志、强制停止或取消排队。' : '点击查看日志和排队进度。' }}</p></div>
+            <div><h2>运行队列</h2><p>{{ runningExecution ? '1 项正在运行' : '当前没有运行任务' }} · {{ queuedExecutions.length }} 项排队</p></div>
             <button class="button secondary compact" type="button" @click="loadAll({ quiet: true, includeAdmin: false })">刷新队列</button>
           </header>
           <div v-if="orderedActiveExecutions.length" class="queue-list">
@@ -1213,7 +1259,7 @@ onBeforeUnmount(() => {
               <span class="run-result"><strong>{{ item.status === 'running' ? '正在运行' : '排队中' }}</strong><small>{{ requesterName(item) }} 发起</small></span>
             </button>
           </div>
-          <div v-else class="empty-state"><strong>当前没有运行或排队的任务</strong><p>提交任务后，运行进度和等待顺序会显示在这里。</p><button class="button secondary" type="button" @click="navigateTo('tasks')">打开任务中心</button></div>
+          <div v-else class="empty-state"><strong>当前没有运行或排队的任务</strong><button class="button secondary" type="button" @click="navigateTo('tasks')">打开任务中心</button></div>
         </section>
         <section v-if="view === 'overview'" class="view-stack">
           <div class="metric-grid">
@@ -1227,32 +1273,32 @@ onBeforeUnmount(() => {
               <span>运行队列</span><strong :class="{ 'queue-text': activeExecutions.length }">{{ activeExecutions.length }}</strong><small>{{ runningExecution ? '1 个运行，' + queuedExecutions.length + ' 个等待' : '当前没有运行任务' }}</small>
             </article>
             <article class="metric-card">
-              <span>运行主机</span><strong>{{ runningExecution ? '忙碌' : '空闲' }}</strong><small>始终只运行一个 Python</small>
+              <span>运行主机</span><strong>{{ runningExecution ? '忙碌' : '空闲' }}</strong><small>串行执行</small>
             </article>
           </div>
 
           <nav class="console-path" :class="{ 'operator-path': !isAdmin }" aria-label="常用入口">
             <template v-if="isAdmin">
-              <button type="button" @click="navigateTo('management', 'apps')"><span>01</span><strong>创建任务</strong><small>上传脚本并准备独立环境</small></button>
+              <button type="button" @click="navigateTo('management', 'apps')"><span>01</span><strong>创建任务</strong><small>上传 Python</small></button>
               <i>→</i>
             </template>
             <button type="button" @click="navigateTo('tasks')"><span>{{ isAdmin ? '02' : '01' }}</span><strong>任务中心</strong><small>运行、定时、修复和删除</small></button>
             <i>→</i>
             <button type="button" @click="navigateTo('runtime', 'queue')"><span>{{ isAdmin ? '03' : '02' }}</span><strong>任务时间表</strong><small>查看今日和本周计划</small></button>
             <i>→</i>
-            <button type="button" @click="navigateTo('runtime', 'executions')"><span>{{ isAdmin ? '04' : '03' }}</span><strong>运行记录</strong><small>查看结果与完整日志</small></button>
+            <button type="button" @click="navigateTo('runtime', 'executions')"><span>{{ isAdmin ? '04' : '03' }}</span><strong>运行记录</strong><small>结果与日志</small></button>
           </nav>
 
           <div v-if="attentionTasks.length" class="notice warning">
             <span class="notice-icon">!</span>
-            <div><strong>{{ attentionTasks.length }} 个任务最近一次运行异常</strong><small>可在运行记录中查看完整日志和通知结果。</small></div>
+            <div><strong>{{ attentionTasks.length }} 个任务最近一次运行异常</strong><small>查看日志定位问题</small></div>
             <button class="button ghost compact" type="button" @click="navigateTo('runtime', 'executions')">查看记录</button>
           </div>
 
           <div class="two-column queue-overview">
             <section class="panel">
               <header class="panel-heading">
-                <div><h2>当前队列</h2><p>一个运行，其余按顺序等待，不会抢占共享电脑。</p></div>
+                <div><h2>当前队列</h2></div>
                 <button class="text-button" type="button" @click="navigateTo('runtime', 'active')">查看运行队列</button>
               </header>
               <div v-if="runningExecution || queuedExecutions.length" class="queue-list">
@@ -1269,13 +1315,13 @@ onBeforeUnmount(() => {
               </div>
               <div v-else class="empty-state compact-empty">
                 <strong>共享执行器正在等待</strong>
-                <p>现在没有运行或排队的任务。</p>
+
               </div>
             </section>
 
             <section class="panel">
               <header class="panel-heading">
-                <div><h2>最近完成</h2><p>显示团队最近提交的运行记录。</p></div>
+                <div><h2>最近完成</h2></div>
                 <button class="text-button" type="button" @click="navigateTo('runtime', 'executions')">全部记录</button>
               </header>
               <div v-if="recentExecutions.length" class="run-list">
@@ -1285,7 +1331,7 @@ onBeforeUnmount(() => {
                   <span class="run-result"><strong>{{ statusLabel(item.status) }}</strong><small>{{ formatDuration(item.duration_ms) }}</small></span>
                 </button>
               </div>
-              <div v-else class="empty-state compact-empty"><strong>还没有完成记录</strong><p>运行完成后会显示在这里。</p></div>
+              <div v-else class="empty-state compact-empty"><strong>还没有完成记录</strong></div>
             </section>
           </div>
         </section>
@@ -1326,6 +1372,7 @@ onBeforeUnmount(() => {
                     <td><span class="person-chip">{{ (task.created_by_name || '系统迁移').slice(0, 1) }}</span>{{ task.created_by_name || '系统迁移' }}</td>
                     <td class="align-right">
                       <div class="row-actions">
+                        <button v-if="isAdmin" class="button ghost compact" type="button" @click="openAi(task)">AI 助手</button>
                         <button v-if="taskIsActive(task)" class="button primary compact" type="button" @click="viewTaskExecution(task)">查看运行</button>
                         <button v-else class="button primary compact" type="button" :disabled="!task.enabled || task.environment_status !== 'ready'" @click="runTask(task)">运行</button>
                         <button class="icon-button" type="button" :disabled="taskIsActive(task)" aria-label="编辑任务" :title="taskIsActive(task) ? '任务完成后才能编辑' : '编辑任务'" @click="openEdit(task)">✎</button>
@@ -1395,7 +1442,7 @@ onBeforeUnmount(() => {
 
         <section v-else-if="view === 'runtime' && runtimeTab === 'executions'" class="view-stack">
           <div class="section-summary record-summary">
-            <p>查看正在运行、排队和已结束的任务，以及每次运行的状态和日志。</p>
+
             <span>{{ executionHistoryTotal }} 条记录</span>
           </div>
           <section class="panel scheduler-toolbar">
@@ -1413,7 +1460,7 @@ onBeforeUnmount(() => {
           </section>
           <section class="panel table-panel">
             <header class="panel-heading">
-              <div><h2>运行记录</h2><p>每页 10 条，点击任意一行查看日志。</p></div>
+              <div><h2>运行记录</h2><p>每页 10 条</p></div>
               <button class="button secondary compact" type="button" :disabled="executionHistoryLoading" @click="loadExecutionHistory()">刷新记录</button>
             </header>
             <div v-if="executionHistory.length" class="table-wrap">
@@ -1449,12 +1496,14 @@ onBeforeUnmount(() => {
         </section>
 
         <section v-else-if="view === 'management' && managementTab === 'apps' && isAdmin" class="view-stack">
+          <section class="panel" style="padding: 18px 24px; display: flex; justify-content: space-between; align-items: center; gap: 16px;"><div><strong>AI 创建</strong></div><button class="button primary" type="button" @click="openAi()">AI 创建任务</button></section>
           <section v-if="isAdmin" class="panel">
             <form class="app-upload-form" @submit.prevent="uploadApp">
               <label class="field upload-name"><span>任务名称</span><input v-model="appForm.name" type="text" maxlength="100" placeholder="例如：财务日报" /></label>
               <label class="field upload-description"><span>任务说明（可不填）</span><input v-model="appForm.description" type="text" maxlength="500" placeholder="这个任务负责什么" /></label>
               <label class="field file-field upload-script">
                 <span>Python 脚本</span>
+                <small v-if="appForm.script">已选择：{{ appForm.script.name }}</small>
                 <input :key="uploadKey" type="file" accept=".py,text/x-python" @change="selectScript" />
               </label>
               <label class="field file-field upload-requirements">
@@ -1471,13 +1520,13 @@ onBeforeUnmount(() => {
               </label>
               <section class="schedule-card create-task-settings">
                 <div class="schedule-card-heading">
-                  <div><strong>运行设置</strong><small>创建时一次设置完成，以后需要变更时再编辑。</small></div>
+                  <div><strong>运行设置</strong></div>
                   <span>北京时间 · 最长 10 分钟</span>
                 </div>
                 <div class="trigger-choice-grid">
                   <button v-for="option in triggerOptions" :key="option.value" type="button" :class="{ active: appForm.trigger_type === option.value }" @click="appForm.trigger_type = option.value"><i></i>{{ option.label }}</button>
                 </div>
-                <div v-if="appForm.trigger_type === 'manual'" class="schedule-hint">创建后由伙伴点击“运行”，不会自动执行。</div>
+                <div v-if="appForm.trigger_type === 'manual'" class="schedule-hint">手动点击“运行”执行</div>
                 <label v-else-if="appForm.trigger_type === 'daily'" class="field"><span>每天执行时间</span><input v-model="appForm.daily_time" type="time" /></label>
                 <div v-else class="weekly-fields">
                   <div class="field"><span>执行星期</span><div class="weekday-grid"><button v-for="day in weekdayOptions" :key="day.value" type="button" :class="{ active: appForm.weekly_days.includes(day.value) }" @click="toggleCreateWeekday(day.value)">周{{ day.label }}</button></div></div>
@@ -1489,7 +1538,7 @@ onBeforeUnmount(() => {
                     <button class="switch-row" type="button" role="switch" :aria-checked="appForm.enabled" @click="appForm.enabled = !appForm.enabled"><i :class="{ active: appForm.enabled }"><b></b></i><span>{{ appForm.enabled ? '创建后启用' : '暂不启用' }}</span></button>
                   </div>
                   <div class="notification-options">
-                    <div><strong>最终通知</strong><small>每次运行结束后最多发送一条；失败包含错误原因，可选附带前台窗口截图。</small></div>
+                    <div><strong>最终通知</strong><small>每次结束通知一次</small></div>
                     <label><input v-model="appForm.notify_on_success" type="checkbox" />成功时通知</label>
                     <label><input v-model="appForm.notify_on_failure" type="checkbox" />失败时通知</label>
                     <label :class="{ disabled: !appForm.notify_on_failure }" title="失败或超时时尝试截取宿主机前台窗口；错误日志始终保存。"><input v-model="appForm.failure_screenshot" :disabled="!appForm.notify_on_failure" type="checkbox" />失败附带截图</label>
@@ -1501,21 +1550,25 @@ onBeforeUnmount(() => {
           </section>
         </section>
 
+        <section v-else-if="view === 'management' && managementTab === 'ai' && isAdmin" class="view-stack">
+          <AiSettings :can-edit="isSuperAdmin" />
+        </section>
+
         <section v-else-if="view === 'management' && managementTab === 'settings' && isAdmin" class="view-stack settings-grid">
           <section class="panel">
-            <header class="panel-heading"><div><h2>共享运行方式</h2><p>所有成员连接同一个网页，由这台电脑统一执行。</p></div><span class="mini-badge success-badge">{{ settings.scheduler === 'running' ? '运行中' : '已连接' }}</span></header>
+            <header class="panel-heading"><div><h2>共享运行方式</h2></div><span class="mini-badge success-badge">{{ settings.scheduler === 'running' ? '运行中' : '已连接' }}</span></header>
             <div class="setting-rows">
-              <div><span>执行数量</span><strong>1 at a time</strong><small>任何时候最多运行一个 Python，其余任务进入持久队列。</small></div>
-              <div><span>调度时区</span><strong>{{ settings.scheduler_timezone || 'Asia/Shanghai' }}</strong><small>所有计划按北京时间计算。</small></div>
-              <div><span>任务环境</span><strong>one task · one venv</strong><small>每个任务绑定自己的程序环境，互不共用。</small></div>
-              <div><span>最长运行</span><strong>10 分钟</strong><small>只计算 Python 实际运行时间，排队等待不计时。</small></div>
-              <div><span>公共文件夹</span><strong>{{ settings.work_directory_name || '共享工作区' }}</strong><small>运行前、运行后都会自动清空；模板每次重新复制。</small></div>
-              <div><span>运行前检查</span><strong>Excel / 端口 {{ settings.managed_browser_port || 9123 }}</strong><small>管理用 Chrome 可以保持打开；只在专用自动化浏览器未退出时排队。</small></div>
-              <div><span>轮询刷新</span><strong>1.2s / 5s</strong><small>繁忙时快速刷新，空闲时降低请求频率。</small></div>
+              <div><span>执行数量</span><strong>串行执行</strong><small>同时运行 1 个任务</small></div>
+              <div><span>调度时区</span><strong>{{ settings.scheduler_timezone || 'Asia/Shanghai' }}</strong><small>北京时间</small></div>
+              <div><span>任务环境</span><strong>独立环境</strong></div>
+              <div><span>最长运行</span><strong>10 分钟</strong><small>排队时间不计入</small></div>
+              <div><span>公共文件夹</span><strong>{{ settings.work_directory_name || '共享工作区' }}</strong><small>运行前后自动清空</small></div>
+              <div><span>运行前检查</span><strong>Excel / 端口 {{ settings.managed_browser_port || 9123 }}</strong><small>专用浏览器退出后执行</small></div>
+
             </div>
           </section>
           <section class="panel">
-            <header class="panel-heading"><div><h2>我的账号</h2><p>当前登录信息与账号安全。</p></div><span class="mini-badge neutral-badge">{{ roleLabel(me.role) }}</span></header>
+            <header class="panel-heading"><div><h2>我的账号</h2></div><span class="mini-badge neutral-badge">{{ roleLabel(me.role) }}</span></header>
             <div class="profile-block">
               <span class="avatar large-avatar">{{ (me.display_name || me.username).slice(0, 1) }}</span>
               <div><strong>{{ me.display_name || me.username }}</strong><small>@{{ me.username }}</small></div>
@@ -1527,28 +1580,28 @@ onBeforeUnmount(() => {
             </div>
           </section>
           <section class="panel">
-            <header class="panel-heading"><div><h2>飞书通知</h2><p>凭据只保存在后端，不会显示在网页中。</p></div><span class="mini-badge" :class="settings.feishu_configured ? 'success-badge' : 'warning-badge'">{{ settings.feishu_configured ? '已配置' : '待配置' }}</span></header>
+            <header class="panel-heading"><div><h2>飞书通知</h2></div><span class="mini-badge" :class="settings.feishu_configured ? 'success-badge' : 'warning-badge'">{{ settings.feishu_configured ? '已配置' : '待配置' }}</span></header>
             <div class="policy-list">
-              <div><span class="policy-index success-bg">01</span><p><strong>运行成功</strong><small>发送任务名称、成功状态和耗时。</small></p></div>
-              <div><span class="policy-index danger-bg">02</span><p><strong>运行失败</strong><small>发送错误摘要和最终结果。</small></p></div>
-              <div><span class="policy-index neutral-bg">03</span><p><strong>安静通知</strong><small>不发送开始提醒，结束时最多一条。</small></p></div>
+              <div><span class="policy-index success-bg">01</span><p><strong>运行成功</strong><small>任务、状态、耗时</small></p></div>
+              <div><span class="policy-index danger-bg">02</span><p><strong>运行失败</strong><small>错误摘要与结果</small></p></div>
+              <div><span class="policy-index neutral-bg">03</span><p><strong>安静通知</strong><small>仅在结束时通知</small></p></div>
             </div>
           </section>
         </section>
 
         <section v-else-if="view === 'management' && managementTab === 'users' && isAdmin" class="view-stack">
           <section v-if="isSuperAdmin" class="panel">
-            <header class="panel-heading"><div><h2>创建成员账号</h2><p>仅超级管理员可管理成员；管理员负责管理任务，普通成员可运行任务和查看结果。</p></div><span class="mini-badge neutral-badge">超级管理员区域</span></header>
+            <header class="panel-heading"><div><h2>创建成员账号</h2></div><span class="mini-badge neutral-badge">超级管理员区域</span></header>
             <form class="user-create-form" @submit.prevent="createUser">
               <label class="field"><span>登录账号</span><input v-model="userForm.username" type="text" autocomplete="off" maxlength="50" placeholder="例如：xiaoming" /></label>
               <label class="field"><span>显示名称</span><input v-model="userForm.display_name" type="text" maxlength="100" placeholder="例如：小明" /></label>
               <label class="field"><span>成员角色</span><select v-model="userForm.role"><option value="operator">普通成员</option><option value="admin">管理员</option></select></label>
-              <label class="field"><span>初始密码</span><input v-model="userForm.password" type="password" minlength="6" autocomplete="new-password" placeholder="至少 6 个字符" /><small>默认初始密码：123321，登录后可直接使用。</small></label>
+              <label class="field"><span>初始密码</span><input v-model="userForm.password" type="password" minlength="6" autocomplete="new-password" placeholder="至少 6 个字符" /></label>
               <button class="button primary" type="submit" :disabled="creatingUser">{{ creatingUser ? '正在创建…' : '创建成员' }}</button>
             </form>
           </section>
           <section class="panel table-panel">
-            <header class="panel-heading"><div><h2>团队成员</h2><p>共 {{ users.length }} 个账号。{{ isSuperAdmin ? '可编辑资料、角色和密码。' : '仅可查看，成员及密码由超级管理员管理。' }}</p></div><button type="button" class="button secondary compact" @click="refreshMembers().catch(error => showToast('error', '刷新失败', error.message))">刷新成员</button></header>
+            <header class="panel-heading"><div><h2>团队成员</h2><p>{{ users.length }} 个账号</p></div><button type="button" class="button secondary compact" @click="refreshMembers().catch(error => showToast('error', '刷新失败', error.message))">刷新成员</button></header>
             <div v-if="users.length" class="member-grid">
               <article v-for="user in users" :key="user.id" class="member-card">
                 <span class="avatar">{{ (user.display_name || user.username).slice(0, 1) }}</span>
@@ -1566,7 +1619,7 @@ onBeforeUnmount(() => {
         </section>
 
         <section v-else-if="view === 'management' && managementTab === 'audit' && isAdmin" class="view-stack">
-          <div class="section-summary"><p>这里记录谁在什么时间登录、修改任务、发起运行或管理自动化程序，方便团队追溯操作。</p></div>
+
           <section class="panel table-panel">
             <header class="panel-heading"><div><h2>最近操作</h2><p>最近 {{ auditLogs.length }} 条审计记录</p></div><button class="button secondary compact" type="button" @click="loadAll({ quiet: true, includeAdmin: true })">刷新记录</button></header>
             <div v-if="auditLogs.length" class="table-wrap">
@@ -1583,25 +1636,27 @@ onBeforeUnmount(() => {
                 </tbody>
               </table>
             </div>
-            <div v-else class="empty-state compact-empty"><strong>暂无审计记录</strong><p>团队操作发生后会显示在这里。</p></div>
+            <div v-else class="empty-state compact-empty"><strong>暂无审计记录</strong></div>
           </section>
         </section>
       </template>
     </main>
 
+    <AiAssistant v-if="aiOpen && isAdmin" :task-id="aiTaskId" @close="aiOpen = false" @use-draft="prepareAiDraft" @open-execution="id => { aiOpen = false; openExecution({ id }) }" />
+
     <div v-if="taskModalOpen" class="modal-layer" @mousedown.self="taskModalOpen = false">
       <section class="modal plan-modal" role="dialog" aria-modal="true" aria-label="编辑任务">
-        <header><div><span class="eyebrow">TEAM TASK</span><h2>编辑任务</h2></div><button class="modal-close" type="button" aria-label="关闭" @click="taskModalOpen = false">×</button></header>
+        <header><div><h2>编辑任务</h2></div><button class="modal-close" type="button" aria-label="关闭" @click="taskModalOpen = false">×</button></header>
         <div class="modal-body">
           <label class="field"><span>任务名称</span><input v-model="taskForm.name" type="text" maxlength="100" placeholder="例如：订单同步" /></label>
           <label class="field"><span>任务说明</span><input v-model="taskForm.description" type="text" maxlength="500" placeholder="这个计划负责什么" /></label>
 
           <section class="schedule-card">
-            <div class="schedule-card-heading"><div><strong>触发方式</strong><small>支持手动、每日和每周三种方式。</small></div><span>北京时间 UTC+8</span></div>
+            <div class="schedule-card-heading"><div><strong>触发方式</strong></div><span>北京时间 UTC+8</span></div>
             <div class="trigger-choice-grid">
               <button v-for="option in triggerOptions" :key="option.value" type="button" :class="{ active: taskForm.trigger_type === option.value }" @click="taskForm.trigger_type = option.value"><i></i>{{ option.label }}</button>
             </div>
-            <div v-if="taskForm.trigger_type === 'manual'" class="schedule-hint">仅通过“运行”按钮提交，不自动执行。</div>
+            <div v-if="taskForm.trigger_type === 'manual'" class="schedule-hint">手动点击“运行”执行</div>
             <label v-else-if="taskForm.trigger_type === 'daily'" class="field"><span>每天执行时间</span><input v-model="taskForm.daily_time" type="time" /></label>
             <div v-else class="weekly-fields">
               <div class="field"><span>执行星期</span><div class="weekday-grid"><button v-for="day in weekdayOptions" :key="day.value" type="button" :class="{ active: taskForm.weekly_days.includes(day.value) }" @click="toggleWeekday(day.value)">周{{ day.label }}</button></div></div>
@@ -1610,16 +1665,16 @@ onBeforeUnmount(() => {
           </section>
 
           <div class="field-grid">
-            <div class="field"><span>最长运行时间</span><div class="schedule-hint">固定为 10 分钟，从 Python 真正开始运行时计算；排队等待不计时。</div></div>
+            <div class="field"><span>最长运行时间</span><div class="schedule-hint">10 分钟，排队不计时</div></div>
             <div class="field"><span>计划状态</span><button class="switch-row" type="button" role="switch" :aria-checked="taskForm.enabled" @click="taskForm.enabled = !taskForm.enabled"><i :class="{ active: taskForm.enabled }"><b></b></i><span>{{ taskForm.enabled ? '保存后立即启用' : '暂不启用' }}</span></button></div>
           </div>
           <div class="notification-options">
-            <div><strong>最终通知</strong><small>每次运行结束后最多发送一条；失败包含错误原因，可选附带前台窗口截图。</small></div>
+            <div><strong>最终通知</strong><small>每次结束通知一次</small></div>
             <label><input v-model="taskForm.notify_on_success" type="checkbox" />成功时通知</label>
             <label><input v-model="taskForm.notify_on_failure" type="checkbox" />失败时通知</label>
             <label :class="{ disabled: !taskForm.notify_on_failure }" title="失败或超时时尝试截取宿主机前台窗口；错误日志始终保存。"><input v-model="taskForm.failure_screenshot" :disabled="!taskForm.notify_on_failure" type="checkbox" />失败附带截图</label>
           </div>
-          <div v-if="editingTask" class="edit-version-note">当前版本 {{ editingTask.version }} · 如果其他成员已经修改，保存时会提醒你刷新。</div>
+          <div v-if="editingTask" class="edit-version-note">版本 {{ editingTask.version }}</div>
         </div>
         <footer><button class="button ghost" type="button" @click="taskModalOpen = false">取消</button><button class="button primary" type="button" :disabled="saving" @click="saveTask">{{ saving ? '正在保存…' : '保存修改' }}</button></footer>
       </section>
@@ -1638,6 +1693,13 @@ onBeforeUnmount(() => {
           <span>飞书 <strong>{{ notificationLabel(detail.notification_status) }}</strong></span>
         </div>
         <div class="modal-body log-body">
+          <div v-if="detail.maintenance" class="notice" :class="detail.maintenance.status === 'activated' && !['failed', 'timeout', 'cancelled'].includes(detail.maintenance.rerun_status) ? 'info' : 'warning'">
+            <span class="notice-icon">{{ detail.maintenance.rerun_status === 'success' ? '✓' : 'i' }}</span>
+            <div>
+              <strong>{{ detail.maintenance.status === 'activated' ? maintenanceResult(detail.maintenance) + ' · V' + detail.maintenance.version : detail.maintenance.ended_at ? '维护结果' : '正在自动修复' }}</strong>
+              <MaintenanceLog :job="detail.maintenance" :execution-id="detail.id" @open-execution="id => openExecution({ id })" />
+            </div>
+          </div>
           <div v-if="detail.status === 'pending' && detail.error_message" class="notice info"><span class="notice-icon">i</span><div><strong>仍在排队，没有开始计时</strong><small>{{ detail.error_message }}</small></div></div>
           <div v-if="detail.result_source === 'result_json'" class="notice" :class="detail.business_outcome === 'success' ? 'info' : 'warning'">
             <span class="notice-icon">{{ detail.business_outcome === 'success' ? '✓' : '!' }}</span>
@@ -1651,7 +1713,7 @@ onBeforeUnmount(() => {
           </div>
           <div class="execution-artifacts">
             <div class="artifact-heading"><span class="log-label">本次文件</span><small v-if="detailFinished && artifactFiles.length">{{ artifactFiles.length }} 个文件</small></div>
-            <p v-if="!detailFinished" class="artifact-empty">运行结束后，可在这里下载本次保存的文件。</p>
+            <p v-if="!detailFinished" class="artifact-empty">运行结束后可下载</p>
             <template v-else-if="detail.artifacts">
               <ul v-if="artifactFiles.length" class="artifact-list">
                 <li v-for="file in artifactFiles" :key="file.path" class="artifact-row">
@@ -1659,9 +1721,9 @@ onBeforeUnmount(() => {
                   <button class="button secondary compact" type="button" :disabled="artifactDownload.busy" :aria-label="'下载 ' + file.path" @click="downloadArtifact(file)">{{ artifactDownload.busy && artifactDownload.path === file.path ? '准备下载…' : '下载' }}</button>
                 </li>
               </ul>
-              <p v-else-if="!detail.artifacts.error" class="artifact-empty">这次运行没有保存可下载的文件。</p>
-              <p v-if="detail.artifacts.error" class="artifact-message danger-text">暂时无法完整读取本次文件，请稍后刷新。</p>
-              <p v-if="detail.artifacts.truncated" class="artifact-message">文件较多，当前仅显示部分文件。</p>
+              <p v-else-if="!detail.artifacts.error" class="artifact-empty">暂无文件</p>
+              <p v-if="detail.artifacts.error" class="artifact-message danger-text">文件读取失败，请刷新</p>
+              <p v-if="detail.artifacts.truncated" class="artifact-message">仅显示部分文件</p>
             </template>
             <p v-else class="artifact-empty">正在读取本次文件…</p>
             <p v-if="artifactDownload.message" class="artifact-message" :class="{ 'danger-text': artifactDownload.error }" role="status">{{ artifactDownload.message }}</p>
@@ -1709,7 +1771,7 @@ onBeforeUnmount(() => {
               <label class="field"><span>账号状态</span><select v-model="userEditForm.active" :disabled="editingUser.id === me.id"><option :value="true">启用</option><option :value="false">停用</option></select></label>
             </div>
             <template v-if="editingUser.id !== me.id">
-              <label class="field"><span>重置密码</span><input v-model="userEditForm.password" type="password" minlength="6" maxlength="200" autocomplete="new-password" placeholder="留空则保留原密码" /><small>至少 6 个字符，重置后可直接使用新密码登录，无需再次修改。</small></label>
+              <label class="field"><span>重置密码</span><input v-model="userEditForm.password" type="password" minlength="6" maxlength="200" autocomplete="new-password" placeholder="留空则保留原密码" /><small>至少 6 个字符</small></label>
               <label class="field"><span>确认密码</span><input v-model="userEditForm.confirm_password" type="password" maxlength="200" autocomplete="new-password" placeholder="重置密码时再次输入" /></label>
             </template>
             <p v-else>当前账号不能降权、停用或删除。自己的密码请通过右上角“修改密码”调整。</p>

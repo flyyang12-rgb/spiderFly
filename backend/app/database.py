@@ -171,7 +171,7 @@ def _recover_interrupted_work(conn: sqlite3.Connection) -> None:
         """
         SELECT task_id, MIN(id) AS keep_id
         FROM executions
-        WHERE status = 'pending' AND trigger_source != 'schedule'
+        WHERE status = 'pending' AND trigger_source NOT IN ('schedule', 'maintenance')
         GROUP BY task_id
         HAVING COUNT(*) > 1
         """
@@ -182,7 +182,7 @@ def _recover_interrupted_work(conn: sqlite3.Connection) -> None:
             UPDATE executions
             SET status = 'cancelled', ended_at = ?,
                 error_message = '重启恢复时合并了重复排队记录'
-            WHERE task_id = ? AND status = 'pending' AND trigger_source != 'schedule' AND id != ?
+            WHERE task_id = ? AND status = 'pending' AND trigger_source NOT IN ('schedule', 'maintenance') AND id != ?
             """,
             (now, row["task_id"], row["keep_id"]),
         )
@@ -376,6 +376,7 @@ def init_db() -> None:
             "requested_by": "ALTER TABLE executions ADD COLUMN requested_by INTEGER",
             "script_path_snapshot": "ALTER TABLE executions ADD COLUMN script_path_snapshot TEXT NOT NULL DEFAULT ''",
             "python_path_snapshot": "ALTER TABLE executions ADD COLUMN python_path_snapshot TEXT NOT NULL DEFAULT ''",
+            "maintenance_snapshot": "ALTER TABLE executions ADD COLUMN maintenance_snapshot TEXT NOT NULL DEFAULT ''",
             "result_source": "ALTER TABLE executions ADD COLUMN result_source TEXT NOT NULL DEFAULT 'legacy'",
             "business_outcome": "ALTER TABLE executions ADD COLUMN business_outcome TEXT NOT NULL DEFAULT ''",
             "result_code": "ALTER TABLE executions ADD COLUMN result_code TEXT NOT NULL DEFAULT ''",
@@ -414,13 +415,16 @@ def init_db() -> None:
             """
         )
         # Older releases allowed only one active execution of any source.
-        # Scheduled occurrences now remain queued alongside manual runs.
+        # Scheduled occurrences and a repair rerun can coexist with a manual run.
         conn.execute("DROP INDEX IF EXISTS uq_executions_one_active_task")
+        manual_index = conn.execute("SELECT sql FROM sqlite_master WHERE type='index' AND name='uq_executions_one_active_manual_task'").fetchone()
+        if manual_index and "'maintenance'" not in manual_index['sql']:
+            conn.execute("DROP INDEX uq_executions_one_active_manual_task")
         conn.execute(
             """
             CREATE UNIQUE INDEX IF NOT EXISTS uq_executions_one_active_manual_task
             ON executions(task_id)
-            WHERE status IN ('pending', 'running') AND trigger_source != 'schedule'
+            WHERE status IN ('pending', 'running') AND trigger_source NOT IN ('schedule', 'maintenance')
             """
         )
         conn.execute(

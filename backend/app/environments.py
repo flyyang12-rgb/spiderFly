@@ -458,6 +458,13 @@ def delete_task_bundle(task_id: int) -> dict:
         raise ValueError("任务编号无效")
     with _APP_STORAGE_LOCK:
         with transaction() as conn:
+            from . import maintenance
+            maintenance_ids = ()
+            if maintenance.available(conn):
+                jobs = conn.execute('SELECT id,status FROM maintenance_jobs WHERE task_id=?',(task_id,)).fetchall()
+                if any(item['status'] in maintenance.ACTIVE for item in jobs):
+                    raise RuntimeError('任务正在自动维护，请维护结束或停止本次维护后再删除')
+                maintenance_ids = tuple(item['id'] for item in jobs)
             task = conn.execute(
                 "SELECT * FROM tasks WHERE id = ? AND archived = 0", (task_id,)
             ).fetchone()
@@ -503,6 +510,7 @@ def delete_task_bundle(task_id: int) -> dict:
         removed_app_dirs: tuple[str, ...] = ()
         try:
             removed_execution_dirs = remove_execution_workspaces(execution_ids)
+            maintenance.remove_task_files(maintenance_ids,execution_ids)
             if app_id:
                 removed_app_dirs = remove_managed_app_storage(app_id)
         except (OSError, RuntimeError, ValueError) as exc:
@@ -1016,7 +1024,7 @@ def _build_environment_variables() -> dict[str, str]:
     environment = {
         key: value
         for key, value in os.environ.items()
-        if not key.upper().startswith(("SPIDERFLY_", "FEISHU_"))
+        if not key.upper().startswith(("SPIDERFLY_", "FEISHU_", "DEEPSEEK_"))
     }
     environment["PYTHONIOENCODING"] = "utf-8"
     environment["PYTHONUTF8"] = "1"
