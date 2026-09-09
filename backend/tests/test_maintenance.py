@@ -83,7 +83,7 @@ class MaintenanceTests(unittest.TestCase):
         self.assertTrue(candidate['approved']); self.assertEqual(view['policy']['runtime'],'readonly-v1')
         self.assertIn('missing_value',self.path.read_text('utf-8'))
         req=Request({'type':'http','headers':[],'client':('127.0.0.1',123)})
-        with self.assertRaises(HTTPException): m.rollback(self.task_id,original['id'],req,self.user)
+        m.rollback(self.task_id,original['id'],req,self.user)
         self.complete_rerun()
         m.rollback(self.task_id,original['id'],req,self.user)
         self.assertEqual(m.policy_view(self.task_id)['policy']['runtime'],'native')

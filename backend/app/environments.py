@@ -571,6 +571,14 @@ def cleanup_old_environments(
     if current is None:
         raise RuntimeError("当前 Python 环境路径不在 SpiderFly 受管目录内，已停止清理")
     protected = {current}
+    with transaction() as conn:
+        if conn.execute("SELECT 1 FROM sqlite_master WHERE name='task_version_details'").fetchone():
+            rows=conn.execute("SELECT d.env_path FROM task_version_details d JOIN task_code_versions v ON v.id=d.version_id JOIN tasks t ON t.id=v.task_id WHERE t.app_id=? AND d.runtime='native'",(app_id,)).fetchall()
+            for row in rows:
+                if row['env_path']:
+                    old=_validated_managed_directory(Path(row['env_path']),root=RPA_ENVS_DIR,app_id=app_id)
+                    if old is not None:protected.add(old)
+
     for value in protected_python_paths:
         referenced = _environment_from_python_snapshot(value, app_id)
         if referenced is not None:

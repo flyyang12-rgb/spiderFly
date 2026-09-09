@@ -22,7 +22,7 @@ from fastapi import (
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from . import ai_agent, maintenance
+from . import ai_agent, maintenance, task_versions
 
 from .database import (
     TASK_EXECUTION_STATUS_SQL,
@@ -113,6 +113,7 @@ app.add_middleware(
 )
 app.include_router(ai_agent.router)
 app.include_router(maintenance.router)
+app.include_router(task_versions.router)
 
 _scheduler_task: asyncio.Task | None = None
 _queue_worker_task: asyncio.Task | None = None
@@ -421,7 +422,13 @@ async def _queue_worker_loop() -> None:
         # Finish a ready repair at the serial boundary before starting queued code.
         try:
             await asyncio.to_thread(maintenance.reconcile_reruns)
+            await asyncio.to_thread(task_versions.notify_next)
             if await maintenance.run_next_trial():
+                continue
+            if await task_versions.run_next():
+                continue
+            from .collection import run_next_trial as run_collection_trial
+            if await run_collection_trial():
                 continue
         except asyncio.CancelledError: raise
         except Exception:

@@ -19,6 +19,7 @@ import requests
 
 request = json.loads(Path('/opt/task/input.json').read_text())
 pages = request.get('pages', {})
+collection = request.get('collection', False)
 os.environ.update(SPIDERFLY_ARTIFACT_DIR='/work/artifacts', SPIDERFLY_RESULT_FILE='/work/result.json',
                   SPIDERFLY_WORK_DIR='/work', SPIDERFLY_EXECUTION_ID='0')
 Path('/work/artifacts').mkdir()
@@ -54,8 +55,25 @@ def session_request(self, method, url, **kwargs):
     reply.encoding = 'utf-8'
     return reply
 
-urllib.request.urlopen = urlopen
-requests.sessions.Session.request = session_request
+if collection:
+    sys.path.insert(0, '/opt/task')
+    import spiderfly_collection
+    def live_request(self, method, url, **kwargs):
+        if method.upper() != 'GET' or any(kwargs.get(key) for key in ('data', 'json', 'files', 'cookies', 'auth')):
+            raise PermissionError('采集环境只支持无凭据 GET')
+        if kwargs.get('params'):
+            url = requests.Request('GET', url, params=kwargs['params']).prepare().url
+        page = spiderfly_collection.response(url)
+        reply = requests.Response()
+        reply.status_code, reply.url = page['status'], page['url']
+        reply.headers['Content-Type'] = page['content_type']
+        reply._content = base64.b64decode(page['body'])
+        reply.encoding = 'utf-8'
+        return reply
+    requests.sessions.Session.request = live_request
+else:
+    urllib.request.urlopen = urlopen
+    requests.sessions.Session.request = session_request
 
 # Kernel-enforced syscall restrictions are installed before untrusted Python starts.
 # Network is additionally absent at the namespace level; no host sockets are mounted.
@@ -72,6 +90,8 @@ if not ctx:
     raise RuntimeError('Cannot initialize seccomp')
 for name in ('execve', 'execveat', 'fork', 'vfork', 'clone', 'clone3', 'ptrace', 'process_vm_writev',
              'mount', 'umount2', 'unshare', 'setns', 'bpf', 'keyctl', 'add_key', 'request_key', 'reboot'):
+    if collection and name in {'execve', 'execveat', 'fork', 'vfork', 'clone', 'clone3'}:
+        continue
     syscall = seccomp.seccomp_syscall_resolve_name(name.encode())
     if syscall >= 0 and seccomp.seccomp_rule_add(ctx, 0x00050000 | errno.EPERM, syscall, 0) != 0:
         raise RuntimeError('Cannot restrict syscall')
@@ -80,7 +100,16 @@ if seccomp.seccomp_load(ctx) != 0:
 seccomp.seccomp_release(ctx)
 for kind, limit in ((resource.RLIMIT_AS, 512 * 1024 * 1024), (resource.RLIMIT_FSIZE, 8 * 1024 * 1024),
                     (resource.RLIMIT_NOFILE, 64), (resource.RLIMIT_CPU, min(300, request['timeout']))):
+    if collection and kind == resource.RLIMIT_AS:
+        continue  # Chromium reserves a large virtual address range. tmpfs/output/time remain bounded.
+    if collection and kind == resource.RLIMIT_NOFILE:
+        limit = 512
     resource.setrlimit(kind, (limit, limit))
+
+if collection:
+    resource.setrlimit(resource.RLIMIT_DATA, (2 * 1024**3, 2 * 1024**3))
+    resource.setrlimit(resource.RLIMIT_NPROC, (128, 128))
+    resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
 
 class BoundedLog(io.StringIO):
     def write(self, value):

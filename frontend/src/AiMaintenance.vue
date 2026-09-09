@@ -1,6 +1,7 @@
 <script setup>
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import MaintenanceLog from './MaintenanceLog.vue'
+import TaskVersions from './TaskVersions.vue'
 import { maintenanceResult } from './maintenanceSummary'
 const props = defineProps({ taskId: { type: Number, required: true } })
 const emit = defineEmits(['open-execution'])
@@ -34,10 +35,7 @@ onBeforeUnmount(() => { alive = false; window.clearInterval(timer) })
         <MaintenanceLog :job="job" @open-execution="id => emit('open-execution', id)" />
         <div class="maintenance-actions"><button v-if="job.candidate_id" class="button ghost" @click="preview(job.candidate_id)">查看修复代码</button><button v-if="['pending','generating','ready','testing'].includes(job.status)" class="button ghost" :disabled="busy" @click="action(`/jobs/${job.id}/stop`)">停止本次维护</button></div>
       </details>
-      <details class="maintenance-version-list"><summary>代码版本</summary>
-        <p>{{ state.policy.runtime === 'readonly-v1' ? '受限环境 · 最长 120 秒' : '原任务环境' }}</p>
-        <div v-for="version in state.versions" :key="version.id" class="maintenance-version"><span>V{{ version.sequence }} · {{ version.kind === 'original' ? '原始版本' : version.approved ? '已验证修复' : '修复候选' }} {{ version.id === state.policy.active_version_id ? '（使用中）' : '' }}</span><button class="button ghost" @click="preview(version.id)">查看</button><button v-if="version.approved && version.id !== state.policy.active_version_id" class="button ghost" :disabled="busy" @click="action(`/tasks/${taskId}/rollback/${version.id}`)">回退至 V{{ version.sequence }}</button></div>
-      </details>
+      <TaskVersions :task-id="taskId" />
     </template>
     <div v-if="code"><strong>V{{ code.sequence }}</strong><button class="button ghost" @click="code = null">收起代码</button><pre>{{ code.source }}</pre></div>
     </details>

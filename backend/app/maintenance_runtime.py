@@ -25,14 +25,14 @@ def safe_name(name):
     reserved = {'CON','PRN','AUX','NUL',*(f'COM{x}' for x in range(10)),*(f'LPT{x}' for x in range(10))}
     return isinstance(name,str) and bool(re.fullmatch(r'[\w.-]{1,100}',name)) and not name.endswith('.') and name.split('.')[0].upper() not in reserved
 
-def command(check=False):
+def command(check=False, profile=None):
     path = DRIVER.resolve().as_posix()
     if os.name == 'nt':
         path = '/mnt/' + path[0].lower() + path[2:]
         args = ['wsl.exe', '-d', 'Ubuntu', '--', 'python3', path]
     else:
         args = ['python3', path]
-    return args + (['--check'] if check else [])
+    return args + (['--collection'] if profile == 'collection-v1' else []) + (['--check'] if check else [])
 
 def check_runtime():
     result = subprocess.run(command(True), capture_output=True, timeout=15,
@@ -91,9 +91,15 @@ def capture_pages(contract):
         pages[url] = page
     return pages
 
-async def execute_source(source, *, pages, template='', timeout=120, stop=None):
-    payload = json.dumps({'source': source, 'pages': pages, 'template': template, 'timeout': timeout}, ensure_ascii=True).encode()
-    process = await asyncio.create_subprocess_exec(*command(), stdin=asyncio.subprocess.PIPE,
+async def execute_source(source, *, pages, template='', timeout=120, stop=None, profile=None, allowed_hosts=(), checkpoint=None):
+    payload = json.dumps({'source': source, 'pages': pages, 'template': template, 'timeout': timeout, 'hosts': list(allowed_hosts)}, ensure_ascii=True).encode()
+    if checkpoint:
+        checkpoint = Path(checkpoint).resolve().as_posix()
+        if os.name == 'nt': checkpoint = '/mnt/' + checkpoint[0].lower() + checkpoint[2:]
+        data = json.loads(payload)
+        data['checkpoint'] = checkpoint
+        payload = json.dumps(data).encode()
+    process = await asyncio.create_subprocess_exec(*(command(profile=profile) if profile else command()), stdin=asyncio.subprocess.PIPE,
         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
         creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
     async def drain(stream):
@@ -153,7 +159,7 @@ def decode_result(reply):
     if sum(map(len, files.values())) > 8 * 1024 * 1024:
         raise ValueError('产物超过限额')
     return {'exit_code': reply['exit_code'], 'log': str(reply.get('log', ''))[-64000:], 'files': files,
-            'result': str(reply.get('result', ''))[:65536]}
+            'result': str(reply.get('result', ''))[:65536], 'network': reply.get('network', {})}
 
 def validate_result(result, contract):
     if result['exit_code'] != 0:

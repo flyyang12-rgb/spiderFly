@@ -640,7 +640,7 @@ function prepareAiDraft(draft) {
   uploadKey.value += 1
   aiOpen.value = false
   navigateTo('management', 'apps')
-  showToast('success', 'Python 草稿已带入', '语法已检查，请先创建手动任务验证实际结果')
+  showToast('success', 'Python 草稿已带入', draft.trial?.status === 'success' ? '采集试跑通过，可创建任务并设置定时' : '语法已检查，请先创建手动任务验证实际结果')
 }
 
 async function uploadApp() {
@@ -1521,7 +1521,7 @@ onBeforeUnmount(() => {
               <section class="schedule-card create-task-settings">
                 <div class="schedule-card-heading">
                   <div><strong>运行设置</strong></div>
-                  <span>北京时间 · 最长 10 分钟</span>
+                  <span>北京时间</span>
                 </div>
                 <div class="trigger-choice-grid">
                   <button v-for="option in triggerOptions" :key="option.value" type="button" :class="{ active: appForm.trigger_type === option.value }" @click="appForm.trigger_type = option.value"><i></i>{{ option.label }}</button>

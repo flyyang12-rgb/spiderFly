@@ -261,6 +261,11 @@ class FeishuNotifier:
         content = {"zh_cn": {"title": "SpiderFly 任务通知", "content": content_rows}}
         self._send_message(open_id, "post", content)
 
+    def send_maintenance_result(self, task_name: str, note: str) -> None:
+        if not self.settings.webhook_url:
+            raise FeishuError("未配置群通知")
+        self._send_text("", f"「{task_name}」维护结果：{note[:1800]}")
+
     def send_final_result(
         self,
         *,

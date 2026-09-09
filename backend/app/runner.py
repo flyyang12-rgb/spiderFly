@@ -417,7 +417,7 @@ async def _run_execution(execution_id: int, control: ExecutionControl) -> None:
     if task.get('maintenance_snapshot'):
         import json
         snapshot = json.loads(task['maintenance_snapshot'])
-        if snapshot['policy']['runtime'] == 'readonly-v1':
+        if snapshot['policy']['runtime'] in {'readonly-v1', 'collection-v1'}:
             from .maintenance import run_managed_execution
             await run_managed_execution(execution_id, task, control)
             return

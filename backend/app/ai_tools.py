@@ -26,9 +26,11 @@ def function(name: str, description: str, properties: dict, required: list) -> d
 
 TEXT = {"type": "string"}
 TOOLS = [
+    function("submit_task_update", "提交当前任务的已保存草稿，平台排队验证通过后启用。需求变更写入 spec_patch JSON（只写用户明确改变的字段）；修错传 {}。返回等待不代表已启用。先 read_task 获取 base_version_id。", {"draft_id": TEXT, "base_version_id": TEXT, "spec_patch": TEXT}, ["draft_id", "base_version_id", "spec_patch"]),
     function("search_knowledge", "检索 SpiderFly 已验证入口约定、工具用法和采集经验。先读相关知识再生成代码。", {"query": TEXT}, ["query"]),
     function("fetch_page", "读取用户本轮或历史需求明确给出的公开 HTTP/HTTPS 地址。返回文本、链接及有限 HTML；不提供登录或浏览器渲染。", {"url": TEXT}, ["url"]),
     function("inspect_python", "仅检查 Python 源码语法、导入及是否使用平台结果目录；不会运行代码，不能证明业务成功。", {"source": TEXT}, ["source"]),
+    function("test_collection", "将已保存的采集草稿加入串行队列，在 Scrapling/Playwright 环境实际运行并独立检查文件、字段、数量。返回真实结果。", {"draft_id": TEXT}, ["draft_id"]),
     function("read_task", "读取当前正式任务及本对话最新草稿的源码、说明和依赖。修改已有草稿前先调用。", {}, []),
     function("save_draft", "保存可下载的单文件 Python 草稿和依赖。内部进行语法检查；此工具不会创建、执行或升级正式任务。",
              {"name": TEXT, "description": TEXT, "source": TEXT, "requirements": TEXT}, ["name", "description", "source", "requirements"]),
