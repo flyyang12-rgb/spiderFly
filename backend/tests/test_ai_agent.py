@@ -132,6 +132,41 @@ class AgentTests(unittest.TestCase):
         self.assertEqual(len(state["messages"]), 1)
         self.assertEqual(state["turns"][0]["output_tokens"], 5)
 
+    def test_evidence_review_does_not_force_another_collection(self):
+        turn = self.turn(content='复核刚才空列表的原因，不要再采集数据。')
+        content = '先前响应为空，不能据此断言需要登录；具体原因尚未验证。'
+        response = {'usage': {'prompt_tokens': 20, 'completion_tokens': 5},
+                    'choices': [{'message': {'role': 'assistant', 'content': content}}]}
+        state = {'status': 'closed', 'row_count': 0,
+                 'last_observation': {'url': 'https://example.com/jobs', 'status': 200, 'text': '[]'}}
+        with patch.object(agent.ai_browser, 'state', return_value=state), patch.object(settings, 'model_request', return_value=response) as model:
+            asyncio.run(agent.process_turn(turn))
+        self.assertEqual(model.call_count, 1)
+        self.assertEqual(agent.get_thread(self.thread['id'], self.user)['messages'][-1]['content'], content)
+
+    def test_network_review_counts_as_observation(self):
+        turn = self.turn(content='复核现有网络证据，不要再采集。')
+        content = '响应为空，不能由此确认分页失败的原因。'
+        replies = [{'role': 'assistant', 'content': None, 'tool_calls': [
+            {'id': 'network', 'function': {'name': 'browser_network', 'arguments': '{}'}}]},
+            {'role': 'assistant', 'content': content}]
+        responses = [{'usage': {'prompt_tokens': 20, 'completion_tokens': 5}, 'choices': [{'message': reply}]} for reply in replies]
+        with patch.object(settings, 'model_request', side_effect=responses) as model, patch.object(agent, 'dispatch', return_value={'requests': []}):
+            asyncio.run(agent.process_turn(turn))
+        self.assertEqual(model.call_count, 2)
+        self.assertEqual(agent.get_thread(self.thread['id'], self.user)['messages'][-1]['content'], content)
+
+    def test_unobserved_collection_refusal_still_requests_evidence(self):
+        turn = self.turn(content='采集示例网站的公开岗位。')
+        replies = ['无法采集这个网站。', '当前尚未验证，将继续检查入口。']
+        responses = [{'usage': {'prompt_tokens': 20, 'completion_tokens': 5}, 'choices': [
+            {'message': {'role': 'assistant', 'content': content}}]} for content in replies]
+        with patch.object(settings, 'model_request', side_effect=responses) as model:
+            asyncio.run(agent.process_turn(turn))
+        self.assertEqual(model.call_count, 2)
+        events = database.fetch_all("SELECT * FROM ai_events WHERE turn_id=? AND kind='observation_required'", (turn['id'],))
+        self.assertEqual(len(events), 1)
+
     def test_budget_prevents_model_request_and_unknown_tools(self):
         turn = self.turn(max_tokens=1000)
         with patch.object(settings, "model_request") as model, self.assertRaisesRegex(ValueError, "预算"):

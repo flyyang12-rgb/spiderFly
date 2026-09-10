@@ -18,7 +18,7 @@ let generation = 0
 const active = computed(() => thread.value?.turns?.find(item => ['pending', 'running'].includes(item.status)))
 const latest = computed(() => thread.value?.turns?.[0])
 const tokens = computed(() => (thread.value?.turns || []).reduce((sum, item) => sum + item.input_tokens + item.output_tokens, 0))
-const labels = { pending: '等待 AI 处理', running: 'AI 正在处理', completed: '本轮完成', failed: '本轮未完成', cancelled: '已停止', interrupted: '已中断' }
+const labels = { pending: '等待 AI 处理', running: 'AI 正在处理', waiting_user: '等待你处理浏览器', completed: '本轮完成', failed: '本轮未完成', cancelled: '已停止', interrupted: '已中断' }
 
 async function api(path, body, method) {
   const response = await fetch('/api/ai' + path, { credentials: 'include', method: method || (body ? 'POST' : 'GET'),
@@ -72,6 +72,14 @@ async function stop() {
   catch (cause) { error.value = cause.message }
 }
 
+async function browserAction(action) {
+  busy.value = true
+  error.value = ''
+  try { await api('/threads/' + thread.value.id + '/browser/' + action, {}); await load() }
+  catch (cause) { error.value = cause.message }
+  finally { busy.value = false }
+}
+
 async function preview(draft) {
   try { selectedDraft.value = await api('/drafts/' + draft.id) }
   catch (cause) { error.value = cause.message }
@@ -112,7 +120,11 @@ onBeforeUnmount(() => { alive = false; generation++; window.clearInterval(timer)
   <div class="modal-layer ai-layer" @mousedown.self="emit('close')">
     <section class="ai-dialog" role="dialog" aria-modal="true" aria-labelledby="ai-title">
       <header class="ai-heading">
-        <h2 id="ai-title">{{ taskId ? 'AI 助手' : 'AI 创建任务' }}</h2>
+        <div class="ai-heading-copy">
+          <span class="ai-eyebrow">{{ taskId ? 'TASK COPILOT' : 'TASK STUDIO' }}</span>
+          <h2 id="ai-title">{{ taskId ? 'AI 助手' : 'AI 创建任务' }}</h2>
+          <p>{{ taskId ? '继续完善需求、代码和任务版本' : '把业务需求整理成可以运行的 Python 任务' }}</p>
+        </div>
         <button class="modal-close" aria-label="关闭 AI 助手" @click="emit('close')">×</button>
       </header>
       <p v-if="error" class="ai-error" role="alert">{{ error }}</p>
@@ -120,28 +132,44 @@ onBeforeUnmount(() => { alive = false; generation++; window.clearInterval(timer)
       <div class="ai-layout">
         <main class="ai-chat">
           <div v-if="!taskId" class="ai-history">
-            <select aria-label="选择已有 AI 对话" :disabled="busy" :value="thread?.id" @change="selectThread(Number($event.target.value))">
-              <option v-for="item in threads" :key="item.id" :value="item.id">{{ item.title }}</option>
-            </select>
-            <button class="button ghost" :disabled="busy" @click="newThread">新建对话</button>
+            <label class="ai-thread-picker">
+              <span class="ai-control-label">当前对话</span>
+              <span class="ai-select-shell">
+                <select aria-label="选择已有 AI 对话" :disabled="busy" :value="thread?.id" @change="selectThread(Number($event.target.value))">
+                  <option v-for="item in threads" :key="item.id" :value="item.id">{{ item.title }}</option>
+                </select>
+                <i aria-hidden="true">⌄</i>
+              </span>
+            </label>
+            <button class="ai-new-thread" type="button" :disabled="busy" @click="newThread"><span aria-hidden="true">＋</span>新建对话</button>
           </div>
           <div class="ai-messages">
-            <div v-if="!thread?.messages?.length" class="ai-intro"><h3>想让任务做什么？</h3><p>发一个网址，或描述表格处理规则。</p></div>
+            <div v-if="!thread?.messages?.length" class="ai-intro"><h3>想让任务做什么？</h3><p>说出目标网站和采集条件，或描述表格处理规则。</p></div>
             <article v-for="item in thread?.messages || []" :key="item.id" class="ai-message" :class="item.role">
-              <strong>{{ item.role === 'user' ? '我的需求' : 'AI 助手' }}</strong>
-              <details v-if="item.role !== 'user' && item.content.length > 300" class="ai-message-more"><summary>{{ item.content.slice(0, 180) }}… <small>展开全文</small></summary><div>{{ item.content }}</div></details>
-              <div v-else>{{ item.content }}</div>
+              <header class="ai-message-meta"><span>{{ item.role === 'user' ? '我' : 'AI' }}</span><strong>{{ item.role === 'user' ? '我的需求' : 'AI 助手' }}</strong></header>
+              <div>{{ item.content }}</div>
             </article>
           </div>
-          <div v-if="latest" class="ai-status" aria-live="polite"><span>{{ labels[latest.status] }}{{ active?.stop_requested ? ' · 正在停止' : '' }}</span></div>
+          <div v-if="latest" class="ai-status" aria-live="polite"><i :class="{ active: Boolean(active) }"></i><span>{{ labels[latest.status] }}{{ active?.stop_requested ? ' · 正在停止' : '' }}</span></div>
           <p v-if="latest?.error" class="ai-error">{{ latest.error }}</p>
+          <section v-if="thread?.browser && (thread.browser.status !== 'closed' || thread.browser.row_count)" class="ai-browser" aria-label="探索浏览器">
+            <strong>{{ thread.browser.status === 'waiting_user' ? '浏览器需要你处理' : (thread.browser.status === 'native' ? '原生 Scrapling 采集' : '浏览器探索') }}</strong>
+            <p v-if="thread.browser.message">{{ thread.browser.message }}</p>
+            <p v-if="thread.browser.status === 'open'">独立窗口位于运行 SpiderFly 的 Windows 电脑，当前会话保留登录状态。</p>
+            <p v-if="thread.browser.url" class="ai-browser-url">{{ thread.browser.url }}</p>
+            <div class="ai-draft-actions">
+              <button v-if="thread.browser.status === 'waiting_user'" class="button primary" :disabled="busy || Boolean(active)" @click="browserAction('resume')">我已处理，继续</button>
+              <button v-if="['open', 'waiting_user', 'native'].includes(thread.browser.status)" class="button ghost" :disabled="busy" @click="browserAction('close')">{{ thread.browser.status === 'native' ? '结束本次采集' : '关闭浏览器' }}</button>
+              <a v-if="thread.browser.row_count" :href="`/api/ai/threads/${thread.id}/browser/results.csv`">下载已提取 {{ thread.browser.row_count }} 条</a>
+            </div>
+          </section>
           <form class="ai-compose" @submit.prevent="send">
             <textarea v-model="message" rows="3" maxlength="12000" aria-label="任务需求" placeholder="描述需求或要修改的地方…" :disabled="!thread"></textarea>
-            <div><small>DeepSeek</small><button v-if="active" class="button ghost" type="button" :disabled="active.stop_requested" @click="stop">停止</button><button class="button primary" type="submit" :disabled="!thread || busy || Boolean(active) || !message.trim() || !setting?.key_configured">发送</button></div>
+            <div><small><i></i>DeepSeek</small><button v-if="active" class="button ghost" type="button" :disabled="active.stop_requested" @click="stop">停止</button><button class="button primary ai-send" type="submit" :disabled="!thread || busy || Boolean(active) || !message.trim() || !setting?.key_configured">发送</button></div>
           </form>
         </main>
         <aside class="ai-side">
-          <h3>{{ showHistory ? '草稿版本' : '最新草稿' }}</h3>
+          <div class="ai-side-heading"><div><span>OUTPUT</span><h3>{{ showHistory ? '草稿版本' : '最新草稿' }}</h3></div><small>{{ thread?.drafts?.length || 0 }} 个版本</small></div>
           <article v-for="draft in visibleDrafts" :key="draft.id" class="ai-draft">
             <strong>V{{ draft.version }} · {{ draft.name }}</strong><div class="ai-draft-status"><span class="mini-badge neutral-badge">{{ draft.trial ? ({ pending: '等待试跑', running: '正在采集', success: '试跑通过', failed: '试跑未通过', cancelled: '已停止', interrupted: '已中断' }[draft.trial.status]) : '语法通过 · 未试运行' }}</span></div>
             <p v-if="draft.trial?.message">{{ draft.trial.message }}</p>
@@ -151,7 +179,7 @@ onBeforeUnmount(() => { alive = false; generation++; window.clearInterval(timer)
             <div class="ai-draft-actions"><button class="button ghost" @click="preview(draft)">查看代码</button><button class="button primary" :disabled="Boolean(active)" @click="useDraft(draft)">{{ thread?.task_id ? '更新本任务' : '使用草稿' }}</button></div>
             <div class="ai-links"><a :href="`/api/ai/drafts/${draft.id}/download`">下载 Python</a><a :href="`/api/ai/drafts/${draft.id}/download?file=requirements.txt`">下载依赖</a></div>
           </article>
-          <p v-if="!thread?.drafts?.length" class="ai-note">暂无草稿</p>
+          <div v-if="!thread?.drafts?.length" class="ai-empty-draft"><span aria-hidden="true">{ }</span><strong>还没有草稿</strong><p>明确需求后，AI 生成的 Python 草稿会出现在这里。</p></div>
           <button v-if="thread?.drafts?.length > 1" class="button ghost" :aria-expanded="showHistory" @click="showHistory = !showHistory">{{ showHistory ? '收起历史' : `历史草稿（${thread.drafts.length - 1}）` }}</button>
           <details class="ai-disclosure ai-records"><summary>处理记录与用量</summary>
             <p class="ai-note">{{ setting?.model }} · {{ tokens.toLocaleString() }} tokens</p>
@@ -167,7 +195,240 @@ onBeforeUnmount(() => { alive = false; generation++; window.clearInterval(timer)
 </template>
 
 <style scoped>
-.ai-trial-log{white-space:pre-wrap;overflow-wrap:anywhere;max-height:220px;overflow:auto;font-size:12px}
-.ai-heading{align-items:center}.ai-intro{text-align:center;display:grid;align-content:center;height:100%;box-sizing:border-box}.ai-intro h3{margin:0;font-size:19px;font-weight:500}.ai-intro p{margin:10px 0;font-size:13px}.ai-disclosure{font-size:12px;color:#60746a;line-height:1.7}.ai-disclosure summary{cursor:pointer;padding:7px 0}.ai-records{margin-top:18px;border-top:1px solid #e1e8e3;padding-top:8px}.ai-draft-status{margin-top:10px}
-.ai-layer{z-index:60;padding:24px}.ai-dialog{background:#fff;border-radius:20px;width:min(1220px,96vw);max-height:94vh;overflow:auto;box-shadow:0 30px 100px #183b3433}.ai-heading{padding:25px 30px;display:flex;justify-content:space-between;border-bottom:1px solid #e6ebe8}.ai-heading h2{margin:7px 0}.ai-heading p,.ai-note{color:#687c75;font-size:13px;line-height:1.7}.ai-layout{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(300px,1fr)}.ai-chat{padding:20px 26px;min-width:0}.ai-side{background:#f7f9f7;padding:20px;border-left:1px solid #e6ebe8;min-width:0}.ai-side h3{font-size:14px}.ai-history{display:flex;gap:10px}.ai-history select{min-width:0;flex:1;border:1px solid #dce5df;border-radius:8px;padding:8px}.ai-messages{height:39vh;min-height:220px;overflow:auto;padding:15px 0}.ai-message{padding:14px 16px;border:1px solid #e4ebe7;border-radius:12px;margin:0 0 14px;overflow-wrap:anywhere}.ai-message.user{background:#edf5f0;margin-left:30px}.ai-message strong{display:block;font-size:12px;color:#487462;margin-bottom:8px}.ai-message div{white-space:pre-wrap;font-size:14px;line-height:1.8}.ai-intro{padding:24px 10px;color:#60736a;line-height:1.8}.ai-status{display:flex;justify-content:space-between;font-size:12px;gap:10px;color:#557163;padding:12px 0}.ai-compose textarea{width:100%;resize:vertical;border:1px solid #d9e3dd;border-radius:12px;padding:12px;font:inherit;box-sizing:border-box}.ai-compose>div{display:flex;gap:10px;align-items:center;margin-top:10px}.ai-compose small{flex:1;color:#6e7b73}.ai-error{color:#a53e32;background:#fff2ef;padding:12px 18px;border-radius:8px;white-space:pre-wrap;font-size:13px}.ai-draft{background:white;border:1px solid #dfe8e0;padding:15px;border-radius:12px;margin-bottom:12px}.ai-draft p{font-size:13px;color:#61736b;line-height:1.6}.ai-draft-actions{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}.ai-links{display:flex;gap:16px;font-size:12px}.ai-links a{color:#287251}.ai-events{list-style:none;padding:0;max-height:250px;overflow:auto;font-size:12px}.ai-events li{padding:10px 0;border-bottom:1px solid #e3e9e4;display:flex;gap:8px;justify-content:space-between}.ai-events small{color:#819087;white-space:nowrap}.ai-code{padding:20px 26px;border-top:1px solid #e1e9e3}.ai-code header{display:flex;justify-content:space-between;align-items:center}.ai-code pre{max-height:45vh;overflow:auto;background:#162a22;color:#e1eee5;padding:18px;border-radius:12px;font-size:12px;line-height:1.6}.ai-code p{font-size:12px;white-space:pre-wrap}@media(max-width:760px){.ai-layer{padding:8px}.ai-dialog{width:98vw}.ai-layout{grid-template-columns:1fr}.ai-heading{padding:18px}.ai-chat{padding:16px}.ai-side{border-left:none;border-top:1px solid #e6ebe8}.ai-messages{height:34vh}.ai-status{flex-wrap:wrap}.ai-compose>div{flex-wrap:wrap}.ai-compose small{flex-basis:100%}}
+.ai-browser { padding: 12px 16px; border: 1px solid #dfe8e0; border-radius: 12px; background: #f4faf6; font-size: 12px; }
+.ai-browser p { margin: 6px 0; color: #61736b; }
+.ai-browser-url { overflow-wrap: anywhere; }
+
+.ai-layer {
+  z-index: 60;
+  padding: 18px;
+  background: rgba(25, 35, 29, .52);
+  backdrop-filter: blur(5px);
+}
+.ai-dialog {
+  width: min(1240px, calc(100vw - 36px));
+  max-height: calc(100vh - 36px);
+  overflow: auto;
+  border: 1px solid rgba(31, 66, 47, .16);
+  border-radius: 22px;
+  background: #fff;
+  box-shadow: 0 32px 100px rgba(20, 45, 32, .28);
+}
+.ai-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  min-height: 108px;
+  padding: 22px 30px;
+  border-bottom: 1px solid #e3ebe6;
+  background: linear-gradient(110deg, #fff 0%, #fff 62%, #f2f8f4 100%);
+}
+.ai-heading-copy { display: grid; gap: 3px; }
+.ai-eyebrow {
+  color: #138247;
+  font-family: Consolas, monospace;
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: .13em;
+}
+.ai-heading h2 { margin: 0; color: #202923; font-size: 23px; line-height: 30px; }
+.ai-heading p { margin: 0; color: #78847c; font-size: 12px; line-height: 18px; }
+.ai-heading .modal-close {
+  width: 34px;
+  height: 34px;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  font-size: 19px;
+}
+.ai-heading .modal-close:hover { border-color: #dce7df; background: #fff; }
+.ai-layout { display: grid; grid-template-columns: minmax(0, 1.72fr) minmax(310px, .88fr); }
+.ai-chat { min-width: 0; padding: 22px 28px 24px; }
+.ai-history {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch;
+  gap: 12px;
+  padding: 10px;
+  border: 1px solid #e0e9e3;
+  border-radius: 14px;
+  background: #f7faf8;
+}
+.ai-thread-picker { display: grid; min-width: 0; gap: 4px; padding: 1px 4px; }
+.ai-control-label {
+  color: #748078;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .04em;
+}
+.ai-select-shell { position: relative; display: block; min-width: 0; }
+.ai-select-shell select {
+  width: 100%;
+  height: 32px;
+  padding: 0 34px 0 0;
+  overflow: hidden;
+  border: 0;
+  outline: 0;
+  appearance: none;
+  background: transparent;
+  color: #26332b;
+  font-size: 14px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+.ai-select-shell i {
+  position: absolute;
+  right: 5px;
+  top: 4px;
+  color: #6f7d74;
+  font-size: 17px;
+  font-style: normal;
+  pointer-events: none;
+}
+.ai-new-thread {
+  display: inline-flex;
+  min-width: 128px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 15px;
+  border: 1px solid #bcdac6;
+  border-radius: 10px;
+  background: #fff;
+  color: #08783a;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+  transition: border-color 140ms ease, background 140ms ease, transform 140ms ease;
+}
+.ai-new-thread span {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: 7px;
+  background: #e7f5ec;
+  font-size: 17px;
+  line-height: 1;
+}
+.ai-new-thread:hover:not(:disabled) { border-color: #73b98c; background: #f3faf5; transform: translateY(-1px); }
+.ai-new-thread:disabled { cursor: not-allowed; opacity: .5; }
+.ai-messages {
+  height: 39vh;
+  min-height: 230px;
+  overflow: auto;
+  padding: 18px 4px 8px 0;
+  scrollbar-color: #aebbb2 transparent;
+  scrollbar-width: thin;
+}
+.ai-message {
+  margin: 0 0 14px;
+  padding: 14px 16px 16px;
+  overflow-wrap: anywhere;
+  border: 1px solid #e1e9e4;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 5px 18px rgba(38, 68, 49, .045);
+}
+.ai-message.assistant { margin-right: 28px; border-left: 3px solid #72b98b; }
+.ai-message.user { margin-left: 58px; border-color: #d5e8dc; background: #edf7f0; box-shadow: none; }
+.ai-message-meta { display: flex; align-items: center; gap: 8px; margin-bottom: 9px; }
+.ai-message-meta span {
+  display: grid;
+  width: 25px;
+  height: 25px;
+  place-items: center;
+  border-radius: 8px;
+  background: #e5f4ea;
+  color: #087a3b;
+  font-family: Consolas, monospace;
+  font-size: 9px;
+  font-weight: 800;
+}
+.ai-message.user .ai-message-meta span { background: #fff; color: #4f6f5b; }
+.ai-message-meta strong { color: #47705a; font-size: 11px; letter-spacing: .02em; }
+.ai-message > div { white-space: pre-wrap; color: #303a33; font-size: 14px; line-height: 1.85; }
+.ai-intro { display: grid; height: 100%; align-content: center; padding: 24px 10px; color: #60736a; line-height: 1.8; text-align: center; }
+.ai-intro h3 { margin: 0; color: #26352b; font-size: 19px; font-weight: 650; }
+.ai-intro p { margin: 8px 0; font-size: 13px; }
+.ai-status { display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 4px 2px 10px; color: #557163; font-size: 11px; }
+.ai-status i { width: 7px; height: 7px; border-radius: 50%; background: #8a9a90; }
+.ai-status i.active { background: #009139; box-shadow: 0 0 0 5px rgba(0, 145, 57, .09); animation: ai-pulse 1.5s ease-in-out infinite; }
+.ai-compose {
+  padding: 10px;
+  border: 1px solid #d9e5dd;
+  border-radius: 15px;
+  background: #fbfcfb;
+  box-shadow: 0 8px 24px rgba(35, 68, 47, .06);
+}
+.ai-compose:focus-within { border-color: #80bd95; box-shadow: 0 0 0 3px rgba(0, 145, 57, .08), 0 8px 24px rgba(35, 68, 47, .06); }
+.ai-compose textarea {
+  width: 100%;
+  min-height: 76px;
+  resize: vertical;
+  padding: 4px 5px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #26332b;
+  font: inherit;
+  line-height: 1.7;
+}
+.ai-compose > div { display: flex; align-items: center; gap: 9px; margin-top: 5px; }
+.ai-compose small { display: flex; flex: 1; align-items: center; gap: 7px; color: #7a877e; font-size: 11px; }
+.ai-compose small i { width: 6px; height: 6px; border-radius: 50%; background: #22a05a; }
+.ai-send { min-width: 72px; border-radius: 9px; }
+.ai-error { margin: 16px 28px 0; padding: 12px 16px; border-radius: 10px; background: #fff2ef; color: #a53e32; font-size: 13px; white-space: pre-wrap; }
+.ai-side {
+  min-width: 0;
+  padding: 24px;
+  border-left: 1px solid #e1e9e3;
+  background: #f5f8f6;
+}
+.ai-side-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; padding-bottom: 16px; border-bottom: 1px solid #dfe7e1; }
+.ai-side-heading > div { display: grid; gap: 2px; }
+.ai-side-heading span { color: #218451; font-family: Consolas, monospace; font-size: 9px; font-weight: 800; letter-spacing: .12em; }
+.ai-side-heading h3 { margin: 0; color: #28352c; font-size: 15px; }
+.ai-side-heading small { color: #8a958d; font-size: 10px; }
+.ai-empty-draft { display: grid; min-height: 250px; place-content: center; justify-items: center; gap: 8px; text-align: center; }
+.ai-empty-draft > span { display: grid; width: 48px; height: 48px; place-items: center; border: 1px solid #d6e5db; border-radius: 14px; background: #fff; color: #259059; font-family: Consolas, monospace; font-size: 14px; }
+.ai-empty-draft strong { color: #405147; font-size: 12px; }
+.ai-empty-draft p { max-width: 220px; margin: 0; color: #8a958d; font-size: 11px; line-height: 18px; }
+.ai-note { color: #687c75; font-size: 13px; line-height: 1.7; }
+.ai-draft { margin: 16px 0 12px; padding: 15px; border: 1px solid #dfe8e0; border-radius: 12px; background: #fff; }
+.ai-draft p { color: #61736b; font-size: 13px; line-height: 1.6; }
+.ai-draft-status { margin-top: 10px; }
+.ai-draft-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.ai-links { display: flex; gap: 16px; font-size: 12px; }
+.ai-links a { color: #287251; }
+.ai-disclosure { color: #60746a; font-size: 12px; line-height: 1.7; }
+.ai-disclosure summary { padding: 7px 0; cursor: pointer; }
+.ai-records { margin-top: 18px; padding-top: 8px; border-top: 1px solid #dfe7e1; }
+.ai-trial-log { max-height: 220px; overflow: auto; font-size: 12px; overflow-wrap: anywhere; white-space: pre-wrap; }
+.ai-events { max-height: 250px; overflow: auto; padding: 0; list-style: none; font-size: 12px; }
+.ai-events li { display: flex; justify-content: space-between; gap: 8px; padding: 10px 0; border-bottom: 1px solid #e3e9e4; }
+.ai-events small { color: #819087; white-space: nowrap; }
+.ai-code { padding: 20px 26px; border-top: 1px solid #e1e9e3; }
+.ai-code header { display: flex; align-items: center; justify-content: space-between; }
+.ai-code pre { max-height: 45vh; overflow: auto; padding: 18px; border-radius: 12px; background: #162a22; color: #e1eee5; font-size: 12px; line-height: 1.6; }
+.ai-code p { font-size: 12px; white-space: pre-wrap; }
+@keyframes ai-pulse { 50% { opacity: .45; transform: scale(.82); } }
+@media (prefers-reduced-motion: reduce) { .ai-status i.active, .ai-new-thread { animation: none; transition: none; } }
+@media (max-width: 760px) {
+  .ai-layer { padding: 8px; }
+  .ai-dialog { width: calc(100vw - 16px); max-height: calc(100vh - 16px); border-radius: 16px; }
+  .ai-heading { min-height: 92px; padding: 17px 18px; }
+  .ai-heading p { display: none; }
+  .ai-layout { grid-template-columns: 1fr; }
+  .ai-chat { padding: 15px; }
+  .ai-history { grid-template-columns: 1fr; }
+  .ai-new-thread { min-height: 43px; }
+  .ai-messages { height: 36vh; }
+  .ai-message.assistant { margin-right: 12px; }
+  .ai-message.user { margin-left: 24px; }
+  .ai-side { border-top: 1px solid #e1e9e3; border-left: 0; }
+  .ai-status, .ai-compose > div { flex-wrap: wrap; }
+  .ai-compose small { flex-basis: 100%; }
+}
 </style>

@@ -77,3 +77,7 @@ sudo env PYTHONPATH="$HOME/.local/share/spiderfly-collection-v2/python" python3 
 第一步安装到当前 Linux 用户的 `~/.local/share/spiderfly-collection-v2`，第二步准备 Chromium 需要的 Ubuntu 系统库。正式服务必须使用同一 WSL 用户。首次下载需要网络；完成后应做一次网页采集和浏览器试跑，单纯安装成功不等于浏览器可运行。环境未就绪时报告错误，不退回 Windows 直接执行生成代码。
 
 来源：[Scrapling](https://github.com/D4Vinci/Scrapling)、[Playwright Python](https://playwright.dev/python/docs/intro)。
+
+## 与浏览器探索配合
+
+Windows 浏览器探索与本页 WSL collection-v1 是两个执行路径。浏览器实际观察到的公开域名与必要资源域名可用于本对话的静态读取和采集试跑；网络通道继续逐次校验地址。浏览器登录状态不自动传入 WSL，不能据浏览器提取成功宣称登录脚本定时运行通过。安装和人工接力见 [AI 浏览器探索](AI浏览器探索.md)。

@@ -23,3 +23,5 @@ outcome 支持 success/failure/manual_required。人工介入需提供 manual_co
 参数先作为顶部有说明的常量。当前任务参数仍写在源码；需求与来源由平台随版本保存。已有任务明确变更时保存草稿，用 submit_task_update 提交 draft_id、read_task 返回的 task_requirements.version_id 及 spec_patch（仅用户明确变更的字段，修复传 {}）。新版本排队不代表已启用；查看版本更新结果。不能直接更改计划或虚构参数表单 API。
 
 Excel 保存及 Excel/浏览器关闭由脚本负责，平台不会自动接管。按业务要求保存结果，异常保留错误，在 finally 中关闭本次创建的资源；不要全局结束用户已有窗口。
+
+网页探索：优先使用 scrape_search、scrape_page、scrape_inspect、scrape_extract 调用原生 Scrapling HTTP/无头引擎并提取 CSV。不先要求登录或打开可见浏览器。确实需要交互时才使用独立 Windows Chromium；登录由用户在宿主机窗口完成，点击继续后沿用会话。先读 scraping.md；不要混淆原生探索工具与 collection-v1 定时脚本的能力。

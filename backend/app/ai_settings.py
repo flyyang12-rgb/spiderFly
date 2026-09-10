@@ -96,7 +96,7 @@ def save_settings(payload: dict) -> dict:
     current.update({key: payload[key] for key in DEFAULTS if key in payload})
     if current["model"] not in MODELS:
         raise ValueError("请选择支持的 DeepSeek 模型")
-    for name, lower, upper in (("max_seconds", 30, 1800), ("max_calls", 1, 32), ("max_tokens", 1000, 500000)):
+    for name, lower, upper in (("max_seconds", 30, 7200), ("max_calls", 1, 128), ("max_tokens", 1000, 2000000)):
         if type(current[name]) is not int or not lower <= current[name] <= upper:
             raise ValueError(f"{name} 必须在 {lower} 至 {upper} 之间")
     secret = payload.get("api_key", "")

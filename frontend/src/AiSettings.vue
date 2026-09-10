@@ -55,9 +55,9 @@ onMounted(async () => { try { apply(await request('')); await maintenanceRequest
       <details class="ai-budget-details"><summary>调用与维护预算</summary>
       <h3>每轮对话</h3>
       <div class="ai-budget-fields">
-        <label class="field"><span>时长上限（秒）</span><input v-model.number="form.max_seconds" type="number" min="30" max="1800" :disabled="!canEdit" /></label>
-        <label class="field"><span>调用次数</span><input v-model.number="form.max_calls" type="number" min="1" max="32" :disabled="!canEdit" /></label>
-        <label class="field"><span>Token 上限</span><input v-model.number="form.max_tokens" type="number" min="1000" max="500000" step="1000" :disabled="!canEdit" /></label>
+        <label class="field"><span>时长上限（秒）</span><input v-model.number="form.max_seconds" type="number" min="30" max="7200" :disabled="!canEdit" /></label>
+        <label class="field"><span>调用次数</span><input v-model.number="form.max_calls" type="number" min="1" max="128" :disabled="!canEdit" /></label>
+        <label class="field"><span>Token 上限</span><input v-model.number="form.max_tokens" type="number" min="1000" max="2000000" step="1000" :disabled="!canEdit" /></label>
       </div>
       <h3>自动维护 · 滚动 24 小时</h3>
       <div class="ai-budget-fields">
