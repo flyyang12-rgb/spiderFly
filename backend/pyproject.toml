@@ -3,10 +3,10 @@ requires = ["setuptools>=77.0.3"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "spiderfly-instructions"
-version = "0.1.4"
-description = "Reusable Python instructions and a small Excel workflow example."
-readme = "INSTRUCTIONS.md"
+name = "spiderfly-runtime"
+version = "0.1.0"
+description = "Optional input, output and file helpers for standalone SpiderFly tasks."
+readme = "RUNTIME.md"
 requires-python = ">=3.12"
 dependencies = [
     "pydantic>=2,<3",
@@ -14,5 +14,5 @@ dependencies = [
 ]
 
 [tool.setuptools]
-packages = ["spiderfly_instructions", "example_flows"]
+packages = ["spiderfly_runtime"]
 include-package-data = false

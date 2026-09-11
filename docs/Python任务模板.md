@@ -1,8 +1,10 @@
 # 通用 Python 任务模板
 
+> 旧版本兼容资料：本文描述冻结的 spiderfly-instructions 包，不能再用当前 backend/pyproject.toml 构建它。新业务入口见 [独立流程](../flows/README.md)，当前边界见 [项目架构](项目架构.md)。
+
 新增流程请优先使用[独立流程目录](../flows/README.md)中的模板和单文件例子。本文下方保留前一阶段的入口说明；包内业务示例继续兼容，但新增业务不再依赖它们。
 
-写新流程时，可以复用[通用入口](../backend/spiderfly_instructions/task.py)，把业务代码放进一个 `process(context)` 函数。公共代码接收平台路径、留存上传文件并保存回执，业务函数负责计算、检查及输出文件。
+写新流程时，可以复用[通用入口](https://github.com/flyyang12-rgb/spiderFly/blob/b328cd40532ea103692ea794a911b388bbbfc605/backend/spiderfly_instructions/task.py)，把业务代码放进一个 `process(context)` 函数。公共代码接收平台路径、留存上传文件并保存回执，业务函数负责计算、检查及输出文件。
 
 ## 先拿哪个文件
 

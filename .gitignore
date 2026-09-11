@@ -36,3 +36,7 @@ yarn-error.log*
 !/release/instructions/spiderfly_instructions-0.1.4-py3-none-any.whl
 /backend/build/
 /backend/*.egg-info/
+
+!/release/runtime/
+/release/runtime/*
+!/release/runtime/spiderfly_runtime-0.1.0-py3-none-any.whl

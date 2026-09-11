@@ -1,4 +1,4 @@
-"""Write a plain .xlsx table to a new file, using the shared instruction entry."""
+"""Write a plain .xlsx table to a new file, with input and saved-file validation."""
 
 from __future__ import annotations
 
@@ -15,14 +15,14 @@ from openpyxl.worksheet.dimensions import ColumnDimension, RowDimension
 from openpyxl.utils.exceptions import IllegalCharacterError
 from pydantic import Field
 
-from .core import Instruction, InstructionError, InstructionModel
+from ._validation import DataModel, TaskError, checked
 from .excel import CellValue
 
 
-INSTRUCTION_ID = "excel.write"
+OPERATION = "excel.write"
 
 
-class WriteExcelInput(InstructionModel):
+class WriteExcelInput(DataModel):
     file_path: str = Field(min_length=1, description="新建 .xlsx 文件的保存路径，所在目录须已存在")
     columns: list[str] = Field(min_length=1, max_length=16384, description="按保存顺序填写列名")
     rows: list[dict[str, CellValue]] = Field(max_length=1048575, description="每行按列名保存数据；键须与列名一致")
@@ -30,14 +30,14 @@ class WriteExcelInput(InstructionModel):
     template_file: str | None = Field(default=None, min_length=1, description="可选原 .xlsx；保留原工作簿，仅在指定表右侧追加列，原列和全部有效行必须原样传入")
 
 
-class WriteExcelOutput(InstructionModel):
+class WriteExcelOutput(DataModel):
     file_path: str = Field(description="生成文件的绝对路径")
     sheet_name: str = Field(description="生成的工作表名称")
     row_count: int = Field(ge=0, description="写入的数据行数，不含表头；含传入的全空行")
 
 
-def _failure(code: str, message: str) -> InstructionError:
-    return InstructionError(code, INSTRUCTION_ID, "execute", message)
+def _failure(code: str, message: str) -> TaskError:
+    return TaskError(code, OPERATION, "execute", message)
 
 
 def _check_table(inputs: WriteExcelInput) -> None:
@@ -169,7 +169,7 @@ def _build_workbook(inputs: WriteExcelInput) -> bytes:
         with BytesIO() as buffer:
             workbook.save(buffer)
             return buffer.getvalue()
-    except InstructionError:
+    except TaskError:
         raise
     except (TypeError, ValueError) as exc:
         raise _failure("EXCEL_VALUE_INVALID", "工作表名称或数据无法保存为 Excel，请检查输入内容。") from exc
@@ -177,7 +177,7 @@ def _build_workbook(inputs: WriteExcelInput) -> bytes:
         workbook.close()
 
 
-def write_excel(inputs: WriteExcelInput) -> dict[str, object]:
+def _write_excel(inputs: WriteExcelInput) -> dict[str, object]:
     path = Path(inputs.file_path).absolute()
     if path.suffix.lower() != ".xlsx":
         raise _failure("EXCEL_FORMAT_UNSUPPORTED", "保存路径必须以 .xlsx 结尾。")
@@ -317,13 +317,5 @@ def _verify_template_write(inputs: WriteExcelInput, result: WriteExcelOutput) ->
         original.close()
 
 
-WRITE_EXCEL = Instruction(
-    instruction_id=INSTRUCTION_ID,
-    name="写入 Excel",
-    version="0.1.1",
-    description="写成新的 .xlsx；可基于原工作簿只追加新列，保留原数据与其他工作表。目标文件已存在时拒绝覆盖。",
-    input_model=WriteExcelInput,
-    output_model=WriteExcelOutput,
-    handler=write_excel,
-    verifier=verify_excel_write,
-)
+def write_excel(file_path: str, columns: list[str], rows: list[dict], sheet_name: str = "数据", template_file: str | None = None) -> WriteExcelOutput:
+    return checked(OPERATION, WriteExcelInput, WriteExcelOutput, _write_excel, verify_excel_write, dict(file_path=file_path, columns=columns, rows=rows, sheet_name=sheet_name, template_file=template_file))

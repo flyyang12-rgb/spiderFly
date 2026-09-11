@@ -1,8 +1,10 @@
 # 用 Python 流程计算两组金额之差
 
+> 旧版本兼容资料：本文描述冻结的 spiderfly-instructions 包，不能再用当前 backend/pyproject.toml 构建它。新业务入口见 [独立流程](../flows/README.md)，当前边界见 [项目架构](项目架构.md)。
+
 本页保留之前的测试与兼容入口。当前优先使用[独立金额差额流程](../flows/amount_difference.py)：规则直接放在该文件内，只引用公共指令和运行辅助。新增流程的方法见[独立流程说明](../flows/README.md)，无需为每条业务重新打包。
 
-[命令行入口](../examples/instruction_excel_amount_difference.py)调用包内的[金额差额流程](../backend/example_flows/excel_amount_difference.py)，读取 Excel，分别筛出两个状态，将两组金额汇总后相减。默认计算“待处理总金额 − 已完成总金额”，当前源码需要 `spiderfly-instructions 0.1.3`，输入文件只读。平台上传、运行及结果下载见[Python 任务模板](Python任务模板.md)。
+[命令行入口](../examples/instruction_excel_amount_difference.py)调用包内的[金额差额流程](https://github.com/flyyang12-rgb/spiderFly/blob/b328cd40532ea103692ea794a911b388bbbfc605/backend/example_flows/excel_amount_difference.py)，读取 Excel，分别筛出两个状态，将两组金额汇总后相减。默认计算“待处理总金额 − 已完成总金额”，当前源码需要 `spiderfly-instructions 0.1.3`，输入文件只读。平台上传、运行及结果下载见[Python 任务模板](Python任务模板.md)。
 
 ## 本次 ccc.xlsx 的结果
 

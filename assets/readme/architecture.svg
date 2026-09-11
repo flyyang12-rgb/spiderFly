@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="640" viewBox="0 0 1200 640" role="img" aria-labelledby="title desc">
+<title id="title">SpiderFly 的平台、业务与运行库</title>
+<desc id="desc">平台负责账号、调度、环境和记录。业务脚本负责筛选、计算和采集。可选运行库提供输入、产物、回执和通用文件函数。</desc>
+<rect x="0" y="0" width="1200" height="640" rx="22" fill="#f5f7f4" stroke="none"/>
+<text x="48" y="72" font-family="Segoe UI, Microsoft YaHei, PingFang SC, sans-serif" font-size="44" font-weight="700" fill="#163b28">三层职责，各自清楚。</text>
+<text x="1152" y="72" font-family="Segoe UI, Microsoft YaHei, PingFang SC, sans-serif" font-size="18" font-weight="600" fill="#647269" text-anchor="end">ARCHITECTURE</text>
+<rect x="48" y="115" width="1104" height="140" rx="12" fill="#ffffff" stroke="none"/>
+<rect x="48" y="115" width="6" height="140" rx="3" fill="#009139" stroke="none"/>
+<text x="78" y="173" font-family="Segoe UI, Microsoft YaHei, PingFang SC, sans-serif" font-size="42" font-weight="650" fill="#163b28">平台</text>
+<text x="78" y="220" font-family="Segoe UI, Microsoft YaHei, PingFang SC, sans-serif" font-size="25" font-weight="400" fill="#647269">backend/app · frontend/src</text>
+<text x="590" y="192" font-family="Segoe UI, Microsoft YaHei, PingFang SC, sans-serif" font-size="34" font-weight="500" fill="#163b28">账号、调度、环境、记录</text>
+<rect x="48" y="275" width="1104" height="140" rx="12" fill="#ffffff" stroke="none"/>
+<rect x="48" y="275" width="6" height="140" rx="3" fill="#009139" stroke="none"/>
+<text x="78" y="333" font-family="Segoe UI, Microsoft YaHei, PingFang SC, sans-serif" font-size="42" font-weight="650" fill="#163b28">业务脚本</text>
+<text x="78" y="380" font-family="Segoe UI, Microsoft YaHei, PingFang SC, sans-serif" font-size="25" font-weight="400" fill="#647269">flows · 上传的 .py</text>
+<text x="590" y="352" font-family="Segoe UI, Microsoft YaHei, PingFang SC, sans-serif" font-size="34" font-weight="500" fill="#163b28">筛选、计算、采集规则</text>
+<rect x="48" y="435" width="1104" height="140" rx="12" fill="#ffffff" stroke="none"/>
+<rect x="48" y="435" width="6" height="140" rx="3" fill="#009139" stroke="none"/>
+<text x="78" y="493" font-family="Segoe UI, Microsoft YaHei, PingFang SC, sans-serif" font-size="42" font-weight="650" fill="#163b28">运行库（可选）</text>
+<text x="78" y="540" font-family="Segoe UI, Microsoft YaHei, PingFang SC, sans-serif" font-size="25" font-weight="400" fill="#647269">backend/spiderfly_runtime</text>
+<text x="590" y="512" font-family="Segoe UI, Microsoft YaHei, PingFang SC, sans-serif" font-size="34" font-weight="500" fill="#163b28">输入、产物、回执与文件辅助</text>
+<text x="48" y="619" font-family="Segoe UI, Microsoft YaHei, PingFang SC, sans-serif" font-size="24" font-weight="400" fill="#496652">普通 Python 入口 · 业务不进入平台 · 运行库按需使用</text>
+</svg>

@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
-from .core import InstructionError
+from .errors import TaskError
 
 
 @dataclass(frozen=True)
@@ -125,9 +125,9 @@ def run_task(process: Callable[[TaskContext], TaskResult], *, require_input: boo
         _write_receipt(receipt, "success", result)
     except (Exception, SystemExit, KeyboardInterrupt) as exc:
         code = "TASK_FAILED"
-        if isinstance(exc, InstructionError):
+        if isinstance(exc, TaskError):
             code = exc.code if re.fullmatch(r"[A-Z0-9][A-Z0-9_.-]{0,63}", exc.code) else code
-            message = f"{exc.instruction_id}（{exc.stage}）：{exc}"
+            message = f"{exc.operation}（{exc.stage}）：{exc}"
         elif isinstance(exc, (SystemExit, KeyboardInterrupt)):
             code, message = "TASK_INTERRUPTED", "业务流程提前结束，未确认成功。"
         else:

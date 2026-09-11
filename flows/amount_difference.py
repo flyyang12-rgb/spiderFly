@@ -1,6 +1,6 @@
-"""用已有读取、筛选指令求两组金额之差；汇总和减法由普通 Python 流程完成。
+"""用已有读取、筛选函数求两组金额之差；汇总和减法由普通 Python 流程完成。
 
-独立流程，只依赖 spiderfly-instructions 0.1.3 的通用指令和运行入口。
+独立流程，只依赖 spiderfly-runtime==0.1.0 的通用函数和运行入口。
 带参数时本地运行，不带参数时由平台运行；不修改输入 Excel。
 英文逗号沿用样表约定：5,2 表示两个数 5 和 2。
 """
@@ -13,10 +13,10 @@ import sys
 from decimal import Decimal, DecimalException, Inexact, localcontext
 from pathlib import Path
 
-from spiderfly_instructions import InstructionError, InstructionRegistry
-from spiderfly_instructions.excel import READ_EXCEL
-from spiderfly_instructions.table_filter import FILTER_EQUALS
-from spiderfly_instructions.task import TaskContext, TaskResult, run_task
+from spiderfly_runtime import TaskError
+from spiderfly_runtime.excel import read_excel
+from spiderfly_runtime.table_filter import filter_equals
+from spiderfly_runtime.task import TaskContext, TaskResult, run_task
 
 
 FLOW_ID = "example.excel_amount_difference"
@@ -31,7 +31,7 @@ def _group_total(rows: list[dict], column: str, status: str) -> Decimal:
     for index, row in enumerate(rows, start=1):
         value = row[column]
         if type(value) not in (str, int, float):
-            raise InstructionError(
+            raise TaskError(
                 "FLOW_AMOUNT_INVALID", FLOW_ID, "calculate",
                 f"“{status}”第 {index} 条匹配记录的金额必须是数字或英文逗号分隔的数字文字。",
             )
@@ -42,7 +42,7 @@ def _group_total(rows: list[dict], column: str, status: str) -> Decimal:
                 if not number.is_finite():
                     raise ValueError("non-finite amount")
             except (DecimalException, ValueError) as exc:
-                raise InstructionError(
+                raise TaskError(
                     "FLOW_AMOUNT_INVALID", FLOW_ID, "calculate",
                     f"“{status}”第 {index} 条匹配记录含空项或非法金额，请检查原表。",
                 ) from exc
@@ -55,23 +55,14 @@ def run_flow(
     status_column: str = STATUS_COLUMN, amount_column: str = AMOUNT_COLUMN,
     left_status: str = LEFT_STATUS, right_status: str = RIGHT_STATUS,
 ) -> dict:
-    registry = InstructionRegistry()
-    registry.register(READ_EXCEL)
-    registry.register(FILTER_EQUALS)
     calls = []
 
-    table = registry.execute("excel.read", {
-        "file_path": input_path, "sheet_name": sheet_name,
-        "required_columns": list(dict.fromkeys([status_column, amount_column])),
-    })
+    table = read_excel(file_path=input_path, sheet_name=sheet_name, required_columns=list(dict.fromkeys([status_column, amount_column])))
     calls.append("excel.read")
 
     groups = []
     for status in (left_status, right_status):
-        group = registry.execute("table.filter_equals", {
-            "columns": table.columns, "rows": table.rows,
-            "column": status_column, "value": status,
-        })
+        group = filter_equals(columns=table.columns, rows=table.rows, column=status_column, value=status)
         groups.append(group)
         calls.append("table.filter_equals")
 
@@ -85,7 +76,7 @@ def run_flow(
             right_total = _group_total(groups[1].rows, amount_column, right_status)
             difference = left_total - right_total
     except DecimalException as exc:
-        raise InstructionError(
+        raise TaskError(
             "FLOW_AMOUNT_RANGE", FLOW_ID, "calculate",
             "金额汇总超出当前十进制计算精度或范围，未返回近似结果。",
         ) from exc
@@ -100,7 +91,7 @@ def run_flow(
         # Strings retain the exact decimal result when writing JSON.
         "left_total": str(left_total), "right_total": str(right_total),
         "difference": str(difference),
-        "instruction_calls": calls,
+        "operations": calls,
         "calculation": "Python Decimal: sum(left) - sum(right)",
     }
 
@@ -115,7 +106,7 @@ def process(context: TaskContext) -> TaskResult:
     with (context.output_dir / "金额差额.txt").open("x", encoding="utf-8") as stream:
         stream.write(message + "\n")
         stream.write(f"匹配行数：{result['left_row_count']} / {result['right_row_count']}\n")
-        stream.write("指令调用：" + " → ".join(result["instruction_calls"]) + "\n")
+        stream.write("处理步骤：" + " → ".join(result["operations"]) + "\n")
     return TaskResult(message=message, code="AMOUNT_DIFFERENCE_DONE")
 
 
@@ -137,7 +128,7 @@ def main() -> int:
             status_column=args.status_column, amount_column=args.amount_column,
             left_status=args.left_status, right_status=args.right_status,
         )
-    except InstructionError as exc:
+    except TaskError as exc:
         print(json.dumps(exc.to_dict(), ensure_ascii=False), file=sys.stderr)
         return 2
     print(json.dumps(result, ensure_ascii=False))

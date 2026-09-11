@@ -7,21 +7,21 @@ import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
-from app import environments, instruction_packages
+from app import environments, local_packages
 
 
 class InstructionRequirementTests(unittest.TestCase):
     def test_utf8_bom_does_not_hide_the_reserved_package(self) -> None:
         text = "\ufeffspiderfly-instructions==0.1.0"
         self.assertEqual(environments._safe_requirements(text), text.lstrip("\ufeff"))
-        self.assertEqual(instruction_packages.split_instruction_requirement(text), ("", "0.1.0"))
+        self.assertEqual(local_packages.split_local_requirements(text), ("", {"spiderfly-instructions": "0.1.0"}))
 
     def test_pip_preprocessing_cannot_hide_the_reserved_package(self) -> None:
         for text in ("spiderfly-\\\ninstructions==0.1.0", "${PACKAGE_NAME}==0.1.0",
                      "spiderfly-${PACKAGE_SUFFIX}==0.1.0"):
             with self.subTest(text=text):
                 for validate in (environments._safe_requirements,
-                                 instruction_packages.split_instruction_requirement):
+                                 local_packages.split_local_requirements):
                     with self.assertRaisesRegex(ValueError, "暂不支持续行或环境变量"):
                         validate(text)
 
@@ -29,9 +29,9 @@ class InstructionRequirementTests(unittest.TestCase):
         for name in ("spiderfly-instructions", "SpiderFly_Instructions", "spiderfly...instructions"):
             with self.subTest(name=name):
                 source = f"requests>=2,<3\n{name} == 0.1.0 # local package\n# comment"
-                public, version = instruction_packages.split_instruction_requirement(source)
+                public, version = local_packages.split_local_requirements(source)
                 self.assertEqual(public, "requests>=2,<3\n# comment")
-                self.assertEqual(version, "0.1.0")
+                self.assertEqual(version, {"spiderfly-instructions": "0.1.0"})
                 self.assertEqual(environments._safe_requirements(source), source)
 
     def test_reserved_name_cannot_fall_through_for_unsupported_declarations(self) -> None:
@@ -55,17 +55,17 @@ class InstructionRequirementTests(unittest.TestCase):
             root = Path(folder)
             wheel = root / "spiderfly_instructions-0.1.0-py3-none-any.whl"
             wheel.write_bytes(b"local fixture")
-            with patch.object(instruction_packages, "INSTRUCTION_WHEEL_DIR", root):
-                self.assertEqual(instruction_packages.instruction_wheel("0.1.0"), wheel)
+            with patch.object(local_packages, "INSTRUCTION_WHEEL_DIR", root):
+                self.assertEqual(local_packages.local_wheel("spiderfly-instructions", "0.1.0"), wheel)
                 with self.assertRaisesRegex(FileNotFoundError, "不会从公网安装同名包"):
-                    instruction_packages.instruction_wheel("0.2.0")
+                    local_packages.local_wheel("spiderfly-instructions", "0.2.0")
                 with self.assertRaises(ValueError):
-                    instruction_packages.instruction_wheel("../0.1.0")
+                    local_packages.local_wheel("spiderfly-instructions", "../0.1.0")
 
 
 class InstructionEnvironmentBuildTests(unittest.TestCase):
     def _build(self, *, requirements: str, missing_wheel: bool = False,
-               failed_phase: str = "") -> dict:
+               failed_phase: str = "", package: str = "spiderfly-instructions") -> dict:
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
             app_dir = root / "apps" / "1"
@@ -74,7 +74,7 @@ class InstructionEnvironmentBuildTests(unittest.TestCase):
             script.write_text("print('example')\n", encoding="utf-8")
             wheel_dir = root / "release" / "instructions"
             wheel_dir.mkdir(parents=True)
-            wheel = wheel_dir / "spiderfly_instructions-0.1.0-py3-none-any.whl"
+            wheel = wheel_dir / f"{package.replace('-', '_')}-0.1.0-py3-none-any.whl"
             if not missing_wheel:
                 wheel.write_bytes(b"fake wheel; subprocess is mocked")
             app = {"id": 1, "revision": 1, "environment_status": "pending",
@@ -93,7 +93,8 @@ class InstructionEnvironmentBuildTests(unittest.TestCase):
                 patch.object(environments, "RPA_APPS_DIR", root / "apps"),
                 patch.object(environments, "RPA_ENVS_DIR", root / "envs"),
                 patch.object(environments, "BASE_PYTHON", sys.executable),
-                patch.object(instruction_packages, "INSTRUCTION_WHEEL_DIR", wheel_dir),
+                patch.object(local_packages, "INSTRUCTION_WHEEL_DIR", wheel_dir),
+                patch.object(local_packages, "RUNTIME_WHEEL_DIR", wheel_dir),
                 patch.object(environments, "fetch_one", return_value=app),
                 patch.object(environments, "fetch_all", return_value=[]),
                 patch.object(environments, "execute_result", return_value=(0, 1)) as updates,
@@ -110,7 +111,7 @@ class InstructionEnvironmentBuildTests(unittest.TestCase):
     def test_build_installs_exact_local_file_and_checks_actual_package_before_ready(self) -> None:
         result = self._build(requirements="spiderfly-instructions==0.1.0\nrequests>=2,<3")
         phases = [options["phase"] for _, options in result["calls"]]
-        self.assertEqual(phases, ["创建虚拟环境", "安装依赖", "验证解释器", "检查依赖", "验证指令包"])
+        self.assertEqual(phases, ["创建虚拟环境", "安装依赖", "验证解释器", "检查依赖", "验证本地依赖"])
         command = result["calls"][1][0]
         self.assertEqual(command[1:5], ("-m", "pip", "install", result["wheel"]))
         self.assertNotIn("spiderfly-instructions", result["generated"])
@@ -124,12 +125,12 @@ class InstructionEnvironmentBuildTests(unittest.TestCase):
         result = self._build(requirements="spiderfly-instructions==0.1.0", missing_wheel=True)
         self.assertEqual(result["calls"], [])
         self.assertEqual(len(result["updates"]), 1)
-        self.assertIn("本机缺少指令包", result["failures"][0].args[1][0])
+        self.assertIn("本机缺少本地包", result["failures"][0].args[1][0])
 
     def test_failed_instruction_import_does_not_publish_environment(self) -> None:
-        result = self._build(requirements="spiderfly-instructions==0.1.0", failed_phase="验证指令包")
+        result = self._build(requirements="spiderfly-instructions==0.1.0", failed_phase="验证本地依赖")
         self.assertEqual(len(result["updates"]), 1)
-        self.assertIn("指令包无法导入", result["failures"][0].args[1][0])
+        self.assertIn("spiderfly-instructions 无法导入", result["failures"][0].args[1][0])
 
     def test_ordinary_requirements_keep_existing_install_path(self) -> None:
         result = self._build(requirements="requests>=2,<3")
@@ -137,8 +138,41 @@ class InstructionEnvironmentBuildTests(unittest.TestCase):
         self.assertEqual(command[1:5], ("-m", "pip", "install", "-r"))
         self.assertTrue(command[-1].endswith("requirements.txt"))
         self.assertIsNone(result["generated"])
-        self.assertNotIn("验证指令包", [options["phase"] for _, options in result["calls"]])
+        self.assertNotIn("验证本地依赖", [options["phase"] for _, options in result["calls"]])
         self.assertEqual(result["failures"], [])
+
+
+
+class RuntimePackageTests(unittest.TestCase):
+    _build = InstructionEnvironmentBuildTests._build
+
+    def test_runtime_installs_local_wheel_without_business_import(self):
+        result = self._build(requirements="spiderfly-runtime==0.1.0", package="spiderfly-runtime")
+        self.assertEqual(result["failures"], [])
+        self.assertIn("spiderfly_runtime-0.1.0", result["wheel"])
+        verification = next(cmd for cmd, opts in result["calls"] if opts["phase"] == "验证本地依赖")
+        self.assertIn("spiderfly_runtime", verification)
+        self.assertNotIn("example_flows", " ".join(verification))
+
+    def test_missing_runtime_never_falls_back_to_public_index(self):
+        result = self._build(requirements="spiderfly-runtime==0.1.0", package="spiderfly-runtime", missing_wheel=True)
+        self.assertEqual(result["calls"], [])
+        self.assertIn("不会从公网安装同名包", result["failures"][0].args[1][0])
+
+    def test_runtime_import_failure_does_not_publish_environment(self):
+        result = self._build(requirements="spiderfly-runtime==0.1.0", package="spiderfly-runtime", failed_phase="验证本地依赖")
+        self.assertEqual(len(result["updates"]), 1)
+        self.assertIn("spiderfly-runtime 无法导入", result["failures"][0].args[1][0])
+
+    def test_both_local_names_are_reserved_and_pinned(self):
+        source = "SpiderFly_Runtime == 0.1.0\nspiderfly-instructions==0.1.4\nrequests==2.32.5"
+        self.assertEqual(local_packages.split_local_requirements(source),
+                         ("requests==2.32.5", {"spiderfly-runtime": "0.1.0", "spiderfly-instructions": "0.1.4"}))
+        for suffix in ("", ">=0.1", "==0.1.*", "[excel]==0.1.0", "==0.1.0; python_version >= '3.12'"):
+            with self.subTest(suffix=suffix), self.assertRaises(ValueError):
+                environments._safe_requirements("spiderfly-runtime" + suffix)
+        with self.assertRaises(ValueError):
+            environments._safe_requirements("spiderfly-runtime==0.1.0\nspiderfly_runtime==0.1.0")
 
 
 if __name__ == "__main__":

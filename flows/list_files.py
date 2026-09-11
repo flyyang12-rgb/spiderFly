@@ -1,4 +1,4 @@
-"""独立文件清单流程；需要 spiderfly-instructions==0.1.4。"""
+"""独立文件清单流程；需要 spiderfly-runtime==0.1.0。"""
 
 from __future__ import annotations
 
@@ -6,9 +6,9 @@ import argparse
 import json
 import sys
 
-from spiderfly_instructions import InstructionError, InstructionRegistry
-from spiderfly_instructions.files import LIST_FILES
-from spiderfly_instructions.task import TaskContext, TaskResult, run_task
+from spiderfly_runtime import TaskError
+from spiderfly_runtime.files import list_files
+from spiderfly_runtime.task import TaskContext, TaskResult, run_task
 
 
 # 平台模式填写执行任务那台机器上已有的文件夹；本地模式可通过参数传入。
@@ -17,12 +17,7 @@ FILE_PATTERN = "*"
 
 
 def get_files(folder_path: str, pattern: str = FILE_PATTERN) -> dict:
-    registry = InstructionRegistry()
-    registry.register(LIST_FILES)
-    return registry.execute("file.list", {
-        "folder_path": folder_path,
-        "pattern": pattern,
-    }).model_dump()
+    return list_files(folder_path=folder_path, pattern=pattern).model_dump()
 
 
 def process(context: TaskContext) -> TaskResult:
@@ -43,7 +38,7 @@ def main() -> int:
     args = parser.parse_args()
     try:
         print(json.dumps(get_files(args.folder_path, args.pattern), ensure_ascii=False, indent=2))
-    except InstructionError as exc:
+    except TaskError as exc:
         print(json.dumps(exc.to_dict(), ensure_ascii=False), file=sys.stderr)
         return 1
     return 0

@@ -1,4 +1,4 @@
-"""独立的均值测试流程，只调用公共指令；不带参数时由平台运行。"""
+"""独立的均值测试流程，直接调用 Python 函数；不带参数时由平台运行。"""
 
 from __future__ import annotations
 
@@ -6,30 +6,23 @@ import argparse
 import json
 import sys
 
-from spiderfly_instructions import InstructionError, InstructionRegistry
-from spiderfly_instructions.average import AVERAGE
-from spiderfly_instructions.excel import READ_EXCEL
-from spiderfly_instructions.excel_write import WRITE_EXCEL
-from spiderfly_instructions.task import TaskContext, TaskResult, run_task
+from spiderfly_runtime import TaskError
+from spiderfly_runtime.average import average
+from spiderfly_runtime.excel import read_excel
+from spiderfly_runtime.excel_write import write_excel
+from spiderfly_runtime.task import TaskContext, TaskResult, run_task
 
 
 RESULT_COLUMN = "待处理平均数"
 
 
 def run_flow(input_path: str, output_path: str, sheet_name: str | None = None) -> dict:
-    registry = InstructionRegistry()
-    for instruction in (READ_EXCEL, AVERAGE, WRITE_EXCEL):
-        registry.register(instruction)
-    instruction_calls = []
+    operations = []
 
-    table = registry.execute("excel.read", {
-        "file_path": input_path,
-        "sheet_name": sheet_name,
-        "required_columns": ["状态", "金额"],
-    })
-    instruction_calls.append("excel.read")
+    table = read_excel(file_path=input_path, sheet_name=sheet_name, required_columns=['状态', '金额'])
+    operations.append("excel.read")
     if RESULT_COLUMN in table.columns:
-        raise InstructionError(
+        raise TaskError(
             "FLOW_COLUMN_EXISTS", "example.excel_pending_average", "transform",
             "输入表已有“待处理平均数”列，请换一份输入，避免替换已有内容。",
         )
@@ -37,27 +30,21 @@ def run_flow(input_path: str, output_path: str, sheet_name: str | None = None) -
     rows = []
     processed_row_count = 0
     for row in table.rows:
-        average = None
+        mean_value = None
         if row["状态"] == "待处理":
-            result = registry.execute("math.average", {"value": row["金额"]})
-            instruction_calls.append("math.average")
-            average = result.average
+            result = average(value=row['金额'])
+            operations.append("math.average")
+            mean_value = result.average
             processed_row_count += 1
-        rows.append({**row, RESULT_COLUMN: average})
+        rows.append({**row, RESULT_COLUMN: mean_value})
 
     # 所有待处理行通过检查后才写文件；模板模式保留原表并追加新列。
-    saved = registry.execute("excel.write", {
-        "file_path": output_path,
-        "template_file": input_path,
-        "sheet_name": table.sheet_name,
-        "columns": [*table.columns, RESULT_COLUMN],
-        "rows": rows,
-    })
-    instruction_calls.append("excel.write")
+    saved = write_excel(file_path=output_path, template_file=input_path, sheet_name=table.sheet_name, columns=[*table.columns, RESULT_COLUMN], rows=rows)
+    operations.append("excel.write")
     return {
         **saved.model_dump(),
         "processed_row_count": processed_row_count,
-        "instruction_calls": instruction_calls,
+        "operations": operations,
     }
 
 
@@ -79,7 +66,7 @@ def main() -> int:
     args = parser.parse_args()
     try:
         result = run_flow(args.input_path, args.output_path, args.sheet)
-    except InstructionError as exc:
+    except TaskError as exc:
         print(json.dumps(exc.to_dict(), ensure_ascii=False), file=sys.stderr)
         return 2
     print(json.dumps(result, ensure_ascii=False))

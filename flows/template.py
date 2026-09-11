@@ -1,6 +1,6 @@
-"""独立 Python 流程模板：声明 spiderfly-instructions==0.1.3，并替换 process 中的业务代码。"""
+"""独立 Python 流程模板：声明 spiderfly-runtime==0.1.0，并替换 process 中的业务代码。"""
 
-from spiderfly_instructions.task import TaskContext, TaskResult, run_task
+from spiderfly_runtime.task import TaskContext, TaskResult, run_task
 
 
 def process(context: TaskContext) -> TaskResult:

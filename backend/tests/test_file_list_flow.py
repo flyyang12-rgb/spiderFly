@@ -15,15 +15,26 @@ import importlib.abc, json, runpy, sys
 from pathlib import Path
 class Boundary(importlib.abc.MetaPathFinder):
     def find_spec(self, fullname, path=None, target=None):
-        if fullname.partition('.')[0] in {'app', 'example_flows', 'flows', 'examples'}:
+        if fullname.partition('.')[0] in {'app', 'example_flows', 'flows', 'examples', 'spiderfly_instructions'}:
             raise ImportError('Forbidden business or platform import: ' + fullname)
 sys.meta_path.insert(0, Boundary())
-from spiderfly_instructions import InstructionRegistry
-actual, calls = InstructionRegistry.execute, []
-def trace(registry, name, inputs=None):
-    calls.append(name)
-    return actual(registry, name, inputs)
-InstructionRegistry.execute = trace
+import importlib
+calls = []
+def track(module, function, name):
+    target = importlib.import_module('spiderfly_runtime.' + module)
+    original = getattr(target, function)
+    def invoke(*args, **kwargs):
+        calls.append(name)
+        return original(*args, **kwargs)
+    setattr(target, function, invoke)
+for module, function, name in [
+    ('excel', 'read_excel', 'excel.read'),
+    ('excel_write', 'write_excel', 'excel.write'),
+    ('average', 'average', 'math.average'),
+    ('table_filter', 'filter_equals', 'table.filter_equals'),
+    ('files', 'list_files', 'file.list'),
+]:
+    track(module, function, name)
 record = Path(sys.argv[1])
 sys.argv = sys.argv[2:]
 try:
@@ -75,7 +86,7 @@ class FileListFlowTests(unittest.TestCase):
         self.assertEqual((self.folder / "two.txt").read_bytes(), b"untouched")
         return result, directory
 
-    def test_local_single_file_flow_calls_installed_instruction(self):
+    def test_local_single_file_flow_calls_installed_function(self):
         result, _ = self.invoke()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(json.loads(result.stdout), {"files": [str(self.folder / "一.xlsx")], "count": 1})

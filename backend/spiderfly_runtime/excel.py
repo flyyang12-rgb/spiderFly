@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-import argparse
-import json
-import sys
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from xml.etree.ElementTree import ParseError
@@ -14,28 +11,28 @@ from openpyxl import load_workbook
 from openpyxl.utils.exceptions import InvalidFileException
 from pydantic import Field
 
-from .core import Instruction, InstructionError, InstructionModel, InstructionRegistry
+from ._validation import DataModel, TaskError, checked
 
 
 CellValue = str | bool | int | float | datetime | date | time | timedelta | None
-INSTRUCTION_ID = "excel.read"
+OPERATION = "excel.read"
 
 
-class ReadExcelInput(InstructionModel):
+class ReadExcelInput(DataModel):
     file_path: str = Field(min_length=1, description="本地 .xlsx 文件路径")
     sheet_name: str | None = Field(default=None, min_length=1, description="工作表名称；省略时读取第一张")
     required_columns: list[str] = Field(default_factory=list, description="必须存在的列名；忽略列名首尾空白")
 
 
-class ReadExcelOutput(InstructionModel):
+class ReadExcelOutput(DataModel):
     sheet_name: str = Field(description="实际读取的工作表名称")
     columns: list[str] = Field(description="首行列名，已去除首尾空白")
     rows: list[dict[str, CellValue]] = Field(description="按列名保存的各行数据，不含完全空行")
     row_count: int = Field(ge=0, description="返回的数据行数，不含表头")
 
 
-def _failure(code: str, message: str) -> InstructionError:
-    return InstructionError(code, INSTRUCTION_ID, "execute", message)
+def _failure(code: str, message: str) -> TaskError:
+    return TaskError(code, OPERATION, "execute", message)
 
 
 def _values(cells: tuple, sheet_name: str) -> list[CellValue]:
@@ -87,7 +84,7 @@ def _read_sheet(worksheet, inputs: ReadExcelInput) -> dict[str, object]:
         source_rows.close()
 
 
-def read_excel(inputs: ReadExcelInput) -> dict[str, object]:
+def _read_excel(inputs: ReadExcelInput) -> dict[str, object]:
     path = Path(inputs.file_path)
     if path.suffix.lower() != ".xlsx":
         raise _failure("EXCEL_FORMAT_UNSUPPORTED", "当前只支持 .xlsx 文件，请先转换文件格式。")
@@ -127,36 +124,5 @@ def verify_excel(inputs: ReadExcelInput, result: ReadExcelOutput) -> bool:
     )
 
 
-READ_EXCEL = Instruction(
-    instruction_id=INSTRUCTION_ID,
-    name="读取 Excel",
-    version="0.1.0",
-    description="读取 .xlsx 数据表，第一行为列名；检查必需列，跳过完全空行，不修改原文件，不计算公式。",
-    input_model=ReadExcelInput,
-    output_model=ReadExcelOutput,
-    handler=read_excel,
-    verifier=verify_excel,
-)
-
-
-def main() -> int:
-    parser = argparse.ArgumentParser(description="读取 Excel 数据表")
-    parser.add_argument("file_path", help=".xlsx 文件路径")
-    parser.add_argument("--sheet", default=None, help="工作表名称，默认第一张")
-    parser.add_argument("--require", nargs="*", default=[], help="必需列名")
-    args = parser.parse_args()
-    registry = InstructionRegistry()
-    registry.register(READ_EXCEL)
-    try:
-        result = registry.execute(INSTRUCTION_ID, {
-            "file_path": args.file_path, "sheet_name": args.sheet, "required_columns": args.require,
-        })
-    except InstructionError as exc:
-        print(json.dumps(exc.to_dict(), ensure_ascii=False), file=sys.stderr)
-        return 2
-    print(json.dumps(result.model_dump(mode="json"), ensure_ascii=False))
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
+def read_excel(file_path: str, sheet_name: str | None = None, required_columns: list[str] | None = None) -> ReadExcelOutput:
+    return checked(OPERATION, ReadExcelInput, ReadExcelOutput, _read_excel, verify_excel, {"file_path": file_path, "sheet_name": sheet_name, "required_columns": [] if required_columns is None else required_columns})

@@ -1,8 +1,9 @@
-# Excel 与公共指令
+# Excel 与 Python 处理
 
-核对日期：2026-09-08。公共包 spiderfly-instructions==0.1.4，平台可从本地 wheel 安装。
-已验证的六条公共能力：文字合并、Excel 读取、单列等值筛选、平均数计算、Excel 写入、文件列表。
-不要猜测公共指令的函数签名；尚未读取对应版本说明时，可用已声明的 openpyxl 实现具体表格逻辑。
+核对日期：2026-09-11。新业务直接编写 Python；不创建指令、注册表或字符串调度器。
+普通 Windows 任务可选 spiderfly-runtime==0.1.0，提供输入、产物和回执辅助及文件处理函数；它尚未安装到 WSL 受限环境。
+旧 spiderfly-instructions==0.1.0–0.1.4 仅用于兼容已有任务，不主动升级或用于新生成脚本。
+AI 受限脚本继续使用环境已支持的标准库、openpyxl 等依赖，不假设运行库可用。
 
 使用 openpyxl>=3.1.5,<4 时，load_workbook(input_path) 读取；Workbook() 创建；worksheet.iter_rows(values_only=True) 遍历。
 表头必须检查必需列是否存在。金额使用 Decimal(str(value))，订单号按字符串保留前导零。

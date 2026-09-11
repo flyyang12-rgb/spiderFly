@@ -7,28 +7,28 @@ from math import isfinite, isnan
 
 from pydantic import Field
 
-from .core import Instruction, InstructionError, InstructionModel
+from ._validation import DataModel, TaskError, checked
 from .excel import CellValue
 
 
-INSTRUCTION_ID = "table.filter_equals"
+OPERATION = "table.filter_equals"
 
 
-class FilterEqualsInput(InstructionModel):
+class FilterEqualsInput(DataModel):
     columns: list[str] = Field(min_length=1, description="表格的完整列名，按原顺序填写")
     rows: list[dict[str, CellValue]] = Field(description="表格数据，每行字段须与列名一致")
     column: str = Field(min_length=1, description="用于筛选的列名，必须存在于表头")
     value: CellValue = Field(description="要匹配的值；不自动转换文字、数字或空值")
 
 
-class FilterEqualsOutput(InstructionModel):
+class FilterEqualsOutput(DataModel):
     columns: list[str] = Field(min_length=1, description="保留原顺序的全部列名")
     rows: list[dict[str, CellValue]] = Field(description="符合条件的完整数据行，保留顺序和重复行")
     row_count: int = Field(ge=0, description="符合条件的数据行数")
 
 
-def _failure(code: str, message: str) -> InstructionError:
-    return InstructionError(code, INSTRUCTION_ID, "execute", message)
+def _failure(code: str, message: str) -> TaskError:
+    return TaskError(code, OPERATION, "execute", message)
 
 
 def _check_comparable(value: CellValue, location: str) -> None:
@@ -46,7 +46,7 @@ def _matches(left: CellValue, right: CellValue) -> bool:
     return type(left) in (int, float) and type(right) in (int, float) and left == right
 
 
-def filter_equals(inputs: FilterEqualsInput) -> dict[str, object]:
+def _filter_equals(inputs: FilterEqualsInput) -> dict[str, object]:
     if any(not column or column != column.strip() for column in inputs.columns):
         raise _failure("TABLE_COLUMNS_INVALID", "列名不能为空，也不能在首尾带空格。")
     columns = set(inputs.columns)
@@ -97,13 +97,5 @@ def verify_filter_equals(inputs: FilterEqualsInput, result: FilterEqualsOutput) 
     )
 
 
-FILTER_EQUALS = Instruction(
-    instruction_id=INSTRUCTION_ID,
-    name="按相等条件筛选表格",
-    version="0.1.0",
-    description="按单列与指定值相等筛选，保留全部列、原行序和重复行；文字精确匹配，布尔值不当作数字。",
-    input_model=FilterEqualsInput,
-    output_model=FilterEqualsOutput,
-    handler=filter_equals,
-    verifier=verify_filter_equals,
-)
+def filter_equals(columns: list[str], rows: list[dict], column: str, value: CellValue) -> FilterEqualsOutput:
+    return checked(OPERATION, FilterEqualsInput, FilterEqualsOutput, _filter_equals, verify_filter_equals, dict(columns=columns, rows=rows, column=column, value=value))

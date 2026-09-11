@@ -8,13 +8,13 @@ from pathlib import Path
 
 from pydantic import Field, field_validator
 
-from .core import Instruction, InstructionError, InstructionModel
+from ._validation import DataModel, TaskError, checked
 
 
-INSTRUCTION_ID = "file.list"
+OPERATION = "file.list"
 
 
-class ListFilesInput(InstructionModel):
+class ListFilesInput(DataModel):
     folder_path: str = Field(min_length=1, description="已有文件夹；相对路径按当前运行目录解释")
     pattern: str = Field(default="*", min_length=1, description="文件名通配符，例如 *.xlsx；忽略大小写")
 
@@ -33,7 +33,7 @@ class ListFilesInput(InstructionModel):
         return value
 
 
-class ListFilesOutput(InstructionModel):
+class ListFilesOutput(DataModel):
     files: list[str] = Field(description="匹配的普通文件绝对路径，按文件名排序")
     count: int = Field(ge=0, description="文件数量")
 
@@ -47,7 +47,7 @@ def _sort_key(path: str) -> tuple[str, str]:
     return name.casefold(), name
 
 
-def list_files(inputs: ListFilesInput) -> dict[str, object]:
+def _list_files(inputs: ListFilesInput) -> dict[str, object]:
     try:
         folder = os.path.abspath(inputs.folder_path)
         with os.scandir(folder) as entries:
@@ -56,20 +56,20 @@ def list_files(inputs: ListFilesInput) -> dict[str, object]:
                 if _matches(entry.name, inputs.pattern) and entry.is_file(follow_symlinks=False)
             ]
     except FileNotFoundError as exc:
-        raise InstructionError(
-            "FILE_FOLDER_NOT_FOUND", INSTRUCTION_ID, "execute", "文件夹不存在或已被移走。",
+        raise TaskError(
+            "FILE_FOLDER_NOT_FOUND", OPERATION, "execute", "文件夹不存在或已被移走。",
         ) from exc
     except NotADirectoryError as exc:
-        raise InstructionError(
-            "FILE_FOLDER_INVALID", INSTRUCTION_ID, "execute", "请填写文件夹路径，不能填写单个文件。",
+        raise TaskError(
+            "FILE_FOLDER_INVALID", OPERATION, "execute", "请填写文件夹路径，不能填写单个文件。",
         ) from exc
     except PermissionError as exc:
-        raise InstructionError(
-            "FILE_ACCESS_DENIED", INSTRUCTION_ID, "execute", "没有权限列出这个文件夹中的文件。",
+        raise TaskError(
+            "FILE_ACCESS_DENIED", OPERATION, "execute", "没有权限列出这个文件夹中的文件。",
         ) from exc
     except OSError as exc:
-        raise InstructionError(
-            "FILE_LIST_FAILED", INSTRUCTION_ID, "execute", "读取文件清单失败，请检查路径及磁盘是否可用。",
+        raise TaskError(
+            "FILE_LIST_FAILED", OPERATION, "execute", "读取文件清单失败，请检查路径及磁盘是否可用。",
         ) from exc
     files.sort(key=_sort_key)
     return {"files": files, "count": len(files)}
@@ -91,13 +91,5 @@ def verify_files(inputs: ListFilesInput, result: ListFilesOutput) -> bool:
     )
 
 
-LIST_FILES = Instruction(
-    instruction_id=INSTRUCTION_ID,
-    name="获取文件列表",
-    version="0.1.0",
-    description="列出文件夹当前一层的普通文件，支持文件名通配符；返回排序后的绝对路径及数量。",
-    input_model=ListFilesInput,
-    output_model=ListFilesOutput,
-    handler=list_files,
-    verifier=verify_files,
-)
+def list_files(folder_path: str, pattern: str = "*") -> ListFilesOutput:
+    return checked(OPERATION, ListFilesInput, ListFilesOutput, _list_files, verify_files, {"folder_path": folder_path, "pattern": pattern})

@@ -1,4 +1,6 @@
-# SpiderFly 指令包
+# SpiderFly 旧指令包兼容说明
+
+> 该包已停止源码维护，仅保留 0.1.0–0.1.4 wheel。以下是旧包接口资料；新开发使用 [Python 任务运行库](RUNTIME.md) 和 [独立流程](../flows/README.md)。
 
 `spiderfly-instructions 0.1.4` 提供六条可在 Python 代码中组合的指令，以及通用 Python 任务入口：
 

@@ -23,24 +23,34 @@ from pathlib import Path
 from importlib.metadata import version
 class Boundary(importlib.abc.MetaPathFinder):
     def find_spec(self, fullname, path=None, target=None):
-        if fullname.partition('.')[0] in {'example_flows', 'app', 'flows', 'examples'}:
+        if fullname.partition('.')[0] in {'example_flows', 'app', 'flows', 'examples', 'spiderfly_instructions'}:
             raise ImportError('Independent flow imported a forbidden module: ' + fullname)
 sys.meta_path.insert(0, Boundary())
-from spiderfly_instructions import InstructionRegistry
-actual = InstructionRegistry.execute
+import importlib
 calls = []
-def trace(registry, name, inputs=None):
-    calls.append(name)
-    return actual(registry, name, inputs)
-InstructionRegistry.execute = trace
+def track(module, function, name):
+    target = importlib.import_module('spiderfly_runtime.' + module)
+    original = getattr(target, function)
+    def invoke(*args, **kwargs):
+        calls.append(name)
+        return original(*args, **kwargs)
+    setattr(target, function, invoke)
+for module, function, name in [
+    ('excel', 'read_excel', 'excel.read'),
+    ('excel_write', 'write_excel', 'excel.write'),
+    ('average', 'average', 'math.average'),
+    ('table_filter', 'filter_equals', 'table.filter_equals'),
+    ('files', 'list_files', 'file.list'),
+]:
+    track(module, function, name)
 record = Path(sys.argv[1])
 sys.argv = sys.argv[2:]
 try:
     runpy.run_path(sys.argv[0], run_name='__main__')
 finally:
     record.write_text(json.dumps({
-        'calls': calls, 'version': version('spiderfly-instructions'),
-        'forbidden_loaded': [n for n in sys.modules if n.partition('.')[0] in {'example_flows','app','flows','examples'}],
+        'calls': calls, 'version': version('spiderfly-runtime'),
+        'forbidden_loaded': [n for n in sys.modules if n.partition('.')[0] in {'example_flows','app','flows','examples','spiderfly_instructions'}],
     }), encoding='utf-8')
 """
 
@@ -96,7 +106,7 @@ class IndependentFlowTests(unittest.TestCase):
             cwd=entry_dir, env=environment, capture_output=True, text=True, encoding="utf-8", timeout=20,
         )
         trace = json.loads((directory / "trace.json").read_text(encoding="utf-8"))
-        self.assertEqual(trace["version"], version("spiderfly-instructions"))
+        self.assertEqual(trace["version"], version("spiderfly-runtime"))
         self.assertEqual(trace["forbidden_loaded"], [])
         self.assertEqual(self.source.read_bytes(), self.original)
         return result, directory, trace["calls"]
@@ -116,13 +126,25 @@ class IndependentFlowTests(unittest.TestCase):
         finally:
             book.close()
 
-    def test_amount_cli_calls_public_instructions_with_business_imports_blocked(self):
+    def test_order_filter_runs_as_single_uploaded_file(self):
+        result, directory, calls = self.invoke("order_filter.py", platform=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(calls, ["excel.read", "table.filter_equals", "excel.write"])
+        receipt = json.loads((directory / "result.json").read_text(encoding="utf-8"))
+        self.assertEqual(receipt["outcome"], "success")
+        book = load_workbook(directory / "artifacts/流程文件/输出/结果.xlsx")
+        try:
+            self.assertEqual([row[0] for row in list(book.active.values)[1:]], ["001", "003"])
+        finally:
+            book.close()
+
+    def test_amount_cli_calls_public_functions_with_business_imports_blocked(self):
         result, _, calls = self.invoke("amount_difference.py", [self.source])
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(json.loads(result.stdout)["difference"], "0.3")
         self.assertEqual(calls, ["excel.read", "table.filter_equals", "table.filter_equals"])
 
-    def test_average_cli_calls_public_instructions_and_preserves_input(self):
+    def test_average_cli_calls_public_functions_and_preserves_input(self):
         output = self.root / "average.xlsx"
         result, _, calls = self.invoke("pending_average.py", [self.source, output])
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -144,8 +166,8 @@ class IndependentFlowTests(unittest.TestCase):
                     self.assertIn("差额：0.3", (directory / "artifacts/流程文件/输出/金额差额.txt").read_text(encoding="utf-8"))
 
     def test_changing_only_flow_changes_business_without_library_changes(self):
-        import spiderfly_instructions
-        library = Path(spiderfly_instructions.__file__).parent
+        import spiderfly_runtime
+        library = Path(spiderfly_runtime.__file__).parent
         before = {path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in library.glob("*.py")}
         source = (FLOWS / "amount_difference.py").read_text(encoding="utf-8")
         old = 'LEFT_STATUS = "待处理"\nRIGHT_STATUS = "已完成"'
