@@ -234,8 +234,8 @@ async def repair(job,item,detail,error):
         cutoff=(datetime.now(timezone.utc)-timedelta(hours=24)).isoformat(timespec='seconds')
         rows=used_budget(conn,cutoff)+[dict(r) for r in conn.execute('SELECT task_id,elapsed_seconds,reserved_seconds,input_tokens,output_tokens,reserved_tokens FROM maintenance_jobs WHERE COALESCE(started_at,created_at)>?',(cutoff,))]
         limits=m.settings()
-        seconds=min(240,int(limits['daily_seconds']-sum(max(r['elapsed_seconds'],r['reserved_seconds']) for r in rows)),int(2700-sum(max(r['elapsed_seconds'],r['reserved_seconds']) for r in rows if r['task_id']==job['task_id'])))
-        if seconds<30 or sum(r['input_tokens']+r['output_tokens']+r['reserved_tokens'] for r in rows)+config['max_tokens']>limits['daily_tokens']: raise ValueError('维护预算不足，当前版本保留')
+        seconds=240 if limits.get('unlimited', False) else min(240,int(limits['daily_seconds']-sum(max(r['elapsed_seconds'],r['reserved_seconds']) for r in rows)),int(2700-sum(max(r['elapsed_seconds'],r['reserved_seconds']) for r in rows if r['task_id']==job['task_id'])))
+        if not limits.get('unlimited', False) and (seconds<30 or sum(r['input_tokens']+r['output_tokens']+r['reserved_tokens'] for r in rows)+config['max_tokens']>limits['daily_tokens']): raise ValueError('维护预算不足，当前版本保留')
         conn.execute("UPDATE task_version_updates SET status='repairing',reserved_seconds=?,reserved_tokens=? WHERE id=?",(seconds+job.get('validation_seconds',0),config['max_tokens'],job['id']))
     job.update(repair_started=time.monotonic(),repair_seconds=seconds)
     tool=ai_tools.function('submit_fix','提交保留原需求、验收和依赖的最小修复',{'source':ai_tools.TEXT,'explanation':ai_tools.TEXT},['source','explanation'])

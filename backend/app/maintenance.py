@@ -72,7 +72,7 @@ def available(conn):
 
 def settings():
     path = ai_settings.AI_DIR / 'maintenance.json'
-    return {'daily_seconds': 7200, 'daily_tokens': 200000, **(json.loads(path.read_text()) if path.exists() else {})}
+    return {'unlimited': False, 'daily_seconds': 7200, 'daily_tokens': 200000, **(json.loads(path.read_text()) if path.exists() else {})}
 
 def event(job_id, message):
     with transaction() as conn:
@@ -261,8 +261,8 @@ def claim_generation():
         task_used = sum(max(r['elapsed_seconds'],r['reserved_seconds']) for r in rows if r['task_id'] == job['task_id'])
         global_used = sum(max(r['elapsed_seconds'],r['reserved_seconds']) for r in rows)
         token_used = sum(r['input_tokens'] + r['output_tokens'] + r['reserved_tokens'] for r in rows)
-        seconds = min(seconds, int(2700-task_used), int(limits['daily_seconds']-global_used))
-        if seconds < 30 or token_used + config['max_tokens'] > limits['daily_tokens']:
+        seconds = 2700 if limits.get('unlimited', False) else min(seconds, int(2700-task_used), int(limits['daily_seconds']-global_used))
+        if not limits.get('unlimited', False) and (seconds < 30 or token_used + config['max_tokens'] > limits['daily_tokens']):
             conn.execute("UPDATE maintenance_jobs SET status='budget',note='滚动 24 小时维护预算不足，未调用模型',ended_at=? WHERE id=?", (utc_now(), job['id']))
             return {'budget': job['id']}
         conn.execute("UPDATE maintenance_jobs SET status='generating',started_at=?,reserved_seconds=?,reserved_tokens=? WHERE id=?", (utc_now(), seconds, config['max_tokens'], job['id']))
@@ -612,7 +612,7 @@ def get_settings(user:dict=Depends(admin_user)): return settings()
 @router.put('/settings')
 async def save_settings(request:Request,user:dict=Depends(super_admin_user)):
     payload=await request.json()
-    if not isinstance(payload,dict) or set(payload)!={'daily_seconds','daily_tokens'} or any(type(v)is not int for v in payload.values()) or not 60<=payload['daily_seconds']<=86400 or not 1000<=payload['daily_tokens']<=2000000:
+    if not isinstance(payload,dict) or set(payload) not in ({'daily_seconds','daily_tokens'}, {'daily_seconds','daily_tokens','unlimited'}) or type(payload.get('unlimited', False)) is not bool or any(type(payload[k]) is not int for k in ('daily_seconds','daily_tokens')) or not 60<=payload['daily_seconds']<=86400 or not 1000<=payload['daily_tokens']<=2000000:
         raise HTTPException(400,'全局维护预算无效')
     ai_settings.atomic_write(ai_settings.AI_DIR/'maintenance.json',json.dumps(payload).encode())
     write_audit(request,user,'maintenance_budget',target_type='ai',summary='修改滚动 24 小时维护预算')

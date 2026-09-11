@@ -7,7 +7,7 @@ const models = ref([])
 const message = ref('')
 const busy = ref(false)
 const failed = ref(false)
-const maintenance = reactive({ daily_seconds: 7200, daily_tokens: 200000 })
+const maintenance = reactive({ unlimited: false, daily_seconds: 7200, daily_tokens: 200000 })
 async function maintenanceRequest(method = 'GET') {
   const response = await fetch('/api/maintenance/settings', { method, credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: method === 'PUT' ? JSON.stringify(maintenance) : undefined })
   const data = await response.json()
@@ -60,11 +60,12 @@ onMounted(async () => { try { apply(await request('')); await maintenanceRequest
         <label class="field"><span>Token 上限</span><input v-model.number="form.max_tokens" type="number" min="1000" max="2000000" step="1000" :disabled="!canEdit" /></label>
       </div>
       <h3>自动维护 · 滚动 24 小时</h3>
+      <label><input v-model="maintenance.unlimited" type="checkbox" :disabled="!canEdit" /> 不限制累计维护预算</label>
       <div class="ai-budget-fields">
-        <label class="field"><span>全局时长上限（秒）</span><input v-model.number="maintenance.daily_seconds" type="number" min="60" max="86400" :disabled="!canEdit" /></label>
-        <label class="field"><span>全局 Token 上限</span><input v-model.number="maintenance.daily_tokens" type="number" min="1000" max="2000000" :disabled="!canEdit" /></label>
+        <label class="field"><span>全局时长上限（秒）</span><input v-model.number="maintenance.daily_seconds" type="number" min="60" max="86400" :disabled="!canEdit || maintenance.unlimited" /></label>
+        <label class="field"><span>全局 Token 上限</span><input v-model.number="maintenance.daily_tokens" type="number" min="1000" max="2000000" :disabled="!canEdit || maintenance.unlimited" /></label>
       </div>
-      <p class="ai-setting-note">单任务最多 45 分钟，额度不足时停止维护并通知。</p>
+      <p class="ai-setting-note">{{ maintenance.unlimited ? '不按累计时长或 Token 额度拦截维护，单次运行超时仍生效。' : '单任务最多 45 分钟，额度不足时停止维护并通知。' }}</p>
       <div v-if="canEdit"><button class="button secondary" type="button" :disabled="busy" @click="saveMaintenance">保存维护预算</button></div>
       </details>
       <p v-if="message" class="ai-setting-message" :class="{ failed }" role="status">{{ message }}</p>

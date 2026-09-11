@@ -184,6 +184,15 @@ class MaintenanceTests(unittest.TestCase):
         m.init_tables(); self.assertEqual(self.job()['status'],'interrupted')
         self.assertGreater(self.job()['reserved_tokens'],0); self.assertEqual(self.job()['elapsed_seconds'],2700)
 
+    def test_unlimited_budget_calls_model_despite_exhausted_totals(self):
+        self.fail_execution(error='first failure')
+        db.execute("UPDATE maintenance_jobs SET status='failed',elapsed_seconds=100000,reserved_tokens=3000000")
+        self.fail_execution(error='second failure')
+        with patch.object(m, 'settings', return_value={'unlimited': True, 'daily_seconds': 60, 'daily_tokens': 1000}):
+            model = self.generate()
+        self.assertEqual(model.call_count, 1)
+        self.assertEqual(self.job()['status'], 'ready')
+
     def test_global_budget_blocks_without_calling_model(self):
         self.fail_execution()
         with patch.object(m,'settings',return_value={'daily_seconds':7200,'daily_tokens':1000}),patch.object(ai_settings,'model_request') as model:
