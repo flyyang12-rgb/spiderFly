@@ -76,6 +76,18 @@ class RequirementsValidationTests(unittest.TestCase):
             "# install browser support separately\nDrissionPage~=4.1",
         )
 
+    def test_removed_private_packages_cannot_be_installed_from_public_index(self):
+        for name in ("spiderfly-instructions", "SpiderFly_Instructions", "spiderfly...runtime"):
+            for suffix in ("==0.1.0", ">=0.1", "[excel]", ""):
+                with self.subTest(name=name, suffix=suffix):
+                    with self.assertRaisesRegex(ValueError, "已移除"):
+                        environments._safe_requirements("\ufeff" + name + suffix)
+
+    def test_pip_preprocessing_cannot_hide_removed_packages(self):
+        for text in ("spiderfly-\\\ninstructions==0.1.0", "${PACKAGE_NAME}==0.1.0"):
+            with self.subTest(text=text), self.assertRaisesRegex(ValueError, "续行或环境变量"):
+                environments._safe_requirements(text)
+
     def test_accepts_an_empty_requirements_list(self) -> None:
         self.assertEqual(environments._safe_requirements("  \r\n\t"), "")
 

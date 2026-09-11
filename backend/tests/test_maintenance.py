@@ -76,6 +76,22 @@ class MaintenanceTests(unittest.TestCase):
         self.assertEqual(db.fetch_one('SELECT script_path FROM rpa_apps')['script_path'],str(self.path))
         self.assertEqual(db.fetch_one('SELECT COUNT(*) AS n FROM maintenance_jobs')['n'],1)
 
+    def test_plain_failure_and_timeout_queue_auto_repair_without_private_packages(self):
+        self.path.write_text('print(1 + "2")\n', encoding='utf-8')
+        for status in ('failed', 'timeout'):
+            with self.subTest(status=status):
+                db.execute('DELETE FROM maintenance_jobs')
+                eid = self.fail_execution('TypeError: unsupported operand', status=status)
+                job = self.job()
+                self.assertEqual(job['execution_id'], eid)
+                self.assertEqual(job['status'], 'pending')
+                snapshot = m.read_snapshot(job['snapshot'])
+                self.assertEqual(snapshot['requirements'], '')
+                self.assertEqual(snapshot['policy']['mode'], 'auto')
+                self.assertEqual(db.fetch_one('SELECT status FROM executions WHERE id=?', (eid,))['status'], status)
+                m.record_failure(eid)
+                self.assertEqual(db.fetch_one('SELECT COUNT(*) AS n FROM maintenance_jobs')['n'], 1)
+
     def test_automatic_candidate_validation_activation_and_rollback(self):
         self.fail_execution(); self.generate(); self.assertEqual(self.job()['status'],'ready'); self.trial()
         self.assertEqual(self.job()['status'],'activated')

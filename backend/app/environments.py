@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import json
 import logging
 import os
@@ -25,7 +24,6 @@ from .config import (
 )
 from .database import execute, execute_result, fetch_all, fetch_one, transaction, utc_now
 from .execution_results import remove_execution_workspaces
-from .local_packages import LOCAL_PACKAGES, local_wheel, split_local_requirements
 
 
 MAX_SCRIPT_BYTES = 2 * 1024 * 1024
@@ -49,6 +47,12 @@ def _safe_requirements(value: str) -> str:
         if not line or line.startswith("#"):
             continue
         lowered = line.lower()
+        if line.endswith("\\") or "${" in line:
+            raise ValueError("依赖清单暂不支持续行或环境变量，请每行直接填写包名和版本")
+        name = re.match(r"[A-Za-z0-9_.-]+", line)
+        package = re.sub(r"[-_.]+", "-", name.group()).lower() if name else ""
+        if package in {"spiderfly-instructions", "spiderfly-runtime"}:
+            raise ValueError("指令包及其辅助运行库已移除，请改用普通 Python 脚本和实际第三方依赖")
         if (
             line.startswith("-")
             or "://" in lowered
@@ -58,7 +62,6 @@ def _safe_requirements(value: str) -> str:
             or re.match(r"^[A-Za-z]:", line)
         ):
             raise ValueError("依赖清单只允许填写 PyPI 包名和版本，不允许 URL、参数或本地路径")
-    split_local_requirements(value)
     return value
 
 
@@ -1225,19 +1228,6 @@ async def build_environment(app_id: int) -> None:
             newline="\n",
         )
 
-        public_requirements, local_versions = split_local_requirements(requirements)
-        install_arguments = ["-r", str(requirements_file)]
-        if local_versions:
-            wheels = []
-            for package, version in local_versions.items():
-                wheel = local_wheel(package, version)
-                wheel_hash = hashlib.sha256(wheel.read_bytes()).hexdigest()
-                logs.append(f"[本地依赖]\n{wheel.name}\nSHA-256: {wheel_hash}")
-                wheels.append(str(wheel))
-            install_file = app_dir / "requirements.install.txt"
-            install_file.write_text(public_requirements + "\n", encoding="utf-8", newline="\n")
-            install_arguments = [*wheels, "-r", str(install_file)]
-
         RPA_ENVS_DIR.mkdir(parents=True, exist_ok=True)
         base_python = Path(BASE_PYTHON).expanduser().resolve()
         if not base_python.is_file():
@@ -1264,7 +1254,7 @@ async def build_environment(app_id: int) -> None:
                 "-m",
                 "pip",
                 "install",
-                *install_arguments,
+                "-r", str(requirements_file),
                 cwd=app_dir,
                 timeout_seconds=PIP_TIMEOUT_SECONDS,
                 phase="安装依赖",
@@ -1308,22 +1298,6 @@ async def build_environment(app_id: int) -> None:
             if code == 124:
                 raise RuntimeError(f"检查依赖超过 {ENV_VERIFY_TIMEOUT_SECONDS} 秒")
             raise RuntimeError("Python 依赖检查未通过")
-
-        for package, version in local_versions.items():
-            code, output = await _run_command(
-                str(python_path), "-I", "-c",
-                "import sys, importlib; from importlib.metadata import version; "
-                "importlib.import_module(sys.argv[1]); "
-                "assert version(sys.argv[2]) == sys.argv[3]; "
-                "print(sys.argv[2] + ' ' + version(sys.argv[2]))",
-                LOCAL_PACKAGES[package], package, version,
-                cwd=app_dir,
-                timeout_seconds=ENV_VERIFY_TIMEOUT_SECONDS,
-                phase="验证本地依赖",
-            )
-            logs.append(f"[验证本地依赖]\n{output}".strip())
-            if code != 0:
-                raise RuntimeError(f"本地包 {package} 无法导入或安装版本与声明不一致，请查看安装日志")
 
         _, updated = await asyncio.to_thread(
             execute_result,
