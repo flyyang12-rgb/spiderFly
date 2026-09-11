@@ -2,14 +2,13 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from app import database
+from app.api import executions as executions_api
 from contextlib import contextmanager
 from datetime import date
+from fastapi import HTTPException
 from pathlib import Path
 from unittest.mock import patch
-
-from fastapi import HTTPException
-
-from app import database, main
 
 
 class ExecutionHistoryTests(unittest.TestCase):
@@ -95,7 +94,7 @@ class ExecutionHistoryTests(unittest.TestCase):
             "user": {"id": 1},
         }
         values.update(overrides)
-        return main.list_execution_history(**values)
+        return executions_api.list_execution_history(**values)
 
     def test_paginates_ten_records_per_page(self):
         with self.fixture() as inserted:

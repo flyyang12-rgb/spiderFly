@@ -6,13 +6,14 @@ import json
 import os
 import sys
 import unittest
+from app import database, runner, security
+from app.api import executions as executions_api
+from app.services import execution_queue
 from contextlib import ExitStack
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
-
 from starlette.requests import Request
-from app import database, main, runner, security
 from tests import test_app_api, test_member_management
+from unittest.mock import AsyncMock, patch
 
 
 class ForceStopTests(unittest.TestCase):
@@ -123,11 +124,11 @@ class ForceStopTests(unittest.TestCase):
                     await asyncio.sleep(0.02)
             await asyncio.wait_for(wait_loop(), timeout)
         async def scenario():
-            with patch.object(main, "_host_waiting_reason", return_value=""):
-                worker = asyncio.create_task(main._queue_worker_loop())
+            with patch.object(execution_queue, "_host_waiting_reason", return_value=""):
+                worker = asyncio.create_task(execution_queue._queue_worker_loop())
                 try:
                     await wait_until(lambda: ready.exists() and 'before-stop' in database.fetch_one("SELECT stdout FROM executions WHERE id=?", (first,))["stdout"])
-                    self.assertTrue((await main.force_stop_execution(first, request, self.user))["stop_requested"])
+                    self.assertTrue((await executions_api.force_stop_execution(first, request, self.user))["stop_requested"])
                     await wait_until(lambda: database.fetch_one("SELECT status FROM executions WHERE id=?", (second,))["status"] == "success" and self.notify.await_count == 2)
                 finally:
                     worker.cancel()

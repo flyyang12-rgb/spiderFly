@@ -7,7 +7,7 @@ from pathlib import Path
 import time
 from urllib.parse import urlsplit
 
-from . import maintenance_runtime as runtime
+from . import maintenance_runtime as runtime, dp_runtime
 from .database import transaction, fetch_one, utc_now
 
 PROFILE = 'collection-v1'
@@ -16,7 +16,7 @@ PACKAGES = {**runtime.SUPPORTED, 'scrapling': '0.4.15', 'playwright': '1.62.0'}
 
 
 def uses_collection(source):
-    return MARKER in source.splitlines()[:10]
+    return MARKER in source.splitlines()[:10] or dp_runtime.uses_dp(source)
 
 
 def validate(source, requirements):
@@ -24,20 +24,27 @@ def validate(source, requirements):
     from .maintenance import declared_contract
     if not uses_collection(source):
         raise ValueError('采集草稿需在开头声明 ' + MARKER)
+    if dp_runtime.uses_dp(source) and MARKER in source.splitlines()[:10]:
+        raise ValueError('一个脚本只能声明一种运行环境')
     contract = declared_contract(source)
     if not contract or contract.get('effects') != 'artifacts_only' or not contract['urls']:
         raise ValueError('先按需求声明采集网址、结果文件、字段与行数，再试跑')
+    packages = dp_runtime.PACKAGES if dp_runtime.uses_dp(source) else PACKAGES
+    if dp_runtime.uses_dp(source):
+        dp_runtime.validate_source(source)
     for line in requirements.splitlines():
         line = line.split('#', 1)[0].strip()
         if not line:
             continue
         match = re.fullmatch(r'([\w-]+)(?:==([\d.]+))?', line)
-        if not match or match[1].lower() not in PACKAGES or (match[2] and match[2] != PACKAGES[match[1].lower()]):
-            raise ValueError('采集环境仅支持已准备的固定依赖：' + ', '.join(f'{k}=={v}' for k, v in PACKAGES.items()))
+        if not match or match[1].lower() not in packages or (match[2] and match[2] != packages[match[1].lower()]):
+            raise ValueError('采集环境仅支持已准备的固定依赖：' + ', '.join(f'{k}=={v}' for k, v in packages.items()))
     return contract
 
 
 def init_tables(conn):
+    from . import dp_probe
+    dp_probe.init_tables(conn)
     conn.executescript('''
         CREATE TABLE IF NOT EXISTS ai_collection_trials (
           id INTEGER PRIMARY KEY, draft_id INTEGER NOT NULL, turn_id INTEGER NOT NULL,
@@ -94,6 +101,12 @@ async def execute(source, requirements, contract, *, hosts=None, timeout=120, st
     contract = runtime.validate_contract(contract)
     if hosts is None:
         hosts = {(urlsplit(url).hostname or '').lower().rstrip('.') for url in contract['urls']}
+    if dp_runtime.uses_dp(source):
+        result = await dp_runtime.execute(source, hosts=hosts, timeout=timeout, stop=stop)
+        if result['exit_code'] == 0 and not result.get('network', {}).get('requests'):
+            result['exit_code'] = 1
+            result['log'] += '\n没有实际网页请求，不能标记为采集验证通过。'
+        return result
     checkpoint = None
     if state_scope:
         from .config import DATA_DIR

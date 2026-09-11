@@ -1,23 +1,28 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="640" viewBox="0 0 1200 640" role="img" aria-labelledby="title desc">
-<title id="title">SpiderFly 的平台、业务与自动修复</title>
-<desc id="desc">平台负责账号、调度、环境和记录。业务脚本负责筛选、计算和采集。失败后由 AI 验证修复，通过后启用并重跑一次。</desc>
-<rect x="0" y="0" width="1200" height="640" rx="22" fill="#f5f7f4" stroke="none"/>
-<text x="48" y="72" font-family="Segoe UI, Microsoft YaHei, PingFang SC, sans-serif" font-size="44" font-weight="700" fill="#163b28">平台调度，脚本处理业务。</text>
-<text x="1152" y="72" font-family="Segoe UI, Microsoft YaHei, PingFang SC, sans-serif" font-size="18" font-weight="600" fill="#647269" text-anchor="end">ARCHITECTURE</text>
-<rect x="48" y="115" width="1104" height="140" rx="12" fill="#ffffff" stroke="none"/>
-<rect x="48" y="115" width="6" height="140" rx="3" fill="#009139" stroke="none"/>
-<text x="78" y="173" font-family="Segoe UI, Microsoft YaHei, PingFang SC, sans-serif" font-size="42" font-weight="650" fill="#163b28">平台</text>
-<text x="78" y="220" font-family="Segoe UI, Microsoft YaHei, PingFang SC, sans-serif" font-size="25" font-weight="400" fill="#647269">backend/app · frontend/src</text>
-<text x="590" y="192" font-family="Segoe UI, Microsoft YaHei, PingFang SC, sans-serif" font-size="34" font-weight="500" fill="#163b28">账号、调度、环境、记录</text>
-<rect x="48" y="275" width="1104" height="140" rx="12" fill="#ffffff" stroke="none"/>
-<rect x="48" y="275" width="6" height="140" rx="3" fill="#009139" stroke="none"/>
-<text x="78" y="333" font-family="Segoe UI, Microsoft YaHei, PingFang SC, sans-serif" font-size="42" font-weight="650" fill="#163b28">业务脚本</text>
-<text x="78" y="380" font-family="Segoe UI, Microsoft YaHei, PingFang SC, sans-serif" font-size="25" font-weight="400" fill="#647269">examples · 上传的 .py</text>
-<text x="590" y="352" font-family="Segoe UI, Microsoft YaHei, PingFang SC, sans-serif" font-size="34" font-weight="500" fill="#163b28">筛选、计算、采集规则</text>
-<rect x="48" y="435" width="1104" height="140" rx="12" fill="#ffffff" stroke="none"/>
-<rect x="48" y="435" width="6" height="140" rx="3" fill="#009139" stroke="none"/>
-<text x="78" y="493" font-family="Segoe UI, Microsoft YaHei, PingFang SC, sans-serif" font-size="42" font-weight="650" fill="#163b28">AI 自动修复</text>
-<text x="78" y="540" font-family="Segoe UI, Microsoft YaHei, PingFang SC, sans-serif" font-size="25" font-weight="400" fill="#647269">backend/app/maintenance.py</text>
-<text x="590" y="512" font-family="Segoe UI, Microsoft YaHei, PingFang SC, sans-serif" font-size="34" font-weight="500" fill="#163b28">验证通过后启用，重跑一次</text>
-<text x="48" y="619" font-family="Segoe UI, Microsoft YaHei, PingFang SC, sans-serif" font-size="24" font-weight="400" fill="#496652">普通 Python 入口 · 原错误和版本保留 · 修复失败不循环</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="700" viewBox="0 0 1200 700" role="img" aria-labelledby="title desc">
+  <title id="title">SpiderFly：知识、Agent 与执行</title>
+  <desc id="desc">知识库供 AI 检索，Agent 结合真实页面生成 Python，统一队列负责试跑和任务执行，结果与日志留存。添加资料不等于接入执行能力。</desc>
+  <rect width="1200" height="700" rx="22" fill="#f5f7f4"/>
+  <g font-family="Segoe UI, Microsoft YaHei, PingFang SC, sans-serif">
+    <text x="56" y="78" font-size="46" font-weight="700" fill="#163b28">知识有依据，执行有记录。</text>
+    <g id="knowledge">
+      <rect x="56" y="120" width="1088" height="120" rx="12" fill="#fff"/>
+      <rect x="56" y="120" width="6" height="120" rx="3" fill="#009139"/>
+      <text x="92" y="193" font-size="48" font-weight="650" fill="#163b28">知识库</text>
+      <text x="430" y="190" font-size="34" fill="#53685b">工具用法 · 版本来源 · 平台规则</text>
+    </g>
+    <path d="M600 250v26m-10-10 10 10 10-10" fill="none" stroke="#009139" stroke-width="4"/>
+    <g id="agent">
+      <rect x="56" y="288" width="1088" height="120" rx="12" fill="#fff"/>
+      <rect x="56" y="288" width="6" height="120" rx="3" fill="#009139"/>
+      <text x="92" y="361" font-size="48" font-weight="650" fill="#163b28">AI Agent</text>
+      <text x="430" y="358" font-size="34" fill="#53685b">查资料 · 看页面 · 生成 Python</text>
+    </g>
+    <path d="M600 418v26m-10-10 10 10 10-10" fill="none" stroke="#009139" stroke-width="4"/>
+    <g id="execution">
+      <rect x="56" y="456" width="1088" height="120" rx="12" fill="#163b28"/>
+      <text x="92" y="529" font-size="48" font-weight="650" fill="#fff">统一队列</text>
+      <text x="430" y="526" font-size="34" fill="#e2f0e7">试跑验收 · 任务执行 · 结果日志</text>
+    </g>
+    <text x="56" y="644" font-size="34" fill="#53685b">普通 Python 脚本执行业务；正常运行不重复调用 AI。</text>
+  </g>
 </svg>

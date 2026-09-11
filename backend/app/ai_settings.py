@@ -14,7 +14,8 @@ import requests
 from .config import DATA_DIR
 
 MODELS = ("deepseek-v4-pro", "deepseek-v4-flash", "deepseek-v4-flash-vision-exp")
-DEFAULTS = {"model": MODELS[0], "max_seconds": 900, "max_calls": 16, "max_tokens": 100000}
+TURN_MAX_SECONDS = 20 * 60
+DEFAULTS = {"model": MODELS[0], "max_seconds": TURN_MAX_SECONDS, "max_calls": 16, "max_tokens": 100000}
 BASE_URL = "https://api.deepseek.com"
 AI_DIR = DATA_DIR / "ai"
 SECRET_PATH = DATA_DIR / "secrets" / "deepseek.key.dpapi"
@@ -84,6 +85,7 @@ def api_key() -> str:
 def settings() -> dict:
     path = AI_DIR / "settings.json"
     value = {**DEFAULTS, **(json.loads(path.read_text("utf-8")) if path.exists() else {})}
+    value["max_seconds"] = TURN_MAX_SECONDS
     value.update(provider="DeepSeek", base_url=BASE_URL, models=list(MODELS),
                  key_configured=bool(os.getenv("DEEPSEEK_API_KEY") or SECRET_PATH.is_file()))
     return value
@@ -99,6 +101,7 @@ def save_settings(payload: dict) -> dict:
     for name, lower, upper in (("max_seconds", 30, 7200), ("max_calls", 1, 128), ("max_tokens", 1000, 2000000)):
         if type(current[name]) is not int or not lower <= current[name] <= upper:
             raise ValueError(f"{name} 必须在 {lower} 至 {upper} 之间")
+    current["max_seconds"] = TURN_MAX_SECONDS
     secret = payload.get("api_key", "")
     if not isinstance(secret, str) or len(secret) > 500:
         raise ValueError("密钥格式无效")

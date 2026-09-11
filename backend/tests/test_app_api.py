@@ -6,15 +6,14 @@ import json
 import sqlite3
 import tempfile
 import unittest
+from app import database, environments, execution_artifacts, execution_results, security
+from app.api import apps as apps_api, tasks as tasks_api
+from app.schemas import TaskPatch, TaskPayload
 from contextlib import contextmanager
-from pathlib import Path
-from unittest.mock import patch
-
 from fastapi import HTTPException
+from pathlib import Path
 from starlette.datastructures import UploadFile
-
-from app import database, environments, execution_artifacts, execution_results, main
-from app.schemas import TaskPayload, TaskPatch
+from unittest.mock import patch
 
 
 class ManagedAppApiTests(unittest.TestCase):
@@ -82,16 +81,16 @@ class ManagedAppApiTests(unittest.TestCase):
 
     def create_task(self, app_id: int, user: dict, name: str = "每天对账") -> dict:
         payload = TaskPayload(name=name, app_id=app_id, trigger_type="manual")
-        with patch.object(main, "write_audit"):
-            return main.create_task(payload, request=object(), user=user)
+        with patch.object(security, "write_audit"):
+            return tasks_api.create_task(payload, request=object(), user=user)
 
     def test_screenshot_setting_roundtrip_and_legacy_default(self):
-        with self.fixture() as item, patch.object(main, "write_audit"):
+        with self.fixture() as item, patch.object(security, "write_audit"):
             task = self.create_task(item["app_id"], item["user"])
             self.assertIs(task["failure_screenshot"], False)
-            task = main.update_task(task["id"], TaskPatch(failure_screenshot=True), object(), item["user"])
+            task = tasks_api.update_task(task["id"], TaskPatch(failure_screenshot=True), object(), item["user"])
             self.assertIs(task["failure_screenshot"], True)
-            task = main.update_task(task["id"], TaskPatch(notify_on_failure=False), object(), item["user"])
+            task = tasks_api.update_task(task["id"], TaskPatch(notify_on_failure=False), object(), item["user"])
             self.assertIs(task["failure_screenshot"], True)
             self.assertIs(task["notify_on_failure"], False)
             database.init_db()
@@ -118,9 +117,9 @@ class ManagedAppApiTests(unittest.TestCase):
                 filename="daily_report.py",
                 file=io.BytesIO(b"print('daily report')\n"),
             )
-            with patch.object(main, "write_audit") as audit_write:
+            with patch.object(security, "write_audit") as audit_write:
                 created = asyncio.run(
-                    main.create_app(
+                    apps_api.create_app(
                         request=object(),
                         name="财务日报",
                         requirements_text="openpyxl==3.1.5",
@@ -155,9 +154,9 @@ class ManagedAppApiTests(unittest.TestCase):
                 filename="daily.py",
                 file=io.BytesIO(b"print('daily')\n"),
             )
-            with patch.object(main, "write_audit"):
+            with patch.object(security, "write_audit"):
                 created = asyncio.run(
-                    main.create_app(
+                    apps_api.create_app(
                         request=object(),
                         name="每日财务任务",
                         requirements_text="",
@@ -190,9 +189,9 @@ class ManagedAppApiTests(unittest.TestCase):
                 filename="weekly.py",
                 file=io.BytesIO(b"print('weekly')\n"),
             )
-            with patch.object(main, "write_audit"):
+            with patch.object(security, "write_audit"):
                 created = asyncio.run(
-                    main.create_app(
+                    apps_api.create_app(
                         request=object(),
                         name="每周财务任务",
                         requirements_text="",
@@ -237,7 +236,7 @@ class ManagedAppApiTests(unittest.TestCase):
 
             with self.assertRaises(HTTPException) as caught:
                 asyncio.run(
-                    main.create_app(
+                    apps_api.create_app(
                         request=object(),
                         name="错误日程任务",
                         requirements_text="",
@@ -312,8 +311,8 @@ class ManagedAppApiTests(unittest.TestCase):
             workspace = execution_results.create_execution_workspace(execution_id)
             (workspace.artifacts_dir / "result.txt").write_text("ok", encoding="utf-8")
 
-            with patch.object(main, "write_audit") as audit_write:
-                main.delete_task(task["id"], request=object(), user=item["user"])
+            with patch.object(security, "write_audit") as audit_write:
+                tasks_api.delete_task(task["id"], request=object(), user=item["user"])
 
             self.assertIsNone(database.fetch_one("SELECT id FROM tasks WHERE id = ?", (task["id"],)))
             self.assertIsNone(database.fetch_one("SELECT id FROM executions WHERE id = ?", (execution_id,)))
@@ -332,7 +331,7 @@ class ManagedAppApiTests(unittest.TestCase):
                 (task["id"], database.utc_now()),
             )
             with self.assertRaises(HTTPException) as caught:
-                main.delete_task(task["id"], request=object(), user=item["user"])
+                tasks_api.delete_task(task["id"], request=object(), user=item["user"])
             self.assertEqual(caught.exception.status_code, 409)
             self.assertIn("正在运行", caught.exception.detail)
             self.assertIsNotNone(database.fetch_one("SELECT id FROM tasks WHERE id = ?", (task["id"],)))
@@ -342,8 +341,8 @@ class ManagedAppApiTests(unittest.TestCase):
 
     def test_deleting_unbound_app_removes_row_source_and_venv(self) -> None:
         with self.fixture() as item:
-            with patch.object(main, "write_audit") as audit_write:
-                removed = main.delete_app(
+            with patch.object(security, "write_audit") as audit_write:
+                removed = apps_api.delete_app(
                     item["app_id"], request=object(), user=item["user"]
                 )
             self.assertEqual(removed["name"], "测试程序")

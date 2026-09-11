@@ -66,6 +66,66 @@ class AgentTests(unittest.TestCase):
             self.draft(turn)
         self.assertEqual(len(agent.get_thread(self.thread["id"], self.users[2])["messages"]), 1)
 
+    def test_delete_thread_permissions_and_active_conflict(self):
+        app = FastAPI()
+        app.include_router(agent.router)
+        active_user = [self.users[1]]
+        app.dependency_overrides[security.ready_user] = lambda: active_user[0]
+        with TestClient(app) as client:
+            url = f'/api/ai/threads/{self.thread["id"]}'
+            self.assertEqual(client.delete(url).status_code, 404)
+            active_user[0] = self.users[3]
+            self.assertEqual(client.delete(url).status_code, 403)
+            active_user[0] = self.user
+            self.turn()
+            self.assertEqual(client.delete(url).status_code, 409)
+            self.assertIsNotNone(database.fetch_one('SELECT id FROM ai_threads WHERE id=?', (self.thread['id'],)))
+
+    def test_delete_thread_cascades_only_selected_history(self):
+        turn = self.turn()
+        self.draft(turn)
+        agent.event(turn['id'], 'test', '合成事件')
+        database.execute("UPDATE ai_turns SET status='completed' WHERE id=?", (turn['id'],))
+        agent.ai_browser.remember(self.thread['id'], 'closed')
+        database.execute("INSERT INTO ai_browser_rows(thread_id,fields,records,updated_at) VALUES(?,'[]','[]',?)", (self.thread['id'], database.utc_now()))
+        other = agent.create_thread(agent.NewThread(), self.user)
+        app = FastAPI()
+        app.include_router(agent.router)
+        app.dependency_overrides[security.ready_user] = lambda: self.user
+        with TestClient(app) as client:
+            url = f'/api/ai/threads/{self.thread["id"]}'
+            self.assertEqual(client.delete(url).status_code, 200)
+            self.assertEqual(client.get(url).status_code, 404)
+            self.assertEqual(client.delete(url).status_code, 404)
+            self.assertEqual([item['id'] for item in client.get('/api/ai/threads').json()], [other['id']])
+        for table in ('ai_messages', 'ai_turns', 'ai_drafts', 'ai_browser_state', 'ai_browser_rows'):
+            self.assertIsNone(database.fetch_one(f'SELECT * FROM {table} WHERE thread_id=?', (self.thread['id'],)))
+        self.assertIsNone(database.fetch_one('SELECT * FROM ai_events WHERE turn_id=?', (turn['id'],)))
+        self.assertEqual(database.fetch_one("SELECT COUNT(*) AS n FROM audit_logs WHERE action='delete_ai_thread'")['n'], 1)
+
+    def test_delete_thread_rejects_collection_trial(self):
+        turn = self.turn()
+        draft = self.draft(turn)
+        database.execute("UPDATE ai_turns SET status='completed' WHERE id=?", (turn['id'],))
+        database.execute("INSERT INTO ai_collection_trials(draft_id,turn_id,status,hosts,deadline,created_at) VALUES(?,?,'pending','[]',0,?)", (draft['draft_id'], turn['id'], database.utc_now()))
+        app = FastAPI()
+        app.include_router(agent.router)
+        app.dependency_overrides[security.ready_user] = lambda: self.user
+        with TestClient(app) as client:
+            self.assertEqual(client.delete(f'/api/ai/threads/{self.thread["id"]}').status_code, 409)
+
+    def test_summary_titles_match_list_and_detail_without_changing_messages(self):
+        content = 'https://item.jd.com/123.html?tracking=abc帮我采集这个评论 最新的十条'
+        self.turn(content=content)
+        title = '京东 · 采集最新十条评论'
+        self.assertEqual(agent.list_threads(self.user)[0]['title'], title)
+        self.assertEqual(agent.get_thread(self.thread['id'], self.user)['title'], title)
+        database.execute('UPDATE ai_threads SET title=? WHERE id=?', (content[:50], self.thread['id']))
+        self.assertEqual(agent.list_threads(self.user)[0]['title'], title)
+        detail = agent.get_thread(self.thread['id'], self.user)
+        self.assertEqual(detail['title'], title)
+        self.assertEqual(detail['messages'][0]['content'], content)
+
     def test_drafts_deduplicate_and_latest_source_is_recoverable(self):
         turn = self.turn()
         first = self.draft(turn)
@@ -175,6 +235,69 @@ class AgentTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             asyncio.run(agent.dispatch("run_shell", {"command": "anything"}, self.thread, turn["id"], []))
 
+    def test_collection_reference_is_grounded_before_model_without_forcing_web(self):
+        turn = self.turn(content='Scrapling 支持代理池吗？请解释原生与平台的区别。')
+        answer = '原生支持代理机制，当前平台不支持任意代理池配置。'
+        captured = []
+
+        def model(messages, *args, **kwargs):
+            captured.extend(copy.deepcopy(messages))
+            return {'usage': {'prompt_tokens': 20, 'completion_tokens': 5}, 'choices': [
+                {'message': {'role': 'assistant', 'content': answer}}]}
+
+        with patch.object(settings, 'model_request', side_effect=model) as request, patch.object(agent, 'dispatch') as dispatch:
+            asyncio.run(agent.process_turn(turn))
+        request.assert_called_once()
+        dispatch.assert_not_called()
+        payload = json.loads(next(row['content'] for row in captured if row.get('name') == 'search_knowledge'))
+        self.assertIn('scrapling/overview.md', [row['name'] for row in payload['documents']])
+        self.assertTrue(any(row['sources'] for row in payload['documents']))
+        self.assertEqual(agent.get_thread(self.thread['id'], self.user)['messages'][-1]['content'], answer)
+        self.assertEqual(database.fetch_all("SELECT id FROM ai_events WHERE turn_id=? AND kind='observation_required'", (turn['id'],)), [])
+
+    def test_drissionpage_reference_reaches_model_with_current_runtime_scope(self):
+        turn = self.turn(content='DP 浏览器怎么用？')
+        captured = []
+        def model(messages, *args, **kwargs):
+            captured.extend(copy.deepcopy(messages))
+            return {'usage': {'prompt_tokens': 20, 'completion_tokens': 5}, 'choices': [{'message': {'role': 'assistant',
+                    'content': 'DrissionPage 可选 drissionpage-v1；需要已准备的原生 Windows 依赖。'}}]}
+        with patch.object(settings, 'model_request', side_effect=model) as request, patch.object(agent, 'dispatch') as dispatch:
+            asyncio.run(agent.process_turn(turn))
+        request.assert_called_once()
+        dispatch.assert_not_called()
+        payload = json.loads(next(row['content'] for row in captured if row.get('name') == 'search_knowledge'))
+        docs = [row for row in payload['documents'] if row['library'] == 'drissionpage']
+        self.assertTrue(docs)
+        self.assertTrue(any('drissionpage-v1' in row['integration'] for row in docs))
+        self.assertTrue(all(row['sources'] for row in docs))
+
+    def test_read_knowledge_dispatch_returns_requested_chapter(self):
+        turn = self.turn()
+        index = asyncio.run(agent.dispatch('read_knowledge', {'name': 'scrapling/pagination.md', 'section': ''}, self.thread, turn['id'], []))
+        section = index['sections'][0]['section']
+        result = asyncio.run(agent.dispatch('read_knowledge', {'name': index['name'], 'section': section}, self.thread, turn['id'], []))
+        self.assertTrue(result['content'])
+        self.assertEqual(result['section'], section)
+
+    def test_knowledge_compaction_preserves_citation_and_section(self):
+        document = {'name': 'scrapling/sessions.md', 'section': '2', 'version': '0.4.15',
+                    'library': 'drissionpage', 'integration': '仅知识参考；未接入执行',
+                    'sources': [{'title': 'Official', 'url': 'https://example.com/reference'}], 'content': 'x' * 5000}
+        messages = [
+            {'role': 'assistant', 'tool_calls': [{'id': 'k', 'function': {'name': 'read_knowledge'}}]},
+            {'role': 'tool', 'tool_call_id': 'k', 'content': json.dumps(document)},
+            {'role': 'assistant', 'content': '参考说明'},
+            {'role': 'user', 'content': '继续'},
+        ]
+        agent.compact_observations(messages)
+        result = json.loads(messages[1]['content'])['documents'][0]
+        self.assertEqual(result['sources'], document['sources'])
+        self.assertEqual(result['section'], '2')
+        self.assertEqual(result['library'], document['library'])
+        self.assertEqual(result['integration'], document['integration'])
+        self.assertTrue(result['truncated'])
+
     def test_http_roles_and_settings_never_echo_secret(self):
         app = FastAPI()
         app.include_router(agent.router)
@@ -203,6 +326,19 @@ class AgentTests(unittest.TestCase):
             asyncio.run(agent.process_turn(turn))
         self.assertEqual(model.call_count, 1)
         self.assertEqual(len(agent.get_thread(self.thread["id"], self.user)["drafts"]), 1)
+
+    def test_legacy_two_hour_turn_stops_at_twenty_minutes(self):
+        turn = self.turn(max_seconds=7200)
+        with patch.object(agent, "time") as clock, patch.object(settings, "model_request") as model, self.assertRaises(TimeoutError):
+            clock.monotonic.side_effect = [0, 1201]
+            asyncio.run(agent.process_turn(turn))
+        model.assert_not_called()
+
+    def test_saved_time_limit_is_fixed_at_twenty_minutes(self):
+        settings.AI_DIR.mkdir(parents=True, exist_ok=True)
+        (settings.AI_DIR / "settings.json").write_text(json.dumps({"max_seconds": 7200}), encoding="utf-8")
+        self.assertEqual(settings.settings()["max_seconds"], 1200)
+        self.assertEqual(settings.save_settings({"max_seconds": 7200})["max_seconds"], 1200)
 
     def test_time_budget_prevents_dispatch(self):
         turn = self.turn(max_seconds=30)

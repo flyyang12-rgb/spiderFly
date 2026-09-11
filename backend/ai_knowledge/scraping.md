@@ -1,5 +1,11 @@
 # 公开网页采集：Scrapling 与 Playwright
 
+版本：Scrapling 0.4.15；平台探索与 collection-v1 适配
+适用范围：既有平台操作约定与带日期的历史观察
+来源：[Scrapling 0.4.15](https://github.com/D4Vinci/Scrapling/tree/333fa22b7a5821194ce66b59b11f4b16a6484f02)
+
+2026-09-11 新增分主题知识位于 scrapling/：overview、selectors、http、dynamic、sessions、pagination、concurrency、adaptive、spiders、proxies、troubleshooting、recipes、rag。解释原生接口时按主题检索，结合下列平台约定。文中的“已准备”与网站条数是当时记录，不能视为当前环境或网站的现场状态。
+
 核对日期：2026-09-09。已准备 collection-v1，Python 3.12、Scrapling 0.4.15、Playwright 1.62.0 和 Chromium。现有 AI 创建入口可保存并实际试跑采集草稿。
 
 ## 默认先用原生 Scrapling（2026-09-10 实测修正）
@@ -32,7 +38,7 @@ browser_extract 用 Scrapling 解析当前 DOM：rows 传记录 CSS；fields 传
 
 - 入口仍是单文件 Python，前十行内写 `# spiderfly-runtime: collection-v1`。不能生成 Node.js 主程序，不需要 JS 任务入口。
 - 使用内置 `spiderfly_collection` 的 `get`、`render`、`browser`。这是环境提供的采集接口，不是需要 pip 安装的包；不要导入平台 app 或本机 flows。get 使用受控 Scrapling FetcherSession；render 使用原生 DynamicSession，browser 保留 Playwright 操作接口。
-- 静态页面先用 get，CSS/XPath 依据真实页面。需要点击、滚动、动态内容时使用 browser；必要的 JS 用 page.evaluate。DP 未接入，不生成 DP 程序。
+- 静态页面先用 get，CSS/XPath 依据真实页面。需要点击、滚动、动态内容时使用 browser；必要的 JS 用 page.evaluate。collection-v1 不运行 DP；用户选择原生 DP 时使用 drissionpage-v1，先读 drissionpage/runtime.md，再调用 dp_probe、save_draft、test_collection。
 - 在本轮用户需求允许的站点内采集，可跟随同站翻页链接；必须保留城市、条件、字段及数量要求，不能凑数。外部 API/CDN 域名可以来自用户提供或本对话浏览器实际发现；没有探测证据的域名仍需先探索。
 - 仅公开 GET，可使用本次运行的匿名站点 Cookie 会话；无个人浏览器、Cookie、登录、POST 或 WebSocket。登录、验证码、401/403/429 时停止并报告原因，不反复尝试。
 - 每次试跑最多 120 秒（含排队），300 个请求，单响应 2MB，总响应编码 32MB；结果最多 20 个、合计 8MB。时间/量不足就说明实际完成量，不承诺任意站点任意数量。

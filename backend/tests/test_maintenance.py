@@ -1,19 +1,30 @@
 from __future__ import annotations
+
 import asyncio
 import base64
-import json
 import io
+import json
 import os
-from pathlib import Path
 import tempfile
 import unittest
+from app import (
+    ai_settings,
+    database as db,
+    environments,
+    execution_results,
+    maintenance as m,
+    maintenance_runtime as runtime,
+    runner,
+    security,
+)
+from app.services import execution_queue
 from contextlib import ExitStack
-from unittest.mock import AsyncMock, patch
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
+from pathlib import Path
 from starlette.requests import Request
-from app import database as db, maintenance as m, maintenance_runtime as runtime, ai_settings, security, runner, execution_results
-from app import environments
+from unittest.mock import AsyncMock, patch
+
 
 CONTRACT = {'effects':'artifacts_only','file':'rows.csv','format':'csv','min_rows':2,'max_rows':2,'required':['name','value'],'unique_by':['name'],'positive':['value'],'urls':[]}
 GOOD = "import os,csv\nfrom pathlib import Path\nwith (Path(os.environ['SPIDERFLY_ARTIFACT_DIR'])/'rows.csv').open('w',newline='') as f:\n w=csv.writer(f); w.writerow(['name','value']); w.writerows([['a',2],['b',4]])\n"
@@ -355,7 +366,7 @@ class MaintenanceTests(unittest.TestCase):
         from app import main
         original=self.fail_execution(); self.generate()
         async def drive():
-            worker=asyncio.create_task(main._queue_worker_loop())
+            worker=asyncio.create_task(execution_queue._queue_worker_loop())
             try:
                 async with asyncio.timeout(25):
                     while not self.job()['ended_at']:
@@ -363,7 +374,7 @@ class MaintenanceTests(unittest.TestCase):
             finally:
                 worker.cancel()
                 await asyncio.gather(worker,return_exceptions=True)
-        with patch.object(main,'_host_waiting_reason',return_value=''),patch.object(runner,'_send_notification',new=AsyncMock()):
+        with patch.object(execution_queue,'_host_waiting_reason',return_value=''),patch.object(runner,'_send_notification',new=AsyncMock()):
             asyncio.run(drive())
         job=self.job(); eid=job['rerun_execution_id']
         self.assertEqual(job['status'],'activated',job['note'])

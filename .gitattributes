@@ -1,0 +1,2 @@
+# Keep generated reference hashes stable across Windows and Linux checkouts.
+backend/ai_knowledge/drissionpage/reference/** text eol=lf

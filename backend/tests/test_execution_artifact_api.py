@@ -4,12 +4,12 @@ import asyncio
 import json
 import tempfile
 import unittest
+from app import database, execution_artifacts, main, security
+from app.api import executions as executions_api
 from contextlib import ExitStack
 from pathlib import Path
-from urllib.parse import urlencode
 from unittest.mock import patch
-
-from app import database, execution_artifacts, main, security
+from urllib.parse import urlencode
 
 
 class ExecutionArtifactApiTests(unittest.TestCase):
@@ -110,14 +110,14 @@ class ExecutionArtifactApiTests(unittest.TestCase):
 
     def test_head_matches_get_headers_and_closes_file_without_body(self):
         opened = []
-        original = main.open_artifact
+        original = executions_api.open_artifact
 
         def capture(*args):
             stream = original(*args)
             opened.append(stream)
             return stream
 
-        with patch.object(main, "open_artifact", side_effect=capture):
+        with patch.object(executions_api, "open_artifact", side_effect=capture):
             status, head_headers, body = self.request(method="HEAD")
         self.assertEqual(status, 200)
         self.assertEqual(body, b"")
@@ -125,7 +125,7 @@ class ExecutionArtifactApiTests(unittest.TestCase):
         self.assertEqual(head_headers, self.request()[1])
 
     def test_unauthenticated_users_cannot_read_files(self):
-        with patch.object(main, "list_artifacts") as listing, patch.object(main, "open_artifact") as opening:
+        with patch.object(executions_api, "list_artifacts") as listing, patch.object(executions_api, "open_artifact") as opening:
             for method in ("GET", "HEAD"):
                 self.assertEqual(self.request(method=method, logged_in=False)[0], 401)
             self.assertEqual(self.request(download=False, logged_in=False)[0], 401)
@@ -140,7 +140,7 @@ class ExecutionArtifactApiTests(unittest.TestCase):
         self.assertEqual(self.request()[0], 401)
 
     def test_nonterminal_states_never_list_or_open_files(self):
-        with patch.object(main, "list_artifacts") as listing, patch.object(main, "open_artifact") as opening:
+        with patch.object(executions_api, "list_artifacts") as listing, patch.object(executions_api, "open_artifact") as opening:
             for state in ("pending", "running", "unexpected"):
                 with self.subTest(state=state):
                     database.execute("UPDATE executions SET status = ? WHERE id = ?", (state, self.execution_id))
@@ -160,7 +160,7 @@ class ExecutionArtifactApiTests(unittest.TestCase):
                 self.assertEqual(len(json.loads(self.request(download=False)[2])["artifacts"]["files"]), 1)
 
     def test_missing_or_deleted_record_checked_before_files(self):
-        with patch.object(main, "list_artifacts") as listing, patch.object(main, "open_artifact") as opening:
+        with patch.object(executions_api, "list_artifacts") as listing, patch.object(executions_api, "open_artifact") as opening:
             self.assertEqual(self.request(execution_id=99999)[0], 404)
             self.assertEqual(self.request(execution_id=99999, download=False)[0], 404)
             database.execute("DELETE FROM tasks WHERE id = ?", (self.task_id,))
@@ -185,13 +185,13 @@ class ExecutionArtifactApiTests(unittest.TestCase):
                 self.assertEqual(json.loads(body)["detail"], "文件不存在或不可下载")
 
     def test_read_error_is_generic_and_failed_response_construction_closes_file(self):
-        with patch.object(main, "open_artifact", side_effect=PermissionError(str(self.file))):
+        with patch.object(executions_api, "open_artifact", side_effect=PermissionError(str(self.file))):
             status, _, body = self.request()
             self.assertEqual(status, 404)
             self.assertNotIn(str(self.root), body.decode())
         with self.file.open("rb") as stream:
-            with patch.object(main, "open_artifact", return_value=stream), \
-                    patch.object(main, "ArtifactDownloadResponse", side_effect=OSError("gone")):
+            with patch.object(executions_api, "open_artifact", return_value=stream), \
+                    patch.object(executions_api, "ArtifactDownloadResponse", side_effect=OSError("gone")):
                 self.assertEqual(self.request()[0], 404)
                 self.assertTrue(stream.closed)
 

@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 import unittest
+from app.instance_lock import AlreadyRunningError, acquire_instance_lock
+from app.services import runtime
 from unittest.mock import Mock, patch
 from uuid import uuid4
-
-from app import main
-from app.instance_lock import AlreadyRunningError, acquire_instance_lock
 
 
 class InstanceLockTests(unittest.TestCase):
@@ -27,16 +26,16 @@ class StartupGuardTests(unittest.IsolatedAsyncioTestCase):
     async def test_duplicate_start_stops_before_database_recovery(self) -> None:
         with (
             patch.object(
-                main,
+                runtime,
                 "acquire_instance_lock",
                 side_effect=AlreadyRunningError("already running"),
             ),
-            patch.object(main, "init_db") as init_db,
-            patch.object(main, "ensure_bootstrap_admin") as ensure_admin,
-            patch.object(main, "reconcile_schedules") as reconcile,
+            patch.object(runtime, "init_db") as init_db,
+            patch.object(runtime, "ensure_bootstrap_admin") as ensure_admin,
+            patch.object(runtime, "reconcile_schedules") as reconcile,
         ):
             with self.assertRaises(AlreadyRunningError):
-                await main.startup()
+                await runtime.startup()
 
         init_db.assert_not_called()
         ensure_admin.assert_not_called()
@@ -45,35 +44,35 @@ class StartupGuardTests(unittest.IsolatedAsyncioTestCase):
     async def test_startup_failure_releases_the_lock(self) -> None:
         fake_lock = Mock()
         with (
-            patch.object(main, "acquire_instance_lock", return_value=fake_lock),
-            patch.object(main, "init_db", side_effect=RuntimeError("boom")),
+            patch.object(runtime, "acquire_instance_lock", return_value=fake_lock),
+            patch.object(runtime, "init_db", side_effect=RuntimeError("boom")),
         ):
             with self.assertRaisesRegex(RuntimeError, "boom"):
-                await main.startup()
+                await runtime.startup()
 
         fake_lock.close.assert_called_once_with()
-        self.assertIsNone(main._instance_lock)
+        self.assertIsNone(runtime._instance_lock)
 
     async def test_legacy_cleanup_failure_stops_before_scheduler_and_releases_lock(self) -> None:
         fake_lock = Mock()
         with (
-            patch.object(main, "acquire_instance_lock", return_value=fake_lock),
-            patch.object(main, "init_db"),
+            patch.object(runtime, "acquire_instance_lock", return_value=fake_lock),
+            patch.object(runtime, "init_db"),
             patch.object(
-                main,
+                runtime,
                 "cleanup_legacy_task_program_model",
                 side_effect=RuntimeError("cleanup blocked"),
             ),
-            patch.object(main, "ensure_bootstrap_admin") as ensure_admin,
-            patch.object(main, "reconcile_schedules") as reconcile,
+            patch.object(runtime, "ensure_bootstrap_admin") as ensure_admin,
+            patch.object(runtime, "reconcile_schedules") as reconcile,
         ):
             with self.assertRaisesRegex(RuntimeError, "cleanup blocked"):
-                await main.startup()
+                await runtime.startup()
 
         ensure_admin.assert_not_called()
         reconcile.assert_not_called()
         fake_lock.close.assert_called_once_with()
-        self.assertIsNone(main._instance_lock)
+        self.assertIsNone(runtime._instance_lock)
 
 
 if __name__ == "__main__":

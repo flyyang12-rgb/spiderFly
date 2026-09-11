@@ -41,6 +41,10 @@ class FailureScreenshotTests(unittest.TestCase):
                 await original_terminate(process)
             def append(execution_id, field, value):
                 output[field] += value
+            async def finalize_execution(*args):
+                order.append("finalize")
+            async def wait_for_view():
+                order.append("wait_for_view")
             with (
                 patch.object(runner, "RPA_APPS_DIR", scripts),
                 patch.object(runner, "RPA_ENVS_DIR", Path(sys.executable).resolve().parents[1]),
@@ -49,8 +53,9 @@ class FailureScreenshotTests(unittest.TestCase):
                 patch.object(runner, "fetch_one", side_effect=lambda sql, params: output if "SELECT stdout" in sql else task),
                 patch.object(runner, "append_execution_output", side_effect=append),
                 patch.object(runner, "execute"),
-                patch.object(runner, "_finalize", new=AsyncMock()) as finalize,
+                patch.object(runner, "_finalize", new=AsyncMock(side_effect=finalize_execution)) as finalize,
                 patch.object(runner, "_send_notification", new=AsyncMock()) as send,
+                patch.object(runner, "_wait_for_failure_screenshot_view", new=AsyncMock(side_effect=wait_for_view)),
                 patch.object(runner, "capture_active_window_jpeg", side_effect=capture),
                 patch.object(runner, "cleanup_after_run", side_effect=cleanup),
                 patch.object(runner, "_terminate_process", side_effect=terminate),
@@ -67,6 +72,8 @@ class FailureScreenshotTests(unittest.TestCase):
         self.assertIn("Traceback", output["stderr"])
         self.assertEqual(saved, [jpeg])
         self.assertEqual(send.kwargs["image_bytes"], jpeg)
+        self.assertLess(order.index("finalize"), order.index("wait_for_view"))
+        self.assertLess(order.index("wait_for_view"), order.index("capture"))
         self.assertLess(order.index("capture"), order.index("cleanup"))
 
     def test_disabled_notification_or_capture_keeps_logs_without_image(self):

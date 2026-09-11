@@ -1,0 +1,116 @@
+# DrissionPage：🗺️ 模式切换
+工具：drissionpage
+接入状态：仅知识参考；未接入 SpiderFly AI 执行工具和 collection-v1
+主题：🗺️ 模式切换；get_start/examples/switch_mode.md
+版本：用户提供的 Markdown 文档 4.1.1.2
+核对日期：2026-09-11
+适用范围：用户文档原生 API 参考；未进行库运行验证
+资料路径：get_start/examples/switch_mode.md
+资料校验：3ca1d65dff9f1159d508c59a52d1ac17f7ff10c0a8209a4b345f5849d8213316
+来源：[官方对应章节（可变网页，不保证与本地版本一致）](https://www.drissionpage.cn/get_start/examples/switch_mode/)
+
+这个示例演示标签页对象如何切换控制浏览器和收发数据包两种模式。
+
+通常，切换模式是用来应付登录检查很严格的网站，可以用浏览器处理登录，再转换模式用收发数据包的形式来采集数据。
+但是这种场景需要有对应的账号，不便于演示。演示使用浏览器在 gitee 搜索，然后转换到收发数据包的模式来读取数据。
+虽然此示例现实使用意义不大，但可以了解其工作模式。
+
+## ✅️️ 页面分析
+
+网址：[https://gitee.com/explore](https://gitee.com/explore)
+
+打开网址，按`F12`，我们可以看到页面 html 如下：
+
+（图示见用户提供的原始文档；本知识副本仅索引文字。）
+
+输入框`<input>`元素`id`属性为`'q'`，搜索按钮`<button>`元素`文本`包含`'搜索'`文本，可用来作条件查找元素。
+
+输入关键词搜索后，再查看页面 html：
+
+（图示见用户提供的原始文档；本知识副本仅索引文字。）
+
+通过分析 html 代码，我们可以看出，每个结果的标题都存在`id`为`'hits-list'`里面，`class`为`'item'`的元素中。因此，我们可以获取页面中所有这些元素，再遍历获取其信息。
+
+---
+
+## ✅️️ 示例代码
+
+您可以直接运行以下代码：
+
+```python
+from DrissionPage import Chromium
+
+# 连接浏览器并获取一个MixTab对象
+tab = Chromium().latest_tab
+# 访问网址
+tab.get('https://gitee.com/explore/all')
+# 切换到收发数据包模式
+tab.change_mode()
+# 获取所有行元素
+items = tab.ele('.ui relaxed divided items explore-repo__list').eles('.item')
+# 遍历获取到的元素
+for item in items:
+    # 打印元素文本
+    print(item('t:h3').text)
+    print(item('.project-desc mb-1').text)
+    print()
+```
+
+**输出：**
+
+```shell
+dromara/Sa-Token
+一个轻量级 Java 权限认证框...
+
+lengleng/pig
+基于Spring Boot 3.3...
+
+...
+```
+
+---
+
+## ✅️️ 示例详解
+
+我们逐行解读代码：
+
+```python
+from DrissionPage import Chromium
+```
+
+↑ 首先，我们导入用于控制浏览器的类`Chromium`。
+
+```python
+tab = Chromium().latest_tab
+```
+
+↑ 接下来，们创建一个`Chromium`对象，用于连接浏览器，并用`latest_tab`获取一个可切换模式的标签页对象。
+
+```python
+tab.get('https://gitee.com/explore')
+```
+
+↑ 然后控制浏览器访问 gitee。
+
+```python
+tab.change_mode()
+```
+
+↑ `change_mode()`方法用于切换工作模式，从当前控制浏览器的模式切换到收发数据包模式。
+
+切换的时候程序会在新模式重新访问当前 url。
+
+```python
+items = tab('#hits-list').eles('.item')
+```
+
+↑ 切换后，我们可以用与控制浏览器一致的语法，获取页面元素，这获取页面中所有结果行素，它返回这些元素对象组成的列表。
+
+```python
+for item in items:
+    print(item('.title').text)
+    print(item('.desc').text)
+    print()
+```
+
+↑ 最后，我们遍历这些元素，并逐个打印它们包含的文本。

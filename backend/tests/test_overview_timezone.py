@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import unittest
-from unittest.mock import patch
-
-from app import database, main
+from app import database
+from app.api import overview as overview_api
 from tests import test_app_api as api_helpers
+from unittest.mock import patch
 
 
 class OverviewTimezoneTests(unittest.TestCase):
@@ -25,8 +25,8 @@ class OverviewTimezoneTests(unittest.TestCase):
                     (task["id"], status, created_at),
                 )
 
-            with patch.object(main, "utc_now", return_value="2026-09-07T01:30:00+00:00"):
-                result = main.overview(item["user"])
+            with patch.object(overview_api, "utc_now", return_value="2026-09-07T01:30:00+00:00"):
+                result = overview_api.overview(item["user"])
 
             self.assertEqual(result["total_runs"], 3)
             self.assertEqual(result["success_runs"], 1)

@@ -23,9 +23,12 @@ class VersionTests(unittest.TestCase):
         with patch.object(v,'validate_candidate',new=AsyncMock(return_value=result)):
             return asyncio.run(v.run_next())
 
+    def activate(self, update):
+        return v.activate_update(update['id'],Request({'type':'http','headers':[]}),self.user)
+
     def test_upload_publish_download_and_monotonic_after_rollback(self):
-        first=self.submit_version();self.run_update()
-        second=self.submit_version(source=self.path.read_text('utf-8')+'\n# second');self.run_update()
+        first=self.submit_version();self.run_update();self.activate(first)
+        second=self.submit_version(source=self.path.read_text('utf-8')+'\n# second');self.run_update();self.activate(second)
         first_id=db.fetch_one('SELECT version_id FROM task_version_updates WHERE id=?',(first['id'],))['version_id']
         with db.transaction() as conn:v.publish(conn,self.task_id,first_id)
         last=self.submit_version(source=self.path.read_text('utf-8')+'\n# third')
@@ -39,6 +42,8 @@ class VersionTests(unittest.TestCase):
             ids.append(db.execute('INSERT INTO executions(task_id,status,maintenance_snapshot,created_at,trigger_source) VALUES(?,?,?,?,?)',(self.task_id,status,self.original,db.utc_now(),'schedule')))
         update=self.submit_version(spec={'summary':'新的明确用途'},evidence='改用途说明')
         self.run_update()
+        self.assertEqual(v.context(self.task_id)['version_id'],self.base)
+        self.activate(update)
         rows=db.fetch_all('SELECT * FROM executions ORDER BY id')
         self.assertEqual(rows[0]['maintenance_snapshot'],self.original)
         self.assertEqual(rows[2]['maintenance_snapshot'],self.original)
@@ -51,8 +56,8 @@ class VersionTests(unittest.TestCase):
         self.assertEqual(update['status'],'conflict')
         self.assertEqual(v.context(self.task_id)['version_id'],self.base)
         self.assertFalse(asyncio.run(v.run_next()))
-        v.resolve(update['id'],Request({'type':'http','headers':[]}),self.user)
-        self.run_update()
+        resolved=v.resolve(update['id'],Request({'type':'http','headers':[]}),self.user)
+        self.run_update();self.activate(resolved)
         self.assertNotEqual(v.context(self.task_id)['version_id'],self.base)
 
     def test_unsupported_dependency_keeps_current_version_and_does_not_call_model(self):
@@ -71,6 +76,8 @@ class VersionTests(unittest.TestCase):
         passed={'exit_code':0,'log':'done','files':{'rows.csv':b'name,value\na,2\nb,4\n'},'result':''}
         with patch.object(v,'validate_candidate',new=AsyncMock(side_effect=[failed,passed])),patch.object(ai_settings,'model_request',return_value=response):
             asyncio.run(v.run_next())
+        self.assertEqual(v.context(self.task_id)['version_id'],self.base)
+        self.activate(db.fetch_one('SELECT id FROM task_version_updates ORDER BY id DESC LIMIT 1'))
         self.assertEqual(v.context(self.task_id)['version'],3)
         self.assertEqual(db.fetch_one('SELECT source FROM task_code_versions WHERE sequence=2')['source'],bad)
 
@@ -100,9 +107,9 @@ class VersionTests(unittest.TestCase):
 
     def test_stale_update_cannot_replace_newer_submission(self):
         self.submit_version(source=self.path.read_text('utf-8')+'\n# first')
-        self.submit_version(source=self.path.read_text('utf-8')+'\n# newer')
+        newer=self.submit_version(source=self.path.read_text('utf-8')+'\n# newer')
         self.assertEqual(db.fetch_all('SELECT status FROM task_version_updates ORDER BY id')[0]['status'],'cancelled')
-        self.run_update()
+        self.run_update();self.activate(newer)
         self.assertEqual(v.context(self.task_id)['version'],3)
 
     def test_unrelated_requirement_change_cannot_weaken_acceptance(self):
@@ -120,9 +127,19 @@ class VersionTests(unittest.TestCase):
         self.assertEqual(json.loads(detail['contract'])['required'],CONTRACT['required'])
 
     def test_windows_uploaded_newlines_publish_successfully(self):
-        self.submit_version(source=self.path.read_text('utf-8').replace('\n','\r\n'))
+        update=self.submit_version(source=self.path.read_text('utf-8').replace('\n','\r\n'))
         self.run_update()
+        self.assertEqual(db.fetch_one('SELECT status FROM task_version_updates')['status'],'ready')
+        self.assertEqual(v.context(self.task_id)['version_id'],self.base)
+        self.activate(update)
         self.assertEqual(db.fetch_one('SELECT status FROM task_version_updates')['status'],'activated')
+
+    def test_user_can_decline_validated_candidate_without_switching_version(self):
+        update=self.submit_version()
+        self.run_update()
+        v.stop_update(update['id'],self.user)
+        self.assertEqual(db.fetch_one('SELECT status FROM task_version_updates')['status'],'cancelled')
+        self.assertEqual(v.context(self.task_id)['version_id'],self.base)
 
     def test_operator_cannot_upload_or_download_versions(self):
         from fastapi import FastAPI
@@ -153,6 +170,8 @@ class VersionTests(unittest.TestCase):
         result=asyncio.run(agent.dispatch('submit_task_update',{'draft_id':str(draft['draft_id']),'base_version_id':str(self.base),'spec_patch':json.dumps({'summary':'保留这条明确要求'})},thread,turn,[{'role':'user','content':'用途改为保留这条明确要求'}]))
         self.assertEqual(result['status'],'pending')
         self.run_update()
+        self.assertEqual(v.context(self.task_id)['version_id'],self.base)
+        self.activate(result)
         self.assertEqual(v.context(self.task_id)['requirements']['summary']['value'],'保留这条明确要求')
         self.assertEqual(db.fetch_one('SELECT COUNT(*) n FROM tasks')['n'],1)
         latest=agent.save_draft(thread['id'],turn,{'source':self.path.read_text('utf-8')+'\n# button update','requirements':'','name':'版本测试','description':''})

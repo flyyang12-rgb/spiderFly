@@ -4,14 +4,14 @@ import asyncio
 import os
 import tempfile
 import unittest
-from pathlib import Path
-from unittest.mock import patch
-
-from pydantic import ValidationError
-
-from app import config, database, main, runner, security
+from app import config, database, runner, security
+from app.api import tasks as tasks_api
 from app.schemas import TaskPatch
+from app.services import execution_queue
+from pathlib import Path
+from pydantic import ValidationError
 from tests import test_app_api as api_helpers
+from unittest.mock import patch
 
 
 class LogStreamTests(unittest.IsolatedAsyncioTestCase):
@@ -96,9 +96,9 @@ class DisableTaskTests(unittest.TestCase):
         helper = api_helpers.ManagedAppApiTests()
         with helper.fixture() as item:
             task = helper.create_task(item["app_id"], item["user"])
-            execution_id = main._enqueue_task_sync(task["id"])
-            with patch.object(main, "write_audit"):
-                updated = main.update_task(task["id"], TaskPatch(enabled=False), object(), item["user"])
+            execution_id = execution_queue._enqueue_task_sync(task["id"])
+            with patch.object(security, "write_audit"):
+                updated = tasks_api.update_task(task["id"], TaskPatch(enabled=False), object(), item["user"])
             self.assertEqual(database.fetch_one("SELECT status FROM executions WHERE id = ?", (execution_id,))["status"], "cancelled")
             self.assertEqual(updated["last_status"], "cancelled")
 
@@ -106,11 +106,11 @@ class DisableTaskTests(unittest.TestCase):
         helper = api_helpers.ManagedAppApiTests()
         with helper.fixture() as item:
             task = helper.create_task(item["app_id"], item["user"])
-            execution_id = main._enqueue_task_sync(task["id"])
+            execution_id = execution_queue._enqueue_task_sync(task["id"])
             database.execute("UPDATE executions SET status = 'running' WHERE id = ?", (execution_id,))
             database.execute("UPDATE tasks SET last_status = 'running' WHERE id = ?", (task["id"],))
-            with patch.object(main, "write_audit"):
-                updated = main.update_task(task["id"], TaskPatch(enabled=False), object(), item["user"])
+            with patch.object(security, "write_audit"):
+                updated = tasks_api.update_task(task["id"], TaskPatch(enabled=False), object(), item["user"])
             self.assertEqual(updated["last_status"], "running")
             self.assertEqual(database.fetch_one("SELECT status FROM executions WHERE id = ?", (execution_id,))["status"], "running")
 
@@ -119,8 +119,8 @@ class DisableTaskTests(unittest.TestCase):
         with helper.fixture() as item:
             task = helper.create_task(item["app_id"], item["user"])
             database.execute("UPDATE rpa_apps SET env_path = '', environment_status = 'failed' WHERE id = ?", (item["app_id"],))
-            with patch.object(main, "write_audit"):
-                updated = main.update_task(task["id"], TaskPatch(enabled=False), object(), item["user"])
+            with patch.object(security, "write_audit"):
+                updated = tasks_api.update_task(task["id"], TaskPatch(enabled=False), object(), item["user"])
             self.assertFalse(updated["enabled"])
             self.assertIsNone(updated["next_run_at"])
 

@@ -32,6 +32,7 @@ from .host_runtime import cleanup_after_run, prepare_work_directory
 FINAL_STATUSES = {"success", "failed", "timeout", "cancelled"}
 PROCESS_TERMINATION_SECONDS = 8
 STREAM_DRAIN_SECONDS = 5
+FAILURE_SCREENSHOT_SETTLE_SECONDS = 2
 logger = logging.getLogger(__name__)
 
 
@@ -132,6 +133,10 @@ def _notification_enabled(task: dict[str, Any], status: str) -> bool:
     return bool(task.get("notify_on_failure"))
 
 
+def _failure_screenshot_enabled(task: dict[str, Any]) -> bool:
+    return bool(task.get("notify_on_failure") and task.get("failure_screenshot"))
+
+
 def _notification_summary(outcome: ResolvedOutcome) -> str:
     """Never hide a process/runtime failure behind a script-authored message."""
     return outcome.error_message or outcome.result_message
@@ -140,7 +145,7 @@ def _notification_summary(outcome: ResolvedOutcome) -> str:
 async def _capture_failure_image(
     execution_id: int, task: dict[str, Any], workspace: ExecutionWorkspace | None,
 ) -> tuple[bytes | None, str]:
-    if not (task.get("notify_on_failure") and task.get("failure_screenshot")):
+    if not _failure_screenshot_enabled(task):
         return None, ""
     try:
         image = await asyncio.to_thread(capture_active_window_jpeg)
@@ -164,6 +169,11 @@ async def _capture_failure_image(
     if note:
         await asyncio.to_thread(append_execution_output, execution_id, "stderr", f"截图提示：{note}\n")
     return image, note
+
+
+async def _wait_for_failure_screenshot_view() -> None:
+    """Let the active UI consume the finalized execution state before capture."""
+    await asyncio.sleep(FAILURE_SCREENSHOT_SETTLE_SECONDS)
 
 
 async def _send_notification(
@@ -417,7 +427,7 @@ async def _run_execution(execution_id: int, control: ExecutionControl) -> None:
     if task.get('maintenance_snapshot'):
         import json
         snapshot = json.loads(task['maintenance_snapshot'])
-        if snapshot['policy']['runtime'] in {'readonly-v1', 'collection-v1'}:
+        if snapshot['policy']['runtime'] in {'readonly-v1', 'collection-v1', 'drissionpage-v1'}:
             from .maintenance import run_managed_execution
             await run_managed_execution(execution_id, task, control)
             return
@@ -437,6 +447,7 @@ async def _run_execution(execution_id: int, control: ExecutionControl) -> None:
     failure_image: bytes | None = None
     screenshot_note = ""
     screenshot_attempted = False
+    finalized_outcome: ResolvedOutcome | None = None
     try:
         _check_stop(control)
         workspace = await asyncio.to_thread(create_execution_workspace, execution_id)
@@ -548,8 +559,6 @@ async def _run_execution(execution_id: int, control: ExecutionControl) -> None:
         )
         raise
     except Exception as exc:
-        failure_image, screenshot_note = await _capture_failure_image(execution_id, task, workspace)
-        screenshot_attempted = True
         if process and process.returncode is None:
             await _terminate_process(process)
         await _finish_stream_tasks(stdout_task, stderr_task)
@@ -561,12 +570,16 @@ async def _run_execution(execution_id: int, control: ExecutionControl) -> None:
         control.accepting = False
 
     # Resolve business failures as well as nonzero exits before cleaning the UI/workspace.
+    duration_ms = int((time.monotonic() - started) * 1000)
     if status != "cancelled" and not screenshot_attempted:
         before_cleanup = await asyncio.to_thread(
             resolve_execution_outcome, process_status=status, exit_code=exit_code,
             legacy_error=error_message, result_file=workspace.result_file if workspace else None,
         )
-        if before_cleanup.status in {"failed", "timeout"}:
+        if before_cleanup.status in {"failed", "timeout"} and _failure_screenshot_enabled(task):
+            await _finalize(execution_id, task_id, before_cleanup, duration_ms, exit_code)
+            finalized_outcome = before_cleanup
+            await _wait_for_failure_screenshot_view()
             failure_image, screenshot_note = await _capture_failure_image(execution_id, task, workspace)
             screenshot_attempted = True
 
@@ -578,7 +591,6 @@ async def _run_execution(execution_id: int, control: ExecutionControl) -> None:
             item for item in (error_message.strip(), cleanup_error) if item
         )
 
-    duration_ms = int((time.monotonic() - started) * 1000)
     if status == "cancelled" and control.stop_event.is_set():
         outcome = ResolvedOutcome(status="cancelled", error_message=error_message,
                                   result_code="FORCE_STOPPED", result_message=control.reason, retryable=False)
@@ -597,9 +609,17 @@ async def _run_execution(execution_id: int, control: ExecutionControl) -> None:
             "stderr",
             f"{outcome.result_message}\n",
         )
-    if outcome.status in {"failed", "timeout"} and not screenshot_attempted:
+    if (
+        outcome.status in {"failed", "timeout"}
+        and not screenshot_attempted
+        and _failure_screenshot_enabled(task)
+    ):
+        await _finalize(execution_id, task_id, outcome, duration_ms, exit_code)
+        finalized_outcome = outcome
+        await _wait_for_failure_screenshot_view()
         failure_image, screenshot_note = await _capture_failure_image(execution_id, task, workspace)
-    await _finalize(execution_id, task_id, outcome, duration_ms, exit_code)
+    if finalized_outcome != outcome:
+        await _finalize(execution_id, task_id, outcome, duration_ms, exit_code)
     await _send_notification(
         execution_id,
         task,

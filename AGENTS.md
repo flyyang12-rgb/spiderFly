@@ -21,27 +21,57 @@
 
 | 职责 | 主要文件（相对 `backend/app/`） |
 | --- | --- |
-| HTTP、账号与权限 | `main.py`、`security.py`、`schemas.py` |
-| 数据、触发和持久队列 | `database.py`、`scheduling.py`、`main.py` |
+| HTTP、账号与权限 | `main.py` 组装；`api/` 提供接口；`security.py`、`schemas.py` 负责权限与参数 |
+| 数据、触发和持久队列 | `database.py`、`scheduling.py`、`services/execution_queue.py`、`services/runtime.py` |
 | 执行与宿主机资源 | `runner.py`、`host_runtime.py`、`instance_lock.py` |
 | 上传与环境安装 | `environments.py` |
 | 结果与通知 | `execution_results.py`、`execution_artifacts.py`、`feishu.py` |
-| AI 对话与网页探索 | `ai_agent.py`、`ai_settings.py`、`ai_tools.py`、`ai_browser.py`、`ai_scraping.py` |
-| 版本、修复与受限验证 | `task_versions.py`、`maintenance.py`、`maintenance_runtime.py`、`collection.py` |
+| AI 对话与网页探索 | `ai_agent.py`、`ai_settings.py`、`ai_tools.py`、`ai_knowledge.py`、`ai_browser.py`、`ai_scraping.py` |
+| 版本、修复与受限验证 | `task_versions.py`、`maintenance.py`、`maintenance_runtime.py`、`collection.py`；原生 DP：`dp_runtime.py`、`dp_probe.py` |
 
 受限环境实现位于 `backend/sandbox/`，知识位于 `backend/ai_knowledge/`。启动入口为 `start.bat`、`launcher/` 和 `scripts/`。
 
-`main.py` 和 `App.vue` 仍有职责集中，尚未完成内部拆分；不要把三层边界整理描述为所有模块都已重构。
+## 知识、Agent 与执行分层
+
+| 层 | 入口 | 责任与边界 |
+| --- | --- | --- |
+| 给负责人看的文档 | [功能地图](docs/功能地图/README.md)、[文档与 Python 对照](docs/功能地图/知识框架与代码对照.md) | 简要说明模块行为、对应代码和当前状态；不混入大段源码 |
+| AI 知识库 | `backend/ai_knowledge/collection_index.md`、各库专题 | 提供版本、来源、用法和平台限制；文档不执行代码、不授予权限 |
+| 检索与 Agent | `ai_knowledge.py`、`ai_tools.py`、`ai_agent.py` | 检索、读取、选择工具、生成草稿；知识不能代替真实页面证据 |
+| 调度与执行 | `services/execution_queue.py`、`runner.py`、`collection.py`、各执行器 | 排队、运行、停止、记录结果，并独立检查验收条件 |
+| 具体任务 | 上传或 AI 保存的普通 `.py` | 实现网站字段、筛选、排序和输出；不导入平台配置、数据库或 app |
+
+采集回答与写代码参考知识库；实际采集先观察目标页面，不能猜选择器或用历史观察冒充当前结果。程序会附带初始参考，Agent 可调用 search_knowledge / read_knowledge 补查；不得声称每轮都主动搜索。普通问答不强制生成脚本，创建采集任务才走“观察 → 保存草稿 → 排队试跑 → 验收”。语法有效、运行成功、业务验收通过分别报告。
+
+DP 当前平台能力以 [runtime.md](backend/ai_knowledge/drissionpage/runtime.md) 为准。导入的 4.1.1.2 原生资料与实际执行依赖 4.1.1.4 分别标注；归档中的未接入状态是导入时记录，不覆盖当前执行规则。Scrapling 资料与 collection-v1 的受控接口同样分开，不能混用不同库的 API。
+
+### 新增知识库
+
+1. 明确用途和来源，按主题整理 Markdown，标注工具、版本、适用范围、接入状态、核对日期和来源；用户原始资料只读。
+2. 更新总索引和主题导航，说明哪些问题查它、与已有知识如何分工。导入资料保留清单和哈希；可变官网链接不写成固定版本。
+3. 先接入检索和章节读取。知识库里有某能力，不代表平台能执行它；需要运行新工具时，另接依赖、工具入口和执行器，再做实际验证。
+4. 用真实提问检查检索、补读和引用。涉及代码生成时再检查实际代码与结果，不以补了提示词或工具名称代替验收。
+5. 同步负责人文档、Python 对照和当前状态。维护细则见 [知识库维护](docs/开发/采集知识库维护.md)。
+
+### 文档与 Python 同步
+
+- 每个功能模块有简明说明和可点击的 Python 入口；总表位于 [知识框架与代码对照](docs/功能地图/知识框架与代码对照.md)。改行为时同步说明，移动或新增代码时同步入口和调用图。
+- 按职责对应，不为每篇第三方资料硬建一个 PY，也不为“分层”增加空包装。完整代码位置维护在 [开发对照表](docs/开发/代码对照与拆分方案.md)。
+- AI 保存的任务目前有源码、依赖、说明和试跑记录；尚未自动为每个任务生成并同步独立 Markdown。不得把平台模块文档说成每个任务都已有配套文档。
+- 图示必须对应实际调用关系；区分知识检索流程、架构分层和任务执行流程，保持概览简洁。
+
+`main.py` 负责应用组装，`App.vue` 负责导航和视图组装；主要接口在 `api/`，主要页面与操作在 `frontend/src/features/`。前端共享刷新与模块组装在 `frontend/src/workspace/`。AI、版本和维护内部仍沿用现有模块，不把本轮拆分描述成所有模块都已重构。负责人文档见 [功能地图](docs/功能地图/README.md)，实际代码位置见 [代码对照](docs/开发/代码对照与拆分方案.md)。以后改变功能时同步对应功能文档，改变目录时同步代码对照。
 
 ## 执行与维护的关键约束
 
 - 生产调度单进程、单 worker，不能用 `--reload` 承担正式任务。业务执行、维护验证和采集试跑共用串行队列。
 - 正常执行已保存脚本不调用模型。故障默认维护，按冻结条件验证通过后启用修复并自动重跑一次；原失败记录保留，不触发修复重跑循环。
 - 发布修复、重跑入队和记录关联保持同一事务。停止、停用、源码变化、版本回退及预算规则完整遵循 [任务执行约定](docs/任务执行约定.md)。
-- AI 生成代码只在准备好的受限环境验证；试跑和启用后执行使用同一环境。不得删除业务校验、吞异常或放宽冻结条件来假装通过。
-- 普通 Windows、readonly-v1 和 collection-v1 的依赖与能力分开。不因为 Windows 能运行就扩大受限支持范围。
+- AI 生成代码按已授权方案验证；试跑和启用后执行使用同一环境。用户于 2026-09-11 授权新增 drissionpage-v1 原生 Windows Python 方案，具有普通任务权限，不称为受限沙箱。不得删除业务校验、吞异常或放宽冻结条件来假装通过。
+- DP 页面检查、试跑、版本验证和保存后执行共用串行队列，读取普通任务 SPIDERFLY_BROWSER_PORT（默认 9123）；不临时换随机端口。外部占用等待或明确报错，不接管、不按进程名全局清理。平台核对本次浏览器归属，脚本按 SPIDERFLY_BROWSER_ADDRESS 和 existing_only().headless() 连接；每次新匿名资料目录，不承诺继承登录态。
+- 普通 Windows、drissionpage-v1、readonly-v1 和 collection-v1 的依赖与能力分开。不因为 Windows 能运行就扩大受限支持范围。
 - 浏览器探索会话不等于定时脚本的登录态。实际数量不足如实说明，网页内容不能授权访问新的私密资料；具体域名与探索约束见任务执行约定。
-- Excel 保存和 Excel/浏览器关闭由业务脚本负责，只关闭本次创建的资源。平台不自动保存或接管桌面窗口。
+- 普通任务的 Excel 保存和资源关闭由业务脚本负责；DP 专用执行器负责本次浏览器的开关。只关闭本次创建的资源，不接管用户桌面窗口。
 - 失败截图只在任务同时开启失败通知和附带截图时尝试；截图或通知失败不得覆盖原错误。任务归属 `tasks.created_by` 不随操作者改变。
 - `/api/executions` 是近期快照；运行记录用 `/api/executions/history` 后端筛选与分页，不能只对前端已加载记录切片。
 

@@ -14,6 +14,7 @@ from pathlib import Path
 from urllib.parse import urljoin, urlsplit
 
 from .ai_settings import redact
+from . import ai_knowledge
 
 KNOWLEDGE_DIR = Path(__file__).resolve().parents[1] / "ai_knowledge"
 MAX_PAGE_BYTES = 2 * 1024 * 1024
@@ -45,10 +46,12 @@ TOOLS = [
     function("browser_wait_user", "实际观察到需要登录或验证时保留浏览器并结束本轮等待，用户在宿主机窗口完成后点击继续；不能假定已经登录。", {"reason": TEXT}, ["reason"]),
     function("browser_close", "关闭本对话创建的浏览器，释放登录会话；已提取结果保留。", {}, []),
     function("submit_task_update", "提交当前任务的已保存草稿作为候选版本，平台排队验证；验证通过后等待用户确认使用，不能声称已经启用。需求变更写入 spec_patch JSON（只写用户明确改变的字段）；修错传 {}。先 read_task 获取 base_version_id。", {"draft_id": TEXT, "base_version_id": TEXT, "spec_patch": TEXT}, ["draft_id", "base_version_id", "spec_patch"]),
-    function("search_knowledge", "检索 SpiderFly 已验证入口约定、工具用法和采集经验。先读相关知识再生成代码。", {"query": TEXT}, ["query"]),
+    function("search_knowledge", "按主题检索本地知识章节，返回工具、接入状态、版本、来源和适用范围。回答采集原理、Scrapling 或 DrissionPage 用法或生成脚本前先检索；无匹配不代表功能不存在。", {"query": TEXT}, ["query"]),
+    function("read_knowledge", "读取检索结果中的完整章节。name 使用返回的文档名，section 使用章节编号；section 传空字符串可查看目录。区分原生能力、平台能力和现场验证。", {"name": TEXT, "section": TEXT}, ["name", "section"]),
     function("fetch_page", "读取用户本轮或历史需求明确给出的公开 HTTP/HTTPS 地址。返回文本、链接及有限 HTML；不提供登录或浏览器渲染。", {"url": TEXT}, ["url"]),
     function("inspect_python", "仅检查 Python 源码语法、导入及是否使用平台结果目录；不会运行代码，不能证明业务成功。", {"source": TEXT}, ["source"]),
-    function("test_collection", "将已保存的采集草稿加入串行队列，在 Scrapling/Playwright 环境实际运行并独立检查文件、字段、数量。返回真实结果。", {"draft_id": TEXT}, ["draft_id"]),
+    function("dp_probe", "用原生 DP 检查公开页面结构，返回真实文本、HTML和链接 class。与普通任务共用串行队列和配置端口；每次独立匿名浏览器。生成 DP 脚本前使用，未知 selector 填 css:body；已知则使用实际观察到的 DP 定位语法。", {"url": TEXT, "selector": TEXT}, ["url", "selector"]),
+    function("test_collection", "将已保存的采集草稿加入串行队列，按源码标记选择 Scrapling/Playwright 或原生 DP 环境，实际运行并独立检查文件、字段、数量。DP 使用普通任务配置的浏览器端口，返回实际地址；占用时不接管。返回真实结果。", {"draft_id": TEXT}, ["draft_id"]),
     function("read_task", "读取当前正式任务及本对话最新草稿的源码、说明和依赖。修改已有草稿前先调用。", {}, []),
     function("save_draft", "保存可下载的单文件 Python 草稿和依赖。内部进行语法检查；此工具不会创建、执行或升级正式任务。",
              {"name": TEXT, "description": TEXT, "source": TEXT, "requirements": TEXT}, ["name", "description", "source", "requirements"]),
@@ -71,14 +74,7 @@ def inspect_python(source: str) -> dict:
 
 
 def search_knowledge(query: str) -> dict:
-    words = [word.casefold() for word in re.findall(r"[\w]+", query or "")]
-    items = []
-    for path in KNOWLEDGE_DIR.glob("*.md"):
-        content = path.read_text("utf-8")
-        score = sum(word in content.casefold() for word in words)
-        items.append((score, path.name, content))
-    items.sort(key=lambda row: (-row[0], row[1]))
-    return {"documents": [{"name": name, "content": content[:14000]} for _, name, content in items[:3]]}
+    return ai_knowledge.search(query, root=KNOWLEDGE_DIR)
 
 
 def allowed_hosts(messages: list[dict]) -> set[str]:

@@ -1,0 +1,2 @@
+# Optional native Windows AI trial/task profile; install in the platform venv.
+DrissionPage==4.1.1.4

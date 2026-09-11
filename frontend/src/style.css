@@ -476,23 +476,41 @@ select:focus-visible, textarea:focus-visible { outline: 2px solid rgba(0, 145, 5
 .env-building, .env-pending, .env-not_built { background: #eef5f7; color: #52747d !important; }
 .env-failed { background: var(--coral-soft); color: #ad4935 !important; }
 
-.app-upload-form { display: grid; grid-template-areas: "name description script requirements template" ". . . manual manual" "settings settings settings settings settings" "action action action action action"; grid-template-columns: repeat(5, minmax(150px, 1fr)); align-items: start; gap: 10px 12px; padding: 16px 18px; }
-.upload-name { grid-area: name; }
-.upload-description { grid-area: description; }
-.upload-script { grid-area: script; }
-.upload-requirements { grid-area: requirements; }
-.upload-template { grid-area: template; }
-.file-field input { width: 100%; height: 38px; padding: 6px; border: 1px dashed var(--border); border-radius: 8px; background: var(--surface-subtle); color: var(--muted); font-size: 10px; }
-.file-field input::file-selector-button { height: 24px; margin-right: 8px; border: 0; border-radius: 5px; background: var(--brand-soft); color: var(--brand-strong); cursor: pointer; font-size: 10px; font-weight: 650; }
+.create-ai-entry { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 13px; padding: 16px 20px; background: linear-gradient(105deg, #fbfefc 0%, #f4fbf6 100%); }
+.create-ai-entry-icon { display: grid; width: 38px; height: 38px; place-items: center; border: 1px solid #b8ddc4; border-radius: 11px; background: #e8f7ed; color: var(--brand-strong); font-size: 11px; font-weight: 800; letter-spacing: .04em; }
+.create-ai-entry > div:nth-child(2) { display: grid; gap: 3px; }
+.create-ai-entry strong { color: var(--ink); font-size: 13px; }
+.create-ai-entry small { color: var(--muted); font-size: 11px; }
+.app-upload-form { display: grid; gap: 17px; padding: 20px; }
+.upload-form-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.upload-form-heading h2 { margin: 0; color: var(--ink); font-size: 15px; }
+.upload-form-heading p { margin: 4px 0 0; color: var(--muted); font-size: 11px; }
+.upload-form-heading > span { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 10px; }
+.upload-form-heading > span b { display: grid; width: 20px; height: 20px; place-items: center; border-radius: 50%; background: var(--brand-soft); color: var(--brand-strong); font-size: 10px; }
+.upload-basics { display: grid; grid-template-columns: minmax(180px, .75fr) minmax(260px, 1.25fr); gap: 13px; }
+.upload-basics .field > span small { margin-left: 4px; color: var(--faint); font-size: 9px; font-weight: 500; }
+.upload-file-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 11px; }
+.upload-file-card { position: relative; display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; align-items: center; gap: 11px; min-height: 72px; box-sizing: border-box; padding: 11px 12px; border: 1px dashed #cddad1; border-radius: 11px; background: #fafcfb; cursor: pointer; transition: border-color .16s ease, background .16s ease, box-shadow .16s ease; }
+.upload-file-card:hover, .upload-file-card:focus-within { border-color: #78bd90; background: #f6fbf8; box-shadow: 0 0 0 3px rgba(0,145,57,.07); }
+.upload-file-card.selected { border-style: solid; border-color: #a9d6b8; background: #f7fcf8; }
+.upload-file-card input[type="file"] { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.upload-file-mark { display: grid; width: 40px; height: 40px; place-items: center; border-radius: 9px; background: #e8f6ec; color: #08783d; font-size: 11px; font-weight: 800; letter-spacing: .03em; }
+.upload-file-mark.text-file { background: #edf3f8; color: #496d85; }
+.upload-file-mark.excel-file { background: #e8f4ed; color: #29744a; }
+.upload-file-copy { display: grid; min-width: 0; gap: 4px; }
+.upload-file-copy strong { overflow: hidden; color: var(--ink); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.upload-file-copy strong em { margin-left: 4px; color: var(--faint); font-size: 9px; font-style: normal; font-weight: 500; }
+.upload-file-copy small { overflow: hidden; color: var(--faint); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.upload-file-card.selected .upload-file-copy small { color: #4d765c; }
+.upload-file-action { color: var(--brand-strong); font-size: 10px; font-weight: 700; white-space: nowrap; }
 .field textarea { width: 100%; min-height: 92px; resize: vertical; padding: 9px 11px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); font-family: Consolas, monospace; font-size: 11px; line-height: 17px; }
 .field textarea:focus { border-color: var(--brand); outline: none; box-shadow: 0 0 0 3px rgba(0,145,57,.1); }
-.upload-actions { grid-area: action; display: flex; justify-content: flex-end; padding-top: 2px; }
-.manual-requirements { grid-area: manual; border: 0; }
-.manual-requirements summary { width: max-content; padding: 2px 0; color: var(--faint); cursor: pointer; font-size: 10px; list-style-position: inside; }
+.upload-actions { display: flex; justify-content: flex-end; padding-top: 2px; }
+.manual-requirements { margin-top: -9px; border: 0; }
+.manual-requirements summary { width: max-content; padding: 2px 1px; color: var(--faint); cursor: pointer; font-size: 10px; list-style-position: inside; }
 .manual-requirements[open] summary { margin-bottom: 7px; color: var(--muted); }
 .manual-requirements .field { display: block; }
 .manual-requirements textarea { min-height: 76px; }
-.create-task-settings { grid-area: settings; }
 .create-settings-bottom { display: grid; grid-template-columns: minmax(180px, .55fr) minmax(360px, 1.45fr); align-items: end; gap: 12px; }
 .create-plan-state { padding: 0 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-subtle); }
 
@@ -514,7 +532,10 @@ select:focus-visible, textarea:focus-visible { outline: 2px solid rgba(0, 145, 5
 .audit-action { color: var(--ink); font-size: 11px; }
 .audit-detail { max-width: 320px; color: var(--muted); font-size: 11px; }
 
-.edit-version-note { padding: 9px 11px; border: 1px dashed #d7dfd8; border-radius: 8px; background: var(--surface-subtle); color: var(--faint); font-size: 10px; }
+.edit-code-versions { margin-top: 2px; padding-top: 16px; border-top: 1px solid var(--line); }
+.edit-code-versions-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.edit-code-versions-heading strong { color: var(--ink); font-size: 14px; }
+.edit-code-versions-heading small { color: var(--faint); font-size: 11px; }
 .password-modal { width: min(500px, 100%); }
 .mandatory-layer { z-index: 115; }
 .field input[type="password"] { width: 100%; height: 38px; padding: 0 11px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); font-size: 13px; }
@@ -523,7 +544,7 @@ select:focus-visible, textarea:focus-visible { outline: 2px solid rgba(0, 145, 5
 @media (max-width: 1180px) {
   .execution-filter-bar { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .execution-filter-actions { grid-column: 1 / -1; justify-content: flex-end; }
-  .app-upload-form { grid-template-areas: "name description" "script requirements" "template manual" "settings settings" "action action"; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .upload-file-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .user-create-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .user-create-form > .button { justify-self: start; }
 }
@@ -551,7 +572,9 @@ select:focus-visible, textarea:focus-visible { outline: 2px solid rgba(0, 145, 5
   .schedule-agenda { padding-right: 14px; padding-left: 14px; }
   .schedule-agenda-row { grid-template-columns: 52px 16px minmax(0, 1fr); }
   .schedule-entry-card { margin-left: 7px; }
-  .app-upload-form { grid-template-areas: "name" "description" "script" "requirements" "manual" "template" "settings" "action"; grid-template-columns: 1fr; }
+  .upload-basics, .upload-file-grid { grid-template-columns: 1fr; }
+  .create-ai-entry { grid-template-columns: auto minmax(0, 1fr); }
+  .create-ai-entry .button { grid-column: 1 / -1; width: 100%; }
   .create-settings-bottom { grid-template-columns: 1fr; }
   .user-create-form { grid-template-columns: 1fr; }
   .upload-actions .button, .user-create-form > .button { width: 100%; }
