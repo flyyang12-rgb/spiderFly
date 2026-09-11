@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="780" viewBox="0 0 1200 780" role="img" aria-labelledby="title desc">
+  <title id="title">SpiderFly 失败自动维护流程</title>
+  <desc id="desc">任务失败或超时后，AI 根据日志生成修复候选，进入串行队列按原要求验证。符合启用条件则启用修复并在预算及任务状态允许时自动重跑一次；验证未通过则保留原版本。原失败记录始终保留，自动重跑失败不再循环修复。</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M1 1 8 5 1 9" fill="none" stroke="#6a8070" stroke-width="1.5"/></marker>
+  </defs>
+  <rect width="1200" height="780" rx="22" fill="#f5f7f4"/>
+  <g font-family="Segoe UI, Microsoft YaHei, PingFang SC, sans-serif">
+    <text x="56" y="82" font-size="46" font-weight="700" fill="#163b28">失败后，自动维护怎么走？</text>
+    <text x="56" y="130" font-size="25" fill="#53685b">修复先验证，再启用；原失败记录始终保留。</text>
+    <g id="failure">
+      <rect x="56" y="176" width="320" height="184" rx="14" fill="#fff" stroke="#dce5dd"/>
+      <text x="84" y="219" font-size="22" font-weight="700" fill="#98633a">01 / 发现故障</text>
+      <text x="84" y="270" font-size="32" font-weight="700" fill="#163b28">任务失败或超时</text>
+      <text x="84" y="319" font-size="24" fill="#53685b">保留日志、源码与原要求</text>
+    </g>
+    <g id="repair">
+      <rect x="440" y="176" width="320" height="184" rx="14" fill="#fff" stroke="#dce5dd"/>
+      <text x="468" y="219" font-size="22" font-weight="700" fill="#009139">02 / 分析并修复</text>
+      <text x="468" y="270" font-size="32" font-weight="700" fill="#163b28">AI 生成修复候选</text>
+      <text x="468" y="319" font-size="24" fill="#53685b">按故障修改，另存新版本</text>
+    </g>
+    <g id="verification">
+      <rect x="824" y="176" width="320" height="184" rx="14" fill="#fff" stroke="#009139" stroke-width="2"/>
+      <text x="852" y="219" font-size="22" font-weight="700" fill="#009139">03 / 排队验证</text>
+      <text x="852" y="270" font-size="32" font-weight="700" fill="#163b28">按原要求试跑</text>
+      <text x="852" y="319" font-size="24" fill="#53685b">核对产物、字段与数量</text>
+    </g>
+    <g id="flow" fill="none" stroke="#6a8070" stroke-width="3" marker-end="url(#arrow)">
+      <path d="M388 268H427"/>
+      <path d="M772 268H811"/>
+      <path d="M984 372V397H560V448"/>
+      <path d="M984 397H1080V448"/>
+    </g>
+    <text x="76" y="433" font-size="23" fill="#087538">验证通过且符合启用条件</text>
+    <text x="664" y="433" font-size="23" fill="#98633a">验证未通过 / 不满足条件</text>
+    <g id="activated">
+      <rect x="56" y="462" width="548" height="146" rx="14" fill="#163b28"/>
+      <text x="84" y="516" font-size="32" font-weight="700" fill="#fff">启用修复 · 自动重跑一次</text>
+      <text x="84" y="565" font-size="24" fill="#e2f0e7">任务状态与剩余预算允许时入队</text>
+    </g>
+    <g id="retained">
+      <rect x="628" y="462" width="516" height="146" rx="14" fill="#fff" stroke="#dce5dd"/>
+      <text x="656" y="516" font-size="32" font-weight="700" fill="#163b28">保留原版本</text>
+      <text x="656" y="565" font-size="24" fill="#53685b">记录维护结果，供人工处理</text>
+    </g>
+    <g id="rerun-boundary">
+      <path d="M84 638H1116" stroke="#dce5dd" stroke-width="2"/>
+      <text x="56" y="685" font-size="29" font-weight="650" fill="#163b28">重跑仍失败 → 记录结果，不再循环修复</text>
+      <text x="56" y="736" font-size="23" fill="#53685b">仅支持已接入的运行环境；停止、停用、源码变化和维护预算继续约束流程。</text>
+    </g>
+  </g>
+</svg>
