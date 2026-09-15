@@ -1,26 +1,30 @@
 <script setup>
-import { onMounted, onBeforeUnmount, ref } from 'vue'
+import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
+import { updateContext, repairFor } from './lib/versionUpdates'
 const props=defineProps({taskId:{type:Number,required:true}})
 const state=ref(null), error=ref(''), busy=ref(false), uploadFile=ref(null), requirements=ref(''), evidence=ref(''), showUpload=ref(false), detail=ref(null)
 const names={request:'原始要求',summary:'用途',input:'输入',urls:'站点',scope:'范围',quantity:'数量',fields:'字段',filters:'筛选',sort:'排序',concurrency:'并发',output:'输出',acceptance:'验收'}
 const origins={user:'用户要求',inferred:'从代码推断',unspecified:'未说明'}
 const labels={pending:'等待验证',testing:'正在验证',repairing:'正在修复',conflict:'需要确认差异',ready:'验证通过，等待确认',activated:'已启用',failed:'更新失败',cancelled:'已取消',interrupted:'已中断'}
+const latestUpdate=computed(()=>state.value?.updates?.[0])
+const updateNotice=computed(()=>state.value ? updateContext(state.value,latestUpdate.value) : null)
+const uploadNotice=ref(''), loadError=ref('')
 let timer,alive=true
 async function api(path,options={}) {
  const r=await fetch('/api/task-versions'+path,{credentials:'include',...options});const value=await r.json()
  if(!r.ok)throw new Error(typeof value.detail==='string'?value.detail:'版本请求失败')
  return value
 }
-async function load(){try{const value=await api('/tasks/'+props.taskId);if(alive){state.value=value;error.value=''}}catch(e){if(alive)error.value=e.message}}
+async function load(){try{const value=await api('/tasks/'+props.taskId);if(alive){state.value=value;loadError.value=''}}catch(e){if(alive)loadError.value=e.message}}
 function openUpload(){requirements.value=state.value?.versions.find(v=>v.id===state.value.active_version_id)?.requirements||'';showUpload.value=!showUpload.value}
 async function upload(){
  if(!uploadFile.value)return
  busy.value=true;error.value=''
  try{const form=new FormData();form.append('script',uploadFile.value);form.append('requirements',requirements.value);form.append('evidence',evidence.value);form.append('base_version_id',state.value.active_version_id)
- await api('/tasks/'+props.taskId+'/upload',{method:'POST',body:form});showUpload.value=false;await load()
+ const result=await api('/tasks/'+props.taskId+'/upload',{method:'POST',body:form});uploadNotice.value=`V${result.version} 已提交。验证失败会尝试自动修复，修复版需确认后使用。`;showUpload.value=false;await load()
  }catch(e){error.value=e.message}finally{busy.value=false}
 }
-async function action(path){busy.value=true;try{await api(path,{method:'POST'});await load()}catch(e){error.value=e.message}finally{busy.value=false}}
+async function action(path){busy.value=true;error.value='';uploadNotice.value='';try{await api(path,{method:'POST'});await load()}catch(e){error.value=e.message}finally{busy.value=false}}
 async function rollback(id){busy.value=true;error.value='';try{const r=await fetch(`/api/maintenance/tasks/${props.taskId}/rollback/${id}`,{method:'POST',credentials:'include'});const v=await r.json();if(!r.ok)throw new Error(v.detail||'回退失败');await load()}catch(e){error.value=e.message}finally{busy.value=false}}
 async function activate(id){await action(`/updates/${id}/activate`)}
 async function dismiss(id){await action(`/updates/${id}/stop`)}
@@ -28,6 +32,7 @@ function formatted(value){return value==null?'未说明':typeof value==='object'
 function versionState(version){
  if(version.id===state.value?.active_version_id)return {label:'使用中',tone:'current'}
  if(version.update_status==='ready')return {label:'待确认',tone:'pending'}
+ if(repairFor(state.value,version))return {label:'验证未通过',tone:'failed'}
  if(version.approved)return {label:'可切换',tone:'approved'}
  return {label:'未启用',tone:'draft'}
 }
@@ -49,6 +54,14 @@ onBeforeUnmount(()=>{alive=false;clearInterval(timer)})
 <template>
  <section class="task-versions" v-if="state">
   <p v-if="error" role="alert">{{error}}</p>
+  <p v-if="loadError" role="alert">{{loadError}}</p>
+  <p v-if="uploadNotice && (!latestUpdate || ['pending','testing','repairing'].includes(latestUpdate.status))" class="version-update-notice" role="status">{{uploadNotice}}</p>
+  <div v-if="updateNotice" class="version-update-notice" :class="{ 'needs-attention': updateNotice.repaired || ['repairing','failed','ready'].includes(latestUpdate.status) }" role="status">
+   <strong>{{updateNotice.title}}</strong>
+   <small>{{updateNotice.current}}</small>
+   <div v-if="latestUpdate.status==='ready'" class="version-notice-actions"><button class="button compact" :disabled="busy" @click="activate(latestUpdate.id)">确认使用 V{{latestUpdate.sequence}}</button><button class="button ghost compact" :disabled="busy" @click="dismiss(latestUpdate.id)">暂不使用</button></div>
+   <details v-if="(updateNotice.repaired || ['repairing','failed'].includes(latestUpdate.status)) && updateNotice.originalLog"><summary>查看上传版本的验证信息</summary><pre>{{updateNotice.originalLog}}</pre></details>
+  </div>
   <details class="version-section">
    <summary class="version-section-summary">
     <span class="summary-chevron" aria-hidden="true"></span>
@@ -60,7 +73,7 @@ onBeforeUnmount(()=>{alive=false;clearInterval(timer)})
      <button type="button" class="button version-upload-trigger" :aria-expanded="showUpload" @click="openUpload"><span aria-hidden="true">＋</span>{{showUpload?'收起更新':'更新脚本'}}</button>
     </div>
     <form v-if="showUpload" @submit.prevent="upload" class="version-upload">
-     <div class="version-upload-heading"><strong>上传新版本</strong><small>新脚本会先验证，通过后才会替换当前版本</small></div>
+     <div class="version-upload-heading"><strong>上传新版本</strong><small>先验证；失败会尝试生成修复版，验证通过后由你确认使用</small></div>
      <div class="version-upload-grid">
       <label class="version-file-picker" :class="{ selected: uploadFile }">
        <input type="file" accept=".py" required @change="uploadFile=$event.target.files[0]">
@@ -80,8 +93,12 @@ onBeforeUnmount(()=>{alive=false;clearInterval(timer)})
        <div class="version-identity">
         <strong>V{{v.sequence}}</strong>
         <span class="version-badge" :class="`is-${versionState(v).tone}`">{{versionState(v).label}}</span>
+        <span v-if="v.origin==='repair'||v.kind==='repair'" class="version-badge">自动修复</span>
+        <span v-else-if="v.origin==='upload'||v.kind==='upload'" class="version-badge">手动上传</span>
        </div>
        <div class="version-meta"><span>运行环境：{{v.runtime||'原任务环境'}}</span><span>基于：{{versionBase(v)}}</span></div>
+       <p v-if="repairFor(state,v)" class="version-lineage">验证未通过，已生成修复版 V{{repairFor(state,v).sequence}}</p>
+       <p v-else-if="v.origin==='repair'" class="version-lineage">由 {{versionBase(v)}} 自动修复生成</p>
       </div>
       <div class="version-actions">
        <a class="version-action" :href="`/api/task-versions/versions/${v.id}/download`"><span aria-hidden="true">↓</span> 下载 PY</a>
@@ -110,6 +127,15 @@ onBeforeUnmount(()=>{alive=false;clearInterval(timer)})
  </section>
 </template>
 <style scoped>
+.version-update-notice{margin:10px 0;padding:12px 14px;border:1px solid #d5e5da;border-radius:9px;background:#f4faf6;line-height:1.7;overflow-wrap:anywhere}
+.version-update-notice.needs-attention{background:#fffaf1;border-color:#ead8b6}
+.version-update-notice>strong,.version-update-notice>small{display:block}
+.version-update-notice>small{color:#738277;margin-top:3px}
+.version-update-notice details{margin-top:7px}.version-update-notice summary{cursor:pointer}
+.version-update-notice pre{max-height:220px;overflow:auto;white-space:pre-wrap;font-size:12px}
+.version-notice-actions{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+.version-lineage{font-size:12px;margin:7px 0 0;color:#80613a}
+.version-badge.is-failed{color:#a33c2f;background:#fff0ed}
 .task-versions{margin-top:10px;font-size:13px;color:#385f49}.task-versions>details:not(.version-section){margin:12px 0}.task-versions>details:not(.version-section)>summary{cursor:pointer}.task-versions>p[role="alert"]{padding:10px 12px;border:1px solid #f0c9c3;border-radius:8px;background:#fff6f4;color:#a33c2f}dl{display:grid;grid-template-columns:150px 1fr;gap:8px}dt small{display:block;color:#77877b}dd{margin:0;overflow-wrap:anywhere;white-space:pre-wrap}
 .version-section{margin:14px 0;border:1px solid #dce7df;border-radius:14px;background:#fff;overflow:hidden;box-shadow:0 8px 24px rgba(36,73,51,.045)}.version-section-summary{display:flex;align-items:center;gap:11px;padding:15px 17px;cursor:pointer;list-style:none;background:#fbfdfb;transition:background .18s ease}.version-section-summary::-webkit-details-marker{display:none}.version-section-summary:hover{background:#f6faf7}.summary-chevron{width:8px;height:8px;border-right:1.5px solid #54705f;border-bottom:1.5px solid #54705f;transform:rotate(-45deg);transition:transform .18s ease}.version-section[open] .summary-chevron{transform:rotate(45deg) translate(-2px,-2px)}.summary-copy{display:flex;align-items:baseline;gap:10px;min-width:0}.summary-copy strong{font-size:14px;color:#264b36}.summary-copy small{font-size:12px;color:#849187}.version-section-body{padding:16px 17px 18px;border-top:1px solid #e7ede9}
 .version-toolbar{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-bottom:14px}.version-toolbar strong{display:block;font-size:14px;color:#223d2d}.version-toolbar p{margin:4px 0 0!important;font-size:12px!important;line-height:1.5!important;color:#7b897f!important}.version-upload-trigger{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-width:108px;white-space:nowrap}.version-upload-trigger span{font-size:16px;line-height:1}

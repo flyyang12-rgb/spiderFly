@@ -25,7 +25,7 @@
 | 数据、触发和持久队列 | `database.py`、`scheduling.py`、`services/execution_queue.py`、`services/runtime.py` |
 | 执行与宿主机资源 | `runner.py`、`host_runtime.py`、`instance_lock.py` |
 | 上传与环境安装 | `environments.py` |
-| 结果与通知 | `execution_results.py`、`execution_artifacts.py`、`feishu.py` |
+| 结果与通知 | `execution_results.py`、`execution_artifacts.py`、`collection_progress.py`、`feishu.py` |
 | AI 对话与网页探索 | `ai_agent.py`、`ai_settings.py`、`ai_tools.py`、`ai_knowledge.py`、`ai_browser.py`、`ai_scraping.py` |
 | 版本、修复与受限验证 | `task_versions.py`、`maintenance.py`、`maintenance_runtime.py`、`collection.py`；原生 DP：`dp_runtime.py`、`dp_probe.py` |
 
@@ -74,6 +74,15 @@ DP 当前平台能力以 [runtime.md](backend/ai_knowledge/drissionpage/runtime.
 - 普通任务的 Excel 保存和资源关闭由业务脚本负责；DP 专用执行器负责本次浏览器的开关。只关闭本次创建的资源，不接管用户桌面窗口。
 - 失败截图只在任务同时开启失败通知和附带截图时尝试；截图或通知失败不得覆盖原错误。任务归属 `tasks.created_by` 不随操作者改变。
 - `/api/executions` 是近期快照；运行记录用 `/api/executions/history` 后端筛选与分页，不能只对前端已加载记录切片。
+
+## 采集进度与版本提示
+
+- 采集脚本通过标准输出的 `SPIDERFLY_PROGRESS ` JSON 行上报阶段、页码、实际数量和完整性；协议见 [采集进度与结果](docs/采集进度.md)。旧脚本不强制改写，新生成采集脚本按每页或每批上报，不逐条刷日志。
+- 未知总量不计算百分比，未知缺失量不写成零。进度仅为脚本观察值，不能覆盖退出失败、超时、停止或业务验收结果。
+- 数据字段、翻页去重、文件行数等检查由普通 Python 业务脚本按真实需求实现。结构化日志不等于分步骤验收；当前没有新增通用步骤框架，不将其描述为已实现。
+- 执行详情的自动重跑提示默认一行显示结果与版本，保留重跑日志入口；修改说明、用量和过程在“修复详情”中展开。原失败与重跑记录分开保存和展示。
+- 手工上传与故障自动修复的启用规则分开：上传版本先验证，失败可生成独立修复版，验证通过后等待确认使用；执行失败后的自动维护沿用既有自动启用和一次重跑规则。
+- 版本区明确说明“上传版本验证失败 → 生成修复版 → 待确认/已确认启用”，展示当前版本和修复来源，不只显示版本号跳变。轮询不清除用户操作失败提示。
 
 ## 运行资料与隔离
 

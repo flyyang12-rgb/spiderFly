@@ -1,6 +1,7 @@
 """Read-only execution profile and external result checks, never controlled by the model."""
 from __future__ import annotations
 import asyncio
+import codecs
 import ast
 import base64
 from collections import Counter
@@ -91,7 +92,7 @@ def capture_pages(contract):
         pages[url] = page
     return pages
 
-async def execute_source(source, *, pages, template='', timeout=120, stop=None, profile=None, allowed_hosts=(), checkpoint=None):
+async def execute_source(source, *, pages, template='', timeout=120, stop=None, profile=None, allowed_hosts=(), checkpoint=None, on_log=None):
     payload = json.dumps({'source': source, 'pages': pages, 'template': template, 'timeout': timeout, 'hosts': list(allowed_hosts)}, ensure_ascii=True).encode()
     if checkpoint:
         checkpoint = Path(checkpoint).resolve().as_posix()
@@ -102,16 +103,21 @@ async def execute_source(source, *, pages, template='', timeout=120, stop=None, 
     process = await asyncio.create_subprocess_exec(*(command(profile=profile) if profile else command()), stdin=asyncio.subprocess.PIPE,
         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
         creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
-    async def drain(stream):
+    async def drain(stream, live=False):
         data = bytearray()
+        decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
         while chunk := await stream.read(65536):
             data.extend(chunk)
+            if live and on_log:
+                await on_log(decoder.decode(chunk))
             if len(data) > MAX_OUTPUT:
                 raise ValueError('受限执行输出过大')
+        if live and on_log:
+            await on_log(decoder.decode(b"", final=True))
         return bytes(data)
     async def communicate():
         # Drain concurrently so bounded pipes cannot deadlock on large input/output.
-        out, err = asyncio.create_task(drain(process.stdout)), asyncio.create_task(drain(process.stderr))
+        out, err = asyncio.create_task(drain(process.stdout)), asyncio.create_task(drain(process.stderr, live=True))
         try:
             process.stdin.write(payload)
             await process.stdin.drain()

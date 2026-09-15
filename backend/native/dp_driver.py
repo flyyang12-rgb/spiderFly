@@ -30,7 +30,10 @@ class Log(io.StringIO):
     def write(self, value):
         if self.tell() + len(value) > 64000:
             raise ValueError('DP 脚本日志超过限额')
-        return super().write(value)
+        written = super().write(value)
+        sys.__stderr__.write(value)
+        sys.__stderr__.flush()
+        return written
 
 
 def main():

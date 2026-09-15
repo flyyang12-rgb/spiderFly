@@ -516,7 +516,9 @@ async def run_managed_execution(execution_id, task, control):
         ai_settings.atomic_write(JOB_ROOT / 'inputs' / f'{execution_id}.json', json.dumps(pages).encode())
         code = 'ACCEPTANCE_FAILED'
         timeout = max(1, min(120, int(old.get('rerun_timeout_seconds', 120))))
-        result = await execute_profile(old, old['source'], pages=pages, template=old['template'], timeout=timeout, stop=control.stop_event, state_scope=f"task:{old['task_id']}")
+        async def on_log(text):
+            await asyncio.to_thread(runner.append_execution_output, execution_id, 'stdout', text)
+        result = await execute_profile(old, old['source'], pages=pages, template=old['template'], timeout=timeout, stop=control.stop_event, state_scope=f"task:{old['task_id']}", on_log=on_log)
         runner._check_stop(control)
         if old['policy']['runtime'] in {'collection-v1', 'drissionpage-v1'} and any('访问受限' in message for message in result.get('network', {}).get('errors', [])):
             code = 'READONLY_INPUT_ERROR'
@@ -622,8 +624,8 @@ async def save_settings(request:Request,user:dict=Depends(super_admin_user)):
     return settings()
 
 
-async def execute_profile(old, source, *, pages, template='', timeout=120, stop=None, state_scope=None):
+async def execute_profile(old, source, *, pages, template='', timeout=120, stop=None, state_scope=None, on_log=None):
     if old['policy']['runtime'] in {'collection-v1', 'drissionpage-v1'}:
         from .collection import execute
-        return await execute(source, old['requirements'], old['contract'], timeout=timeout, stop=stop, state_scope=state_scope)
-    return await runtime.execute_source(source, pages=pages, template=template, timeout=timeout, stop=stop)
+        return await execute(source, old['requirements'], old['contract'], timeout=timeout, stop=stop, state_scope=state_scope, **({"on_log": on_log} if on_log else {}))
+    return await runtime.execute_source(source, pages=pages, template=template, timeout=timeout, stop=stop, **({"on_log": on_log} if on_log else {}))

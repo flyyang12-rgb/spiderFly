@@ -113,7 +113,10 @@ if collection:
 
 class BoundedLog(io.StringIO):
     def write(self, value):
-        super().write(str(value)[:max(0, 64000 - self.tell())])
+        accepted = str(value)[:max(0, 64000 - self.tell())]
+        super().write(accepted)
+        sys.__stderr__.write(accepted)
+        sys.__stderr__.flush()
         return len(value)
 
 logs = BoundedLog()

@@ -142,7 +142,7 @@ class ExecutionResultMigrationTests(unittest.TestCase):
             db_path = data_dir / "output.db"
             with closing(sqlite3.connect(db_path)) as conn:
                 conn.execute(
-                    "CREATE TABLE executions (id INTEGER PRIMARY KEY, stdout TEXT NOT NULL DEFAULT '', stderr TEXT NOT NULL DEFAULT '')"
+                    "CREATE TABLE executions (id INTEGER PRIMARY KEY, stdout TEXT NOT NULL DEFAULT '', stderr TEXT NOT NULL DEFAULT '', collection_progress TEXT NOT NULL DEFAULT '{}')"
                 )
                 conn.execute("INSERT INTO executions (id) VALUES (1)")
                 conn.commit()

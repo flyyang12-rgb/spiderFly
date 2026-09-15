@@ -71,6 +71,9 @@ with tempfile.TemporaryDirectory(prefix='spiderfly-job-') as directory:
                     selector.unregister(item.fileobj)
                     continue
                 output[item.fileobj].extend(chunk)
+                if item.fileobj is process.stderr:
+                    sys.stderr.buffer.write(chunk)
+                    sys.stderr.buffer.flush()
                 if sum(map(len, output.values())) > 12 * 1024 * 1024:
                     raise RuntimeError('受限试跑输出超过限额')
         process.wait(timeout=2)

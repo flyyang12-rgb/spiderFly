@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import shutil
+from .collection_progress import feed_progress
 import sqlite3
 import threading
 from contextlib import contextmanager
@@ -380,6 +381,7 @@ def init_db() -> None:
             "result_source": "ALTER TABLE executions ADD COLUMN result_source TEXT NOT NULL DEFAULT 'legacy'",
             "business_outcome": "ALTER TABLE executions ADD COLUMN business_outcome TEXT NOT NULL DEFAULT ''",
             "result_code": "ALTER TABLE executions ADD COLUMN result_code TEXT NOT NULL DEFAULT ''",
+            "collection_progress": "ALTER TABLE executions ADD COLUMN collection_progress TEXT NOT NULL DEFAULT '{}'",
             "result_message": "ALTER TABLE executions ADD COLUMN result_message TEXT NOT NULL DEFAULT ''",
             "retryable": "ALTER TABLE executions ADD COLUMN retryable INTEGER",
             "manual_action_url": "ALTER TABLE executions ADD COLUMN manual_action_url TEXT NOT NULL DEFAULT ''",
@@ -521,6 +523,11 @@ def append_execution_output(execution_id: int, field: str, text: str) -> None:
     truncation_marker = "[前方日志已截断]\n"
     tail_chars = max(1, MAX_OUTPUT_CHARS - len(truncation_marker))
     with _DB_LOCK, connection() as conn:
+        if field == "stdout":
+            row = conn.execute("SELECT collection_progress FROM executions WHERE id=?", (execution_id,)).fetchone()
+            if row:
+                progress = feed_progress(row["collection_progress"], text, utc_now())
+                conn.execute("UPDATE executions SET collection_progress=? WHERE id=?", (progress, execution_id))
         conn.execute(
             f"""
             UPDATE executions

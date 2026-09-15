@@ -2,6 +2,7 @@
 import { maintenanceResult } from '../../maintenanceSummary'
 import { useWorkspaceContext } from '../../workspace/context'
 import MaintenanceLog from '../../MaintenanceLog.vue'
+import CollectionProgress from './CollectionProgress.vue'
 
 const {
   artifactDownload,
@@ -57,9 +58,10 @@ const {
         >
       </div>
       <div class="modal-body log-body">
+        <CollectionProgress :progress="detail.collection_progress" :status="detail.status" />
         <div
           v-if="detail.maintenance"
-          class="notice"
+          class="notice execution-maintenance"
           :class="
             detail.maintenance.status === 'activated' &&
             !['failed', 'timeout', 'cancelled'].includes(detail.maintenance.rerun_status)
@@ -68,7 +70,7 @@ const {
           "
         >
           <span class="notice-icon">{{ detail.maintenance.rerun_status === 'success' ? '✓' : 'i' }}</span>
-          <div>
+          <div class="execution-maintenance-content">
             <strong>{{
               detail.maintenance.status === 'activated'
                 ? maintenanceResult(detail.maintenance) + ' · V' + detail.maintenance.version
@@ -77,6 +79,7 @@ const {
                   : '正在自动修复'
             }}</strong>
             <MaintenanceLog
+              compact
               :job="detail.maintenance"
               :execution-id="detail.id"
               @open-execution="(id) => openExecution({ id })"
@@ -188,3 +191,11 @@ const {
     </section>
   </div>
 </template>
+
+<style scoped>
+.execution-maintenance{align-items:flex-start;padding:12px 14px;gap:10px}
+.execution-maintenance .notice-icon{margin-top:1px}
+.execution-maintenance-content{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 18px;min-width:0;flex:1}
+.execution-maintenance-content>strong{font-size:13px;line-height:1.6}
+.execution-maintenance-content>.maintenance-log{flex:1;min-width:180px}
+</style>

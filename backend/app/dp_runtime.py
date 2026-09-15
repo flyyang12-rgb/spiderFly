@@ -1,5 +1,6 @@
 """Native Windows DP profile. Process separation is NOT a security sandbox."""
 import asyncio
+import codecs
 import importlib.metadata
 import json
 import os
@@ -54,7 +55,7 @@ def ready():
         raise ValueError('DP 环境未准备：请在平台 Python 环境安装 backend/requirements-dp.txt')
 
 
-async def execute(source, *, hosts, timeout=120, stop=None):
+async def execute(source, *, hosts, timeout=120, stop=None, on_log=None):
     from .host_runtime import check_host_busy
     from .runner import _runtime_environment, _terminate_process
     ready()
@@ -79,15 +80,20 @@ async def execute(source, *, hosts, timeout=120, stop=None):
             sys.executable, '-I', '-X', 'utf8', str(DRIVER), str(work), json.dumps(sorted(hosts)),
             env=env, cwd=work, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
             creationflags=subprocess.CREATE_NO_WINDOW)
-        async def drain(stream):
+        async def drain(stream, live=False):
             data = bytearray()
+            decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
             while chunk := await stream.read(65536):
                 data.extend(chunk)
+                if live and on_log:
+                    await on_log(decoder.decode(chunk))
                 if len(data) > runtime.MAX_OUTPUT:
                     raise ValueError('DP 输出超过限额')
+            if live and on_log:
+                await on_log(decoder.decode(b"", final=True))
             return bytes(data)
         async def collect():
-            stdout, stderr = await asyncio.gather(drain(process.stdout), drain(process.stderr))
+            stdout, stderr = await asyncio.gather(drain(process.stdout), drain(process.stderr, live=True))
             await process.wait()
             if process.returncode:
                 raise ValueError('DP 执行器失败：' + stderr.decode('utf-8', errors='replace')[-3000:])

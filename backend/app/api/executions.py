@@ -14,6 +14,7 @@ from ..execution_artifacts import (
     list_artifacts,
     open_artifact,
 )
+from ..collection_progress import progress_view
 from ..runner import execution_stop_requested, request_execution_stop
 from ..security import admin_user, ready_user, write_audit
 
@@ -248,6 +249,7 @@ def get_execution(
     )
     if not item:
         raise HTTPException(status_code=404, detail="执行记录不存在")
+    item["collection_progress"] = progress_view(item.get("collection_progress"))
     item["stop_requested"] = item["status"] == "running" and execution_stop_requested(execution_id)
     item.pop("script_path_snapshot", None)
     item.pop("maintenance_snapshot", None)

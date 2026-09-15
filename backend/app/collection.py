@@ -96,13 +96,13 @@ async def request_trial(draft_id, thread, turn_id, hosts):
             conn.execute("UPDATE ai_collection_trials SET stop_requested=1,status=CASE WHEN status='pending' THEN 'cancelled' ELSE status END WHERE id=? AND status IN ('pending','running')", (trial_id,))
 
 
-async def execute(source, requirements, contract, *, hosts=None, timeout=120, stop=None, state_scope=None):
+async def execute(source, requirements, contract, *, hosts=None, timeout=120, stop=None, state_scope=None, on_log=None):
     validate(source, requirements)
     contract = runtime.validate_contract(contract)
     if hosts is None:
         hosts = {(urlsplit(url).hostname or '').lower().rstrip('.') for url in contract['urls']}
     if dp_runtime.uses_dp(source):
-        result = await dp_runtime.execute(source, hosts=hosts, timeout=timeout, stop=stop)
+        result = await dp_runtime.execute(source, hosts=hosts, timeout=timeout, stop=stop, **({"on_log": on_log} if on_log else {}))
         if result['exit_code'] == 0 and not result.get('network', {}).get('requests'):
             result['exit_code'] = 1
             result['log'] += '\n没有实际网页请求，不能标记为采集验证通过。'
@@ -119,7 +119,7 @@ async def execute(source, requirements, contract, *, hosts=None, timeout=120, st
                 if obsolete != checkpoint and obsolete.is_file() and not obsolete.is_symlink():
                     obsolete.unlink()
     result = await runtime.execute_source(source, pages={}, timeout=timeout, stop=stop,
-                                          profile=PROFILE, allowed_hosts=sorted(hosts), **({"checkpoint": checkpoint} if checkpoint else {}))
+                                          profile=PROFILE, allowed_hosts=sorted(hosts), **({"on_log": on_log} if on_log else {}), **({"checkpoint": checkpoint} if checkpoint else {}))
     errors = result.get('network', {}).get('errors', [])
     if any('访问受限' in message for message in errors):
         result['exit_code'] = 1
