@@ -6,7 +6,7 @@ import json
 import sqlite3
 import tempfile
 import unittest
-from app import database, environments, execution_artifacts, execution_results, security
+from app import database, environments, execution_artifacts, execution_results, maintenance, security
 from app.api import apps as apps_api, tasks as tasks_api
 from app.schemas import TaskPatch, TaskPayload
 from contextlib import contextmanager
@@ -33,10 +33,12 @@ class ManagedAppApiTests(unittest.TestCase):
                 patch.object(database, "RPA_ENVS_DIR", envs_root),
                 patch.object(environments, "RPA_APPS_DIR", apps_root),
                 patch.object(environments, "RPA_ENVS_DIR", envs_root),
+                patch.object(maintenance, "RPA_APPS_DIR", apps_root),
                 patch.object(execution_results, "EXECUTIONS_DIR", executions_root),
                 patch.object(execution_artifacts, "EXECUTIONS_DIR", executions_root),
             ):
                 database.init_db()
+                maintenance.init_tables()
                 now = database.utc_now()
                 user_id = database.execute(
                     """
@@ -100,6 +102,12 @@ class ManagedAppApiTests(unittest.TestCase):
             database.init_db()
             self.assertEqual(database.fetch_one("SELECT failure_screenshot FROM tasks WHERE id = ?", (task["id"],))["failure_screenshot"], 0)
 
+    def test_task_patch_can_clear_optional_remote_host_binding(self):
+        self.assertEqual(
+            TaskPatch(target_host_id=None).model_dump(exclude_unset=True),
+            {"target_host_id": None},
+        )
+
     def test_one_app_can_only_bind_one_task(self) -> None:
         with self.fixture() as item:
             self.create_task(item["app_id"], item["user"])
@@ -145,6 +153,17 @@ class ManagedAppApiTests(unittest.TestCase):
             self.assertEqual(stored["python_path"], "")
             self.assertEqual(stored["trigger_type"], "manual")
             self.assertTrue((item["app_dir"].parent / str(created["id"]) / "daily_report.py").is_file())
+            self.assertEqual(created["version_sequence"], 1)
+            version = database.fetch_one(
+                "SELECT sequence,source,approved FROM task_code_versions WHERE task_id=?",
+                (created["task"]["id"],),
+            )
+            self.assertEqual((version["sequence"], version["source"], version["approved"]),
+                             (1, "print('daily report')\n", 1))
+            self.assertEqual(database.fetch_one(
+                "SELECT mode,active_version_id FROM maintenance_policies WHERE task_id=?",
+                (created["task"]["id"],),
+            )["mode"], "off")
             audit_write.assert_called_once()
             self.assertEqual(audit_write.call_args.args[2], "create_task")
 

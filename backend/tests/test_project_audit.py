@@ -82,6 +82,12 @@ class TaskPatchInputTests(unittest.TestCase):
     def test_explicit_null_is_rejected_but_omitted_fields_are_untouched(self):
         self.assertEqual(TaskPatch().model_dump(exclude_unset=True), {})
         for name in TaskPatch.model_fields:
+            if name == "target_host_id":
+                self.assertEqual(
+                    TaskPatch.model_validate({name: None}).model_dump(exclude_unset=True),
+                    {name: None},
+                )
+                continue
             with self.subTest(name=name), self.assertRaises(ValidationError):
                 TaskPatch.model_validate({name: None})
 

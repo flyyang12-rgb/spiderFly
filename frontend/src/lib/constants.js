@@ -13,6 +13,7 @@ export const runtimeTabs = [
 ]
 
 export const managementTabs = [
+  { id: 'hosts', label: '宿主机' },
   { id: 'apps', label: '创建任务' },
   { id: 'ai', label: 'AI 模型' },
   { id: 'users', label: '成员管理' },

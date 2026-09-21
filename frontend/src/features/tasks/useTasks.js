@@ -8,6 +8,8 @@ export function createTasksState() {
   const taskModalOpen = ref(false)
   const editingTask = ref(null)
   const deletingTask = ref(null)
+  const targetHosts = ref([])
+  const targetHostsLoading = ref(false)
   const filters = reactive({ name: '', enabled: 'all', trigger_type: 'all', owner: 'all' })
   const taskForm = reactive({
     name: '',
@@ -19,11 +21,12 @@ export function createTasksState() {
     notify_on_failure: true,
     failure_screenshot: false,
     trigger_type: 'manual',
+    target_host_id: '',
     daily_time: '09:00',
     weekly_days: [1],
     weekly_time: '09:00',
   })
-  return { tasks, taskModalOpen, editingTask, deletingTask, filters, taskForm }
+  return { tasks, taskModalOpen, editingTask, deletingTask, targetHosts, targetHostsLoading, filters, taskForm }
 }
 
 export function useTasks({
@@ -42,6 +45,8 @@ export function useTasks({
   taskIsActive,
   taskModalOpen,
   tasks,
+  targetHosts,
+  targetHostsLoading,
 }) {
   const manualTasks = computed(() =>
     tasks.value.filter((task) => task.enabled && task.trigger_type === 'manual'),
@@ -115,11 +120,25 @@ export function useTasks({
       trigger_type: triggerOptions.some((item) => item.value === task.trigger_type)
         ? task.trigger_type
         : 'manual',
+      target_host_id: task.target_host_id ? String(task.target_host_id) : '',
       daily_time: config.time || '09:00',
       weekly_days: config.weekdays || [1],
       weekly_time: config.time || '09:00',
     })
     taskModalOpen.value = true
+    loadTargetHosts()
+  }
+
+  async function loadTargetHosts() {
+    if (!isAdmin.value || targetHostsLoading.value) return
+    targetHostsLoading.value = true
+    try {
+      targetHosts.value = await request('/hosts')
+    } catch (error) {
+      showToast('error', '宿主机列表载入失败', error.message)
+    } finally {
+      targetHostsLoading.value = false
+    }
   }
 
   function taskPayload() {
@@ -134,6 +153,7 @@ export function useTasks({
       trigger_type: taskForm.trigger_type,
       trigger_config: triggerConfig(taskForm),
     }
+    if (isAdmin.value) payload.target_host_id = taskForm.target_host_id ? Number(taskForm.target_host_id) : null
     if (editingTask.value) payload.version = editingTask.value.version
     return payload
   }
@@ -239,5 +259,6 @@ export function useTasks({
     confirmDelete,
     toggleWeekday,
     resetFilters,
+    loadTargetHosts,
   }
 }

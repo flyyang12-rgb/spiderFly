@@ -36,6 +36,21 @@ class VersionTests(unittest.TestCase):
         self.assertIn(b'# update',v.download(first_id,self.user).body)
         self.assertNotIn('# update',self.path.read_text('utf-8'))
 
+    def test_manual_candidate_is_not_tested_or_runnable_until_admin_confirms(self):
+        bad = "if True print('saved without syntax preflight')\n"
+        candidate = v.submit(
+            self.task_id, bad, '', {}, '', self.user['id'],
+            base_id=self.base, origin='manual_candidate'
+        )
+        self.assertEqual(candidate['status'], 'candidate')
+        self.assertFalse(asyncio.run(v.run_next()))
+        row = db.fetch_one('SELECT * FROM task_code_versions WHERE sequence=2')
+        self.assertEqual((row['source'], row['approved']), (bad, 0))
+        self.activate(candidate)
+        active = v.context(self.task_id)
+        self.assertEqual(active['version'], 2)
+        self.assertEqual(db.fetch_one('SELECT approved FROM task_code_versions WHERE id=?',(row['id'],))['approved'],1)
+
     def test_pending_switches_full_snapshot_running_and_history_do_not(self):
         ids=[]
         for status in ('running','pending','success'):
@@ -168,13 +183,13 @@ class VersionTests(unittest.TestCase):
         turn=db.execute("INSERT INTO ai_turns(thread_id,status,config,created_at) VALUES(?,'running','{}',?)",(thread['id'],db.utc_now()))
         draft=agent.save_draft(thread['id'],turn,{'source':self.path.read_text('utf-8')+'\n# AI update','requirements':'','name':'版本测试','description':''})
         result=asyncio.run(agent.dispatch('submit_task_update',{'draft_id':str(draft['draft_id']),'base_version_id':str(self.base),'spec_patch':json.dumps({'summary':'保留这条明确要求'})},thread,turn,[{'role':'user','content':'用途改为保留这条明确要求'}]))
-        self.assertEqual(result['status'],'pending')
-        self.run_update()
+        self.assertEqual(result['status'],'candidate')
+        self.assertFalse(asyncio.run(v.run_next()))
         self.assertEqual(v.context(self.task_id)['version_id'],self.base)
         self.activate(result)
         self.assertEqual(v.context(self.task_id)['requirements']['summary']['value'],'保留这条明确要求')
         self.assertEqual(db.fetch_one('SELECT COUNT(*) n FROM tasks')['n'],1)
         latest=agent.save_draft(thread['id'],turn,{'source':self.path.read_text('utf-8')+'\n# button update','requirements':'','name':'版本测试','description':''})
         result=v.apply_draft(self.task_id,latest['draft_id'],self.user)
-        self.assertEqual(result['status'],'pending')
+        self.assertEqual(result['status'],'candidate')
         self.assertEqual(db.fetch_one('SELECT COUNT(*) n FROM tasks')['n'],1)

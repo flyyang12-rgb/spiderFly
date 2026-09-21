@@ -23,7 +23,7 @@
 }
 
 * { box-sizing: border-box; }
-html, body, #app { min-width: 320px; min-height: 100%; margin: 0; }
+html, body, #app { min-width: 0; min-height: 100%; margin: 0; }
 body { min-height: 100vh; overflow: hidden; }
 button, input { font: inherit; }
 button:focus-visible, input:focus-visible, [tabindex]:focus-visible { outline: 2px solid rgba(0, 145, 57, 0.34); outline-offset: 2px; }
@@ -456,6 +456,7 @@ select:focus-visible, textarea:focus-visible { outline: 2px solid rgba(0, 145, 5
 .record-summary > span { flex: 0 0 auto; padding: 5px 9px; border-radius: 999px; background: rgba(255,255,255,.7); color: var(--brand-strong); font-size: 10px; font-weight: 700; }
 .queue-position { display: block; margin-top: 4px; color: #587a83; font-size: 10px; }
 .person-chip { display: inline-grid; width: 22px; height: 22px; place-items: center; margin-right: 7px; border-radius: 50%; background: #eef3ef; color: #55705c; font-size: 9px; font-weight: 750; vertical-align: middle; }
+.task-owner { display: inline-flex; align-items: center; min-width: 86px; color: var(--text); white-space: nowrap; }
 
 .console-path { display: grid; grid-template-columns: minmax(0, 1fr) 24px minmax(0, 1fr) 24px minmax(0, 1fr) 24px minmax(0, 1fr); align-items: center; padding: 10px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
 .console-path.operator-path { grid-template-columns: minmax(0, 1fr) 24px minmax(0, 1fr) 24px minmax(0, 1fr); }
@@ -489,7 +490,7 @@ select:focus-visible, textarea:focus-visible { outline: 2px solid rgba(0, 145, 5
 .upload-form-heading > span b { display: grid; width: 20px; height: 20px; place-items: center; border-radius: 50%; background: var(--brand-soft); color: var(--brand-strong); font-size: 10px; }
 .upload-basics { display: grid; grid-template-columns: minmax(180px, .75fr) minmax(260px, 1.25fr); gap: 13px; }
 .upload-basics .field > span small { margin-left: 4px; color: var(--faint); font-size: 9px; font-weight: 500; }
-.upload-file-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 11px; }
+.upload-file-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 11px; }
 .upload-file-card { position: relative; display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; align-items: center; gap: 11px; min-height: 72px; box-sizing: border-box; padding: 11px 12px; border: 1px dashed #cddad1; border-radius: 11px; background: #fafcfb; cursor: pointer; transition: border-color .16s ease, background .16s ease, box-shadow .16s ease; }
 .upload-file-card:hover, .upload-file-card:focus-within { border-color: #78bd90; background: #f6fbf8; box-shadow: 0 0 0 3px rgba(0,145,57,.07); }
 .upload-file-card.selected { border-style: solid; border-color: #a9d6b8; background: #f7fcf8; }

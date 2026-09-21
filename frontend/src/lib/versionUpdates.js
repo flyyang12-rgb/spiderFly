@@ -3,9 +3,10 @@ export function updateContext(state, update) {
   const version = state.versions.find(v => v.id === update.version_id)
   const base = state.versions.find(v => v.id === version?.base_version_id)
   const repaired = version?.origin === 'repair' && Boolean(base)
-  const target = version ? `V${version.sequence}` : `V${update.sequence}`
-  const prefix = repaired ? `${'V' + base.sequence} 验证未通过，已生成修复版 ${target}` : `${target} 更新`
+  const target = version ? `v${version.sequence}` : `v${update.sequence}`
+  const prefix = repaired ? `${'v' + base.sequence} 验证未通过，已生成修复版 ${target}` : `${target} 更新`
   const states = {
+    candidate: '已保存为未运行候选，等待管理员确认',
     pending: '等待验证，当前版本保持不变', testing: '正在验证，当前版本保持不变',
     repairing: '验证未通过，正在尝试自动修复，当前版本保持不变',
     ready: '验证通过，请确认是否使用', activated: '已确认启用',
@@ -15,7 +16,7 @@ export function updateContext(state, update) {
   const current = state.versions.find(v => v.id === state.active_version_id)
   return {
     title: `${prefix}；${states[update.status] || update.status}`,
-    current: current ? `当前使用 V${current.sequence}` : '',
+    current: current ? `当前使用 v${current.sequence}` : '',
     repaired,
     // Keep the original validation output separate from the repaired trial.
     originalLog: (update.log || '').split('\n修复试跑：')[0].trim(),

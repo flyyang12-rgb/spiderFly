@@ -54,9 +54,12 @@ class PythonUploadValidationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "必须使用 UTF-8 编码"):
             environments.validate_python_upload("main.py", b"\xff\xfe\x00\x00")
 
-    def test_rejects_python_syntax_error_with_line_number(self) -> None:
-        with self.assertRaisesRegex(ValueError, "Python 语法检查失败：第 1 行"):
-            environments.validate_python_upload("main.py", b"if True print('bad')\n")
+    def test_accepts_python_syntax_error_without_preflight_execution(self) -> None:
+        filename, source = environments.validate_python_upload(
+            "main.py", b"if True print('bad')\n"
+        )
+        self.assertEqual(filename, "main.py")
+        self.assertEqual(source, "if True print('bad')\n")
 
 
 class RequirementsValidationTests(unittest.TestCase):

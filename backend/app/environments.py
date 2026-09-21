@@ -75,10 +75,8 @@ def validate_python_upload(filename: str, content: bytes) -> tuple[str, str]:
         source = content.decode("utf-8-sig")
     except UnicodeDecodeError as exc:
         raise ValueError("Python 文件必须使用 UTF-8 编码") from exc
-    try:
-        compile(source, safe_name, "exec")
-    except SyntaxError as exc:
-        raise ValueError(f"Python 语法检查失败：第 {exc.lineno or '?'} 行 {exc.msg}") from exc
+    # Upload is storage, not execution. Syntax, imports and dependencies are
+    # reported by the selected Agent when the immutable version actually runs.
     return safe_name, source
 
 
@@ -643,6 +641,7 @@ def create_managed_task_bundle(
     trigger_type: str = "manual",
     trigger_config: str = "{}",
     next_run_at: str | None = None,
+    target_host_id: int | None = None,
     enabled: bool = True,
     notify_on_success: bool = True,
     notify_on_failure: bool = True,
@@ -663,6 +662,7 @@ def create_managed_task_bundle(
             task_trigger_type=trigger_type,
             task_trigger_config=trigger_config,
             task_next_run_at=next_run_at,
+            task_target_host_id=target_host_id,
             task_enabled=enabled,
             task_notify_on_success=notify_on_success,
             task_notify_on_failure=notify_on_failure,
@@ -684,6 +684,7 @@ def _create_managed_app_locked(
     task_trigger_type: str = "manual",
     task_trigger_config: str = "{}",
     task_next_run_at: str | None = None,
+    task_target_host_id: int | None = None,
     task_enabled: bool = True,
     task_notify_on_success: bool = True,
     task_notify_on_failure: bool = True,
@@ -799,14 +800,17 @@ def _create_managed_app_locked(
             )
             task_id: int | None = None
             if create_manual_task:
+                if task_target_host_id is not None:
+                    from .services.task_queries import validate_target_host
+                    validate_target_host(conn, task_target_host_id)
                 task_cursor = conn.execute(
                     """
                     INSERT INTO tasks (
                         name, description, app_id, app_name, script_path, python_path,
-                        enabled, trigger_type, trigger_config, next_run_at,
+                        enabled, trigger_type, trigger_config, target_host_id, next_run_at,
                         timeout_seconds, notify_on_success, notify_on_failure, failure_screenshot,
                         created_by, updated_by, created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         name,
@@ -817,6 +821,7 @@ def _create_managed_app_locked(
                         int(task_enabled),
                         task_trigger_type,
                         task_trigger_config,
+                        task_target_host_id,
                         task_next_run_at,
                         DEFAULT_TASK_TIMEOUT_SECONDS,
                         int(task_notify_on_success),
@@ -829,6 +834,24 @@ def _create_managed_app_locked(
                     ),
                 )
                 task_id = int(task_cursor.lastrowid)
+                if conn.execute(
+                    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='task_code_versions'"
+                ).fetchone():
+                    from . import maintenance
+                    task = dict(conn.execute(
+                        """SELECT t.*,a.script_path AS app_script_path,a.requirements_text,a.template_path
+                           FROM tasks t JOIN rpa_apps a ON a.id=t.app_id WHERE t.id=?""",
+                        (task_id,),
+                    ).fetchone())
+                    first_version = maintenance.version(
+                        conn, task, source, approved=True, kind="original"
+                    )
+                    conn.execute(
+                        """INSERT OR IGNORE INTO maintenance_policies
+                           (task_id,owner_id,mode,runtime,contract,active_version_id,pause_on_failure,updated_at)
+                           VALUES (?,?,'off','native','{}',?,0,?)""",
+                        (task_id, user_id, first_version["id"], utc_now()),
+                    )
             app = conn.execute(
                 "SELECT * FROM rpa_apps WHERE id = ?", (app_id,)
             ).fetchone()
@@ -837,6 +860,8 @@ def _create_managed_app_locked(
             if task_id is not None:
                 result["task_id"] = task_id
                 result["active_task_count"] = 1
+                if "first_version" in locals():
+                    result["version_sequence"] = int(first_version["sequence"])
             return result
     except Exception:
         if app_id is not None and source_write_started:

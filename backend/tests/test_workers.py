@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import unittest
-from app.services import execution_queue, runtime
+from app.services import execution_queue, host_dispatch, runtime
 from unittest.mock import AsyncMock, patch
 
 
@@ -14,6 +14,7 @@ class WorkerIsolationTests(unittest.TestCase):
         with (
             patch.object(execution_queue.maintenance, "reconcile_reruns"),
             patch.object(execution_queue.task_versions, "notify_next"),
+            patch.object(host_dispatch, "notify_next"),
             patch.object(execution_queue.maintenance, "run_next_trial", new=AsyncMock(return_value=False)),
             patch.object(execution_queue.task_versions, "run_next", new=AsyncMock(return_value=False)),
             patch.object(collection, "run_next_trial", new=trial),
@@ -39,6 +40,7 @@ class WorkerIsolationTests(unittest.TestCase):
     def test_one_execution_failure_does_not_stop_the_serial_queue(self) -> None:
         run = AsyncMock(side_effect=[RuntimeError("first failed"), asyncio.CancelledError()])
         with (
+            patch.object(host_dispatch, "notify_next"),
             patch.object(execution_queue, "_next_pending_execution_id", return_value=9),
             patch.object(execution_queue, "_host_waiting_reason", return_value=""),
             patch.object(execution_queue, "_claim_next_execution", return_value=9),
@@ -58,6 +60,7 @@ class WorkerIsolationTests(unittest.TestCase):
         claim = unittest.mock.MagicMock()
         run = AsyncMock()
         with (
+            patch.object(host_dispatch, "notify_next"),
             patch.object(execution_queue, "_next_pending_execution_id", new=next_pending),
             patch.object(
                 execution_queue,

@@ -134,6 +134,7 @@ const {
                 <div class="primary-cell">
                   <strong>{{ triggerLabel(task.trigger_type) }}</strong
                   ><small>{{ triggerDetail(task) }}</small>
+                  <small>{{ task.target_host_name ? '计划宿主机：' + task.target_host_name : '计划宿主机：主控本机' }}</small>
                 </div>
               </td>
               <td>
@@ -148,8 +149,10 @@ const {
                 >
               </td>
               <td>
-                <span class="person-chip">{{ (task.created_by_name || '系统迁移').slice(0, 1) }}</span
-                >{{ task.created_by_name || '系统迁移' }}
+                <span class="task-owner"
+                  ><span class="person-chip">{{ (task.created_by_name || '系统').slice(0, 1) }}</span
+                  >{{ task.created_by_name || '系统迁移' }}</span
+                >
               </td>
               <td class="align-right">
                 <div class="row-actions">

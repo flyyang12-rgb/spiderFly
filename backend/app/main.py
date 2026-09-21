@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import ai_agent, maintenance, task_versions
-from .api import auth, users, audit, apps, overview, settings, tasks, executions
+from .api import auth, users, audit, apps, overview, settings, tasks, executions, hosts
 from .services import runtime
 
 
@@ -30,7 +30,7 @@ app.on_event("shutdown")(runtime.shutdown)
 for router in (
     ai_agent.router, maintenance.router, task_versions.router,
     settings.router, auth.router, users.router, audit.router, apps.router,
-    overview.router, tasks.router, executions.router,
+    overview.router, tasks.router, executions.router, hosts.router,
 ):
     app.include_router(router)
 

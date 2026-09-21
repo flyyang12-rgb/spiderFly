@@ -73,7 +73,7 @@ const {
           <div class="execution-maintenance-content">
             <strong>{{
               detail.maintenance.status === 'activated'
-                ? maintenanceResult(detail.maintenance) + ' · V' + detail.maintenance.version
+                ? maintenanceResult(detail.maintenance) + ' · v' + detail.maintenance.version
                 : detail.maintenance.ended_at
                   ? '维护结果'
                   : '正在自动修复'

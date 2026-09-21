@@ -161,6 +161,8 @@ async def _queue_worker_loop() -> None:
         try:
             await asyncio.to_thread(maintenance.reconcile_reruns)
             await asyncio.to_thread(task_versions.notify_next)
+            from . import host_dispatch
+            await asyncio.to_thread(host_dispatch.notify_next)
             if await maintenance.run_next_trial():
                 continue
             if await task_versions.run_next():

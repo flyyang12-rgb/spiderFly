@@ -14,6 +14,7 @@ from .security import admin_user, write_audit
 router = APIRouter(prefix='/api/task-versions', tags=['任务需求与版本'])
 FIELDS = {'input','urls','scope','quantity','fields','filters','sort','concurrency','output','acceptance','summary','request'}
 ACTIVE = ('pending','testing','repairing')
+CANDIDATE_ORIGINS = {'manual_candidate', 'ai_candidate'}
 
 
 def init_tables(conn):
@@ -151,17 +152,25 @@ def submit(task_id, source, requirements, patch, evidence, actor, *, base_id=Non
         candidate=m.version(conn,seed,source,approved=False,kind=origin)
         from .collection import uses_collection
         from .dp_runtime import uses_dp
-        profile='drissionpage-v1' if uses_dp(source) else ('collection-v1' if uses_collection(source) else 'readonly-v1')
+        profile=('native' if origin in CANDIDATE_ORIGINS else
+                 ('drissionpage-v1' if uses_dp(source) else ('collection-v1' if uses_collection(source) else 'readonly-v1')))
+        candidate_env=(details['env_path'] if profile=='native' else profile)
         conn.execute('INSERT OR IGNORE INTO task_version_details(version_id,spec,contract,runtime,env_path,base_version_id,origin,evidence,created_at) VALUES(?,?,?,?,?,?,?,?,?)',
-            (candidate['id'],json.dumps(spec,ensure_ascii=False),json.dumps(contract),profile,profile,current['id'],origin,evidence[:4000],utc_now()))
-        existing=conn.execute("SELECT id,status FROM task_version_updates WHERE version_id=? AND status IN ('pending','testing','repairing','conflict','ready')",(candidate['id'],)).fetchone()
+            (candidate['id'],json.dumps(spec,ensure_ascii=False),json.dumps(contract),profile,candidate_env,current['id'],origin,evidence[:4000],utc_now()))
+        existing=conn.execute("SELECT id,status FROM task_version_updates WHERE version_id=? AND status IN ('candidate','pending','testing','repairing','conflict','ready')",(candidate['id'],)).fetchone()
         if existing: return {'id':existing['id'],'version':candidate['sequence'],'status':'existing'}
-        conn.execute("UPDATE task_version_updates SET status='cancelled',stop_requested=1,note='已有新提交，旧更新不再启用',ended_at=? WHERE task_id=? AND status IN ('pending','conflict','testing','repairing','ready')",(utc_now(),task_id))
+        conn.execute("UPDATE task_version_updates SET status='cancelled',stop_requested=1,note='已有新提交，旧更新不再启用',ended_at=? WHERE task_id=? AND status IN ('candidate','pending','conflict','testing','repairing','ready')",(utc_now(),task_id))
+        if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='remote_maintenance_jobs'").fetchone():
+            conn.execute("""UPDATE remote_maintenance_jobs SET status='cancelled',note='已有新候选版本，旧候选不再启用',ended_at=?
+                WHERE status='candidate' AND update_id IN (SELECT id FROM task_version_updates WHERE task_id=? AND status='cancelled')""",(utc_now(),task_id))
         # Invalidates an older automatic repair without changing the active program.
         conn.execute('UPDATE maintenance_policies SET version=version+1 WHERE task_id=?',(task_id,))
-        status='conflict' if conflicts and not accept_changes else 'pending'
+        status=('candidate' if origin in CANDIDATE_ORIGINS else
+                ('conflict' if conflicts and not accept_changes else 'pending'))
         uid=conn.execute('INSERT INTO task_version_updates(task_id,version_id,base_version_id,base_policy_version,status,note,created_by,created_at) VALUES(?,?,?,?,?,?,?,?)',
-            (task_id,candidate['id'],current['id'],policy['version']+1,status,'；'.join(conflicts) if status=='conflict' else '等待验证',actor,utc_now())).lastrowid
+            (task_id,candidate['id'],current['id'],policy['version']+1,status,
+             ('未运行，等待管理员确认' if status=='candidate' else ('；'.join(conflicts) if status=='conflict' else '等待验证')),
+             actor,utc_now())).lastrowid
         return {'id':uid,'version':candidate['sequence'],'status':status}
 
 
@@ -187,7 +196,10 @@ def publish(conn,task_id,version_id, *, expected_policy=None):
         python_path=str(Path(env)/'Scripts/python.exe') if detail['runtime']=='native' else ''
         conn.execute('UPDATE executions SET script_path_snapshot=?,python_path_snapshot=?,maintenance_snapshot=? WHERE id=?',
                      (item['path'],python_path,json.dumps(snapshot,ensure_ascii=False),row['id']))
-    conn.execute("UPDATE task_version_updates SET status='cancelled',stop_requested=1,note='版本已切换',ended_at=? WHERE task_id=? AND status IN ('pending','conflict','ready')",(utc_now(),task_id))
+    conn.execute("UPDATE task_version_updates SET status='cancelled',stop_requested=1,note='版本已切换',ended_at=? WHERE task_id=? AND status IN ('candidate','pending','conflict','ready')",(utc_now(),task_id))
+    if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='remote_maintenance_jobs'").fetchone():
+        conn.execute("""UPDATE remote_maintenance_jobs SET status='cancelled',note='任务已切换到其他版本',ended_at=?
+            WHERE status='candidate' AND update_id IN (SELECT id FROM task_version_updates WHERE task_id=? AND status='cancelled')""",(utc_now(),task_id))
     return item
 
 
@@ -226,7 +238,10 @@ async def validate_candidate(job,item,detail):
 
 
 def used_budget(conn,cutoff):
-    return [dict(row) for row in conn.execute('SELECT task_id,elapsed_seconds,reserved_seconds,input_tokens,output_tokens,reserved_tokens FROM task_version_updates WHERE created_at>?',(cutoff,))]
+    rows=[dict(row) for row in conn.execute('SELECT task_id,elapsed_seconds,reserved_seconds,input_tokens,output_tokens,reserved_tokens FROM task_version_updates WHERE created_at>?',(cutoff,))]
+    if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='remote_maintenance_jobs'").fetchone():
+        rows.extend(dict(row) for row in conn.execute('SELECT task_id,elapsed_seconds,reserved_seconds,input_tokens,output_tokens,reserved_tokens FROM remote_maintenance_jobs WHERE COALESCE(started_at,created_at)>?',(cutoff,)))
+    return rows
 
 
 async def repair(job,item,detail,error):
@@ -336,8 +351,8 @@ async def upload(task_id:int,request:Request,user:dict=Depends(admin_user)):
         file=form.get('script')
         if not file or not file.filename.lower().endswith('.py'):raise ValueError('请上传 .py 文件')
         raw=await file.read(2*1024*1024+1)
-        result=submit(task_id,raw.decode('utf-8-sig'),str(form.get('requirements','')),json.loads(str(form.get('spec_patch','{}'))),str(form.get('evidence','')),user['id'],base_id=int(form['base_version_id']),accept_changes=str(form.get('accept_changes','false'))=='true')
-        write_audit(request,user,'version_upload',target_type='task',target_id=task_id,summary=f"上传 V{result['version']}")
+        result=submit(task_id,raw.decode('utf-8-sig'),str(form.get('requirements','')),json.loads(str(form.get('spec_patch','{}'))),str(form.get('evidence','')),user['id'],base_id=int(form['base_version_id']),origin='manual_candidate',accept_changes=str(form.get('accept_changes','false'))=='true')
+        write_audit(request,user,'version_upload',target_type='task',target_id=task_id,summary=f"上传 v{result['version']} 候选版本")
         return result
     except (ValueError,UnicodeError,KeyError) as error:raise HTTPException(400,str(error)) from None
 
@@ -362,18 +377,38 @@ def resolve(update_id:int,request:Request,user:dict=Depends(admin_user)):
 def activate_update(update_id:int,request:Request,user:dict=Depends(admin_user)):
     try:
         with transaction() as conn:
-            job=conn.execute("SELECT * FROM task_version_updates WHERE id=? AND status='ready'",(update_id,)).fetchone()
-            if not job:raise ValueError('该候选版本尚未验证通过或已经处理')
+            job=conn.execute("SELECT * FROM task_version_updates WHERE id=? AND status IN ('candidate','ready')",(update_id,)).fetchone()
+            if not job:raise ValueError('该候选版本已经处理或不能启用')
+            remote_job=None
+            if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='remote_maintenance_jobs'").fetchone():
+                remote_job=conn.execute("SELECT * FROM remote_maintenance_jobs WHERE update_id=? AND status='candidate'",(update_id,)).fetchone()
+            conn.execute('UPDATE task_code_versions SET approved=1 WHERE id=?',(job['version_id'],))
             item=publish(conn,job['task_id'],job['version_id'],expected_policy=job['base_policy_version'])
-            conn.execute("UPDATE task_version_updates SET status='activated',note=?,ended_at=? WHERE id=?",(f"V{item['sequence']} 已确认使用",utc_now(),update_id))
-        write_audit(request,user,'version_activate',target_type='task',target_id=job['task_id'],summary=f"确认使用代码版本 V{item['sequence']}")
-        return {'activated':True,'version':item['sequence']}
+            rerun=None
+            if remote_job:
+                from .services import host_dispatch
+                original_run=conn.execute("SELECT controller_url FROM remote_runs WHERE id=?",(remote_job['remote_run_id'],)).fetchone()
+                rerun=host_dispatch.create_run_in_transaction(
+                    conn,remote_job['host_id'],job['task_id'],
+                    f"remote-maintenance:{remote_job['remote_run_id']}:{update_id}",user,
+                    expected_version_id=job['version_id'],
+                    controller_url=original_run['controller_url'] if original_run else '')
+                conn.execute("UPDATE remote_maintenance_jobs SET status='activated',note='管理员已确认候选，已创建远程重跑',rerun_remote_run_id=?,ended_at=? WHERE id=?",
+                             (rerun['id'],utc_now(),remote_job['id']))
+            conn.execute("UPDATE task_version_updates SET status='activated',note=?,ended_at=? WHERE id=?",(f"v{item['sequence']} 已确认使用（未做上传前试跑）",utc_now(),update_id))
+        summary=f"确认使用代码版本 v{item['sequence']}"
+        if rerun: summary+=f"，创建远程重跑 #{rerun['id']}"
+        write_audit(request,user,'version_activate',target_type='task',target_id=job['task_id'],summary=summary)
+        return {'activated':True,'version':item['sequence'],'remote_run_id':rerun['id'] if rerun else None}
     except (ValueError,InterruptedError) as error:raise HTTPException(400,str(error)) from None
 
 
 @router.post('/updates/{update_id}/stop')
 def stop_update(update_id:int,user:dict=Depends(admin_user)):
-    execute("UPDATE task_version_updates SET stop_requested=1,status=CASE WHEN status IN ('pending','conflict','ready') THEN 'cancelled' ELSE status END,note=CASE WHEN status='ready' THEN '用户暂不使用该候选版本' ELSE note END,ended_at=CASE WHEN status='ready' THEN ? ELSE ended_at END WHERE id=?",(utc_now(),update_id))
+    with transaction() as conn:
+        conn.execute("UPDATE task_version_updates SET stop_requested=1,status=CASE WHEN status IN ('candidate','pending','conflict','ready') THEN 'cancelled' ELSE status END,note=CASE WHEN status IN ('candidate','ready') THEN '用户暂不使用该候选版本' ELSE note END,ended_at=CASE WHEN status IN ('candidate','ready') THEN ? ELSE ended_at END WHERE id=?",(utc_now(),update_id))
+        if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='remote_maintenance_jobs'").fetchone():
+            conn.execute("UPDATE remote_maintenance_jobs SET status='cancelled',note='管理员暂不使用该候选版本',ended_at=? WHERE update_id=? AND status='candidate'",(utc_now(),update_id))
     return {'stopped':True}
 
 
@@ -418,5 +453,5 @@ def apply_draft(task_id:int,draft_id:int,user:dict=Depends(admin_user)):
         raise HTTPException(404,'草稿不存在或不属于当前任务')
     try:
         base=context(task_id)['version_id']
-        return submit(task_id,draft['source'],draft['requirements'],{},'用户提交对话草稿更新任务',user['id'],base_id=base,origin='ai')
+        return submit(task_id,draft['source'],draft['requirements'],{},'用户提交对话草稿更新任务',user['id'],base_id=base,origin='ai_candidate')
     except ValueError as error:raise HTTPException(400,str(error)) from None

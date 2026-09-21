@@ -110,11 +110,18 @@ class MaintenanceTests(unittest.TestCase):
         self.assertTrue(candidate['approved']); self.assertEqual(view['policy']['runtime'],'readonly-v1')
         self.assertIn('missing_value',self.path.read_text('utf-8'))
         req=Request({'type':'http','headers':[],'client':('127.0.0.1',123)})
+        original_source=db.fetch_one('SELECT source FROM task_code_versions WHERE id=?',(original['id'],))['source']
         m.rollback(self.task_id,original['id'],req,self.user)
+        first_rollback=m.policy_view(self.task_id)
+        self.assertEqual(first_rollback['versions'][0]['kind'],'rollback')
+        self.assertEqual(db.fetch_one('SELECT source FROM task_code_versions WHERE id=?',(first_rollback['versions'][0]['id'],))['source'],original_source)
+        self.assertGreater(first_rollback['versions'][0]['sequence'],candidate['sequence'])
         self.complete_rerun()
         m.rollback(self.task_id,original['id'],req,self.user)
-        self.assertEqual(m.policy_view(self.task_id)['policy']['runtime'],'native')
-        self.assertEqual(db.fetch_one('SELECT script_path FROM rpa_apps')['script_path'],str(self.path))
+        final=m.policy_view(self.task_id)
+        self.assertEqual(final['policy']['runtime'],'native')
+        self.assertGreater(final['versions'][0]['sequence'],first_rollback['versions'][0]['sequence'])
+        self.assertEqual(Path(db.fetch_one('SELECT script_path FROM rpa_apps')['script_path']).read_text('utf-8'),original_source)
 
     def test_model_cannot_relax_frozen_acceptance_to_pass_empty_output(self):
         self.fail_execution(); self.generate("SPIDERFLY_ACCEPTANCE = {'min_rows':0}\nprint('success')")

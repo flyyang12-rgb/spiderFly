@@ -58,6 +58,7 @@ async def create_app(
     description: Annotated[str, Form()] = "",
     trigger_type: Annotated[str, Form()] = "manual",
     trigger_config: Annotated[str, Form()] = "{}",
+    target_host_id: Annotated[int | None, Form()] = None,
     enabled: Annotated[bool, Form()] = True,
     notify_on_success: Annotated[bool, Form()] = True,
     notify_on_failure: Annotated[bool, Form()] = True,
@@ -90,6 +91,7 @@ async def create_app(
             trigger_type=clean_trigger_type,
             trigger_config=encoded_config,
             next_run_at=next_run_at,
+            target_host_id=target_host_id,
             enabled=enabled,
             notify_on_success=notify_on_success,
             notify_on_failure=notify_on_failure,
@@ -111,6 +113,8 @@ async def create_app(
     )
     task_id = int(created["task_id"])
     result = _public_app(created, include_private=True)
+    if created.get("version_sequence") is not None:
+        result["version_sequence"] = int(created["version_sequence"])
     result["task"] = _task_or_404(task_id, public=True)
     return result
 

@@ -160,11 +160,12 @@ async def scheduler_loop(enqueue: Callable[[int, str], Awaitable[int]]) -> None:
         )
         for task in due_tasks:
             config = decode_trigger_config(task.get("trigger_config"))
+            scheduled_for = task["next_run_at"]
             next_run = compute_next_run(task["trigger_type"], config, after=now)
             await asyncio.to_thread(
                 execute,
                 "UPDATE tasks SET next_run_at = ?, last_triggered_at = ?, updated_at = ? WHERE id = ?",
-                (next_run, now, now, task["id"]),
+                (next_run, scheduled_for, now, task["id"]),
             )
             try:
                 await enqueue(task["id"], "schedule")

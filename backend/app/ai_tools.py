@@ -45,7 +45,7 @@ TOOLS = [
     function("browser_extract", "用 Scrapling 从当前真实页面提取并累计结果，返回样本、总数和 CSV 下载地址。rows 是记录 CSS；fields 是字段名到 CSS 的 JSON 字符串，值以 ::text 或 ::attr(href) 结尾；unique_by 是去重字段名 JSON 数组（优先职位链接），空串按全部业务字段去重；limit 是累计目标上限数字字符串，空串为2000。先小量核对再翻页，不降低用户条件。", {"rows": TEXT, "fields": TEXT, "unique_by": TEXT, "limit": TEXT}, ["rows", "fields", "unique_by", "limit"]),
     function("browser_wait_user", "实际观察到需要登录或验证时保留浏览器并结束本轮等待，用户在宿主机窗口完成后点击继续；不能假定已经登录。", {"reason": TEXT}, ["reason"]),
     function("browser_close", "关闭本对话创建的浏览器，释放登录会话；已提取结果保留。", {}, []),
-    function("submit_task_update", "提交当前任务的已保存草稿作为候选版本，平台排队验证；验证通过后等待用户确认使用，不能声称已经启用。需求变更写入 spec_patch JSON（只写用户明确改变的字段）；修错传 {}。先 read_task 获取 base_version_id。", {"draft_id": TEXT, "base_version_id": TEXT, "spec_patch": TEXT}, ["draft_id", "base_version_id", "spec_patch"]),
+    function("submit_task_update", "将当前任务的已保存草稿保存为未运行候选版本；管理员确认后才会启用，不能声称已经执行、验证或启用。需求变更写入 spec_patch JSON（只写用户明确改变的字段）；修错传 {}。先 read_task 获取 base_version_id。", {"draft_id": TEXT, "base_version_id": TEXT, "spec_patch": TEXT}, ["draft_id", "base_version_id", "spec_patch"]),
     function("search_knowledge", "按主题检索本地知识章节，返回工具、接入状态、版本、来源和适用范围。回答采集原理、Scrapling 或 DrissionPage 用法或生成脚本前先检索；无匹配不代表功能不存在。", {"query": TEXT}, ["query"]),
     function("read_knowledge", "读取检索结果中的完整章节。name 使用返回的文档名，section 使用章节编号；section 传空字符串可查看目录。区分原生能力、平台能力和现场验证。", {"name": TEXT, "section": TEXT}, ["name", "section"]),
     function("fetch_page", "读取用户本轮或历史需求明确给出的公开 HTTP/HTTPS 地址。返回文本、链接及有限 HTML；不提供登录或浏览器渲染。", {"url": TEXT}, ["url"]),

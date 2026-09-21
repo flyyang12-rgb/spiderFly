@@ -11,7 +11,13 @@ from ..scheduling import decode_trigger_config
 from ..schemas import RunResponse, TaskPatch, TaskPayload
 from ..security import admin_user, ready_user
 from ..services.execution_queue import _enqueue_task
-from ..services.task_queries import TASK_SELECT, _public_task, _schedule_values, _task_or_404
+from ..services.task_queries import (
+    TASK_SELECT,
+    _public_task,
+    _schedule_values,
+    _task_or_404,
+    validate_target_host,
+)
 
 
 router = APIRouter()
@@ -42,6 +48,9 @@ def create_task(
     now = utc_now()
     try:
         with transaction() as conn:
+            if payload.target_host_id is not None and user["role"] not in {"admin", "super_admin"}:
+                raise HTTPException(status_code=403, detail="只有管理员可以指定计划运行宿主机")
+            validate_target_host(conn, payload.target_host_id)
             current_app = conn.execute(
                 "SELECT id FROM rpa_apps WHERE id = ? AND archived = 0",
                 (payload.app_id,),
@@ -64,10 +73,10 @@ def create_task(
                 """
                 INSERT INTO tasks (
                     name, description, app_id, app_name, script_path, python_path,
-                    enabled, trigger_type, trigger_config, next_run_at,
+                    enabled, trigger_type, trigger_config, target_host_id, next_run_at,
                     timeout_seconds, notify_on_success, notify_on_failure, failure_screenshot,
                     created_by, updated_by, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     payload.name,
@@ -79,6 +88,7 @@ def create_task(
                     int(payload.enabled),
                     payload.trigger_type,
                     trigger_config,
+                    payload.target_host_id,
                     next_run_at,
                     payload.timeout_seconds,
                     int(payload.notify_on_success),
@@ -121,6 +131,8 @@ def update_task(
     expected_version = int(values.pop("version", current["version"]))
     if not values:
         return _public_task(current)
+    if "target_host_id" in values and user["role"] not in {"admin", "super_admin"}:
+        raise HTTPException(status_code=403, detail="只有管理员可以指定计划运行宿主机")
 
     active = fetch_one(
         "SELECT id, status FROM executions WHERE task_id = ? AND status IN ('pending', 'running')",
@@ -173,6 +185,8 @@ def update_task(
     params.extend([utc_now(), task_id, expected_version])
     try:
         with transaction() as conn:
+            if "target_host_id" in values:
+                validate_target_host(conn, values["target_host_id"])
             current_app = conn.execute(
                 "SELECT id FROM rpa_apps WHERE id = ? AND archived = 0",
                 (final_app_id,),
@@ -202,6 +216,15 @@ def update_task(
                     conn.execute(
                         f"UPDATE tasks SET last_status = {TASK_EXECUTION_STATUS_SQL} WHERE id = ?",
                         ("cancelled", task_id),
+                    )
+                if conn.execute(
+                    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='remote_runs'"
+                ).fetchone():
+                    conn.execute(
+                        """UPDATE remote_runs
+                           SET status='cancelled',stop_requested=1,finished_at=?,error='任务停用，已取消排队'
+                           WHERE task_id=? AND status='queued'""",
+                        (now, task_id),
                     )
     except sqlite3.IntegrityError as exc:
         raise HTTPException(status_code=409, detail="任务名称已存在") from exc

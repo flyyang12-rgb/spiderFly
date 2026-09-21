@@ -202,7 +202,7 @@ onBeforeUnmount(() => { alive = false; generation++; window.clearInterval(timer)
           </section>
           <div class="ai-side-heading"><div><span>OUTPUT</span><h3>{{ showHistory ? '草稿版本' : '最新草稿' }}</h3></div><small>{{ thread?.drafts?.length || 0 }} 个版本</small></div>
           <article v-for="draft in visibleDrafts" :key="draft.id" class="ai-draft">
-            <strong>V{{ draft.version }} · {{ draft.name }}</strong><div class="ai-draft-status"><span class="mini-badge neutral-badge">{{ draft.trial ? ({ pending: '等待试跑', running: '正在采集', success: '试跑通过', failed: '试跑未通过', cancelled: '已停止', interrupted: '已中断' }[draft.trial.status]) : '语法通过 · 未试运行' }}</span></div>
+            <strong>v{{ draft.version }} · {{ draft.name }}</strong><div class="ai-draft-status"><span class="mini-badge neutral-badge">{{ draft.trial ? ({ pending: '等待试跑', running: '正在采集', success: '试跑通过', failed: '试跑未通过', cancelled: '已停止', interrupted: '已中断' }[draft.trial.status]) : '未试运行' }}</span></div>
             <p v-if="draft.trial?.message">{{ draft.trial.message }}</p>
             <div v-if="draft.trial?.files?.length" class="ai-links"><a v-for="file in draft.trial.files" :key="file" :href="`/api/ai/collection-trials/${draft.trial.id}/files/${encodeURIComponent(file)}`">{{ file }}</a></div>
             <details v-if="draft.trial?.log" class="ai-disclosure"><summary>试跑日志</summary><pre class="ai-trial-log">{{ draft.trial.log }}</pre></details>
@@ -219,7 +219,7 @@ onBeforeUnmount(() => { alive = false; generation++; window.clearInterval(timer)
           </details>
         </aside>
       </div>
-      <div v-if="selectedDraft" class="ai-code"><header><strong>V{{ selectedDraft.version }} · main.py</strong><button class="button ghost" @click="selectedDraft = null">收起代码</button></header><pre>{{ selectedDraft.source }}</pre><p>依赖：{{ selectedDraft.requirements || '仅标准库' }}</p></div>
+      <div v-if="selectedDraft" class="ai-code"><header><strong>v{{ selectedDraft.version }} · main.py</strong><button class="button ghost" @click="selectedDraft = null">收起代码</button></header><pre>{{ selectedDraft.source }}</pre><p>依赖：{{ selectedDraft.requirements || '仅标准库' }}</p></div>
       <AiMaintenance v-if="taskId" :key="taskId" :task-id="taskId" @open-execution="id => emit('open-execution', id)" />
     </section>
   </div>

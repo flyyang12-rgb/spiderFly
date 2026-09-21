@@ -50,11 +50,11 @@ onBeforeUnmount(() => { alive = false; window.clearInterval(timer) })
       <section v-if="versionUpdate" class="ai-version-review" :class="`is-${versionUpdate.status}`">
         <div>
           <span>{{ versionUpdate.status === 'ready' ? '候选版本已验证' : versionUpdate.status === 'conflict' ? '候选版本需要确认' : '候选版本处理中' }}</span>
-          <strong>V{{ versionUpdate.sequence }}</strong>
+          <strong>v{{ versionUpdate.sequence }}</strong>
           <p>{{ versionUpdate.note }}</p>
         </div>
         <div class="maintenance-actions">
-          <template v-if="versionUpdate.status === 'ready'"><button type="button" class="button ghost" :disabled="busy" @click="versionAction(`/updates/${versionUpdate.id}/stop`)">暂不使用</button><button type="button" class="button primary" :disabled="busy" @click="versionAction(`/updates/${versionUpdate.id}/activate`)">确认使用 V{{ versionUpdate.sequence }}</button></template>
+          <template v-if="versionUpdate.status === 'ready'"><button type="button" class="button ghost" :disabled="busy" @click="versionAction(`/updates/${versionUpdate.id}/stop`)">暂不使用</button><button type="button" class="button primary" :disabled="busy" @click="versionAction(`/updates/${versionUpdate.id}/activate`)">确认使用 v{{ versionUpdate.sequence }}</button></template>
           <template v-else-if="versionUpdate.status === 'conflict'"><button type="button" class="button primary" :disabled="busy" @click="versionAction(`/updates/${versionUpdate.id}/resolve`)">按新代码继续验证</button><button type="button" class="button ghost" :disabled="busy" @click="versionAction(`/updates/${versionUpdate.id}/stop`)">保留当前版本</button></template>
           <button v-else type="button" class="button ghost" :disabled="busy" @click="versionAction(`/updates/${versionUpdate.id}/stop`)">停止更新</button>
         </div>
@@ -66,7 +66,7 @@ onBeforeUnmount(() => { alive = false; window.clearInterval(timer) })
       </details>
     </template>
     <section v-if="code" class="maintenance-code-preview">
-      <header><div><span>修复代码</span><strong>V{{ code.sequence }}</strong></div><button type="button" class="button ghost" @click="code = null">收起代码</button></header>
+      <header><div><span>修复代码</span><strong>v{{ code.sequence }}</strong></div><button type="button" class="button ghost" @click="code = null">收起代码</button></header>
       <pre>{{ code.source }}</pre>
     </section>
     </details>

@@ -14,6 +14,23 @@ from ..scheduling import (
 )
 
 
+def validate_target_host(conn, host_id: int | None) -> None:
+    if host_id is None:
+        return
+    exists = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='agent_hosts'"
+    ).fetchone()
+    if not exists:
+        raise HTTPException(status_code=400, detail="宿主机功能尚未初始化")
+    host = conn.execute(
+        "SELECT approval_status FROM agent_hosts WHERE id=?", (host_id,)
+    ).fetchone()
+    if not host:
+        raise HTTPException(status_code=400, detail="计划运行宿主机不存在")
+    if host["approval_status"] != "approved":
+        raise HTTPException(status_code=409, detail="计划运行宿主机尚未批准或已撤销")
+
+
 TASK_SELECT = """
     SELECT
         t.*,
@@ -45,6 +62,12 @@ def _public_task(task: dict) -> dict:
         item[key] = bool(item.get(key))
     for key in ("script_path", "python_path", "app_script_path", "app_env_path"):
         item.pop(key, None)
+    item["target_host_name"] = ""
+    if item.get("target_host_id") and fetch_one(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='agent_hosts'"
+    ):
+        host = fetch_one("SELECT name FROM agent_hosts WHERE id=?", (item["target_host_id"],))
+        item["target_host_name"] = host["name"] if host else "宿主机已移除"
     return item
 
 

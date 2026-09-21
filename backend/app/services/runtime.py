@@ -15,6 +15,7 @@ from ..instance_lock import InstanceLock, acquire_instance_lock
 from ..scheduling import reconcile_schedules, scheduler_loop
 from ..security import ensure_bootstrap_admin
 from ..services.execution_queue import _enqueue_task, _queue_worker_loop
+from ..services.host_dispatch import dispatch_scheduled_task, init_tables as init_host_tables
 
 
 logger = logging.getLogger(__name__)
@@ -32,11 +33,16 @@ _environment_worker_task: asyncio.Task | None = None
 _instance_lock: InstanceLock | None = None
 
 
+async def _dispatch_scheduled_task(task_id: int, source: str) -> int:
+    return await asyncio.to_thread(dispatch_scheduled_task, task_id, source)
+
+
 async def startup() -> None:
     global _scheduler_task, _queue_worker_task, _environment_worker_task, _instance_lock
     _instance_lock = acquire_instance_lock()
     try:
         init_db()
+        init_host_tables()
         await asyncio.to_thread(cleanup_legacy_task_program_model)
         bootstrap_file = ensure_bootstrap_admin()
         if bootstrap_file:
@@ -44,7 +50,7 @@ async def startup() -> None:
         reconcile_schedules()
         maintenance.init_tables()
         ai_agent.start()
-        _scheduler_task = asyncio.create_task(scheduler_loop(_enqueue_task))
+        _scheduler_task = asyncio.create_task(scheduler_loop(_dispatch_scheduled_task))
         _queue_worker_task = asyncio.create_task(_queue_worker_loop())
         _environment_worker_task = asyncio.create_task(_environment_worker_loop())
     except BaseException:

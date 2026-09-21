@@ -9,12 +9,12 @@ export function createAppsState() {
     requirements_text: '',
     requirements_filename: '',
     script: null,
-    template: null,
     enabled: true,
     notify_on_success: true,
     notify_on_failure: true,
     failure_screenshot: false,
     trigger_type: 'manual',
+    target_host_id: '',
     daily_time: '09:00',
     weekly_days: [1],
     weekly_time: '09:00',
@@ -43,10 +43,6 @@ export function useApps({
     aiSourceThread.value = null
     appForm.script = event.target.files?.[0] || null
     if (!appForm.name && appForm.script) appForm.name = appForm.script.name.replace(/\.py$/i, '')
-  }
-
-  function selectTemplate(event) {
-    appForm.template = event.target.files?.[0] || null
   }
 
   async function selectRequirementsFile(event) {
@@ -94,8 +90,8 @@ export function useApps({
       requirements_text: draft.requirements,
       requirements_filename: 'AI 生成的 requirements.txt',
       script: new File([draft.source], 'main.py', { type: 'text/x-python' }),
-      template: null,
       trigger_type: 'manual',
+      target_host_id: '',
       enabled: true,
       notify_on_success: false,
       notify_on_failure: false,
@@ -124,10 +120,6 @@ export function useApps({
       showToast('error', '只能上传 .py 文件')
       return
     }
-    if (appForm.template && !/\.(xlsx|xlsm|xltx|xltm)$/i.test(appForm.template.name)) {
-      showToast('error', '模板格式不支持', '请选择 .xlsx、.xlsm、.xltx 或 .xltm 文件')
-      return
-    }
     if (appForm.trigger_type === 'weekly' && !appForm.weekly_days.length) {
       showToast('error', '请至少选择一个星期')
       return
@@ -147,13 +139,13 @@ export function useApps({
       form.append('description', appForm.description.trim())
       form.append('requirements_text', appForm.requirements_text.trim())
       form.append('trigger_type', appForm.trigger_type)
+      if (appForm.target_host_id) form.append('target_host_id', appForm.target_host_id)
       form.append('trigger_config', JSON.stringify(triggerConfig(appForm)))
       form.append('enabled', String(appForm.enabled))
       form.append('notify_on_success', String(appForm.notify_on_success))
       form.append('notify_on_failure', String(appForm.notify_on_failure))
       form.append('failure_screenshot', String(appForm.failure_screenshot))
       form.append('script', appForm.script)
-      if (appForm.template) form.append('template', appForm.template)
       const created = await request('/apps', { method: 'POST', body: form })
       let aiBindingError = ''
       if (aiSourceThread.value && created.task?.id) {
@@ -173,12 +165,12 @@ export function useApps({
         requirements_text: '',
         requirements_filename: '',
         script: null,
-        template: null,
         enabled: true,
         notify_on_success: true,
         notify_on_failure: true,
         failure_screenshot: false,
         trigger_type: 'manual',
+        target_host_id: '',
         daily_time: '09:00',
         weekly_days: [1],
         weekly_time: '09:00',
@@ -187,7 +179,7 @@ export function useApps({
       await loadAll({ quiet: true, includeAdmin: false })
       navigateTo('tasks')
       if (aiBindingError) showToast('error', '任务已创建，AI 对话关联未完成', aiBindingError)
-      else showToast('success', '任务已一次创建完成', '运行设置已保存，正在准备独立环境')
+      else showToast('success', '任务已创建为 v1', '上传阶段没有运行代码，请选择宿主机进行实际运行')
     } catch (error) {
       showToast('error', '创建任务失败', error.message)
     } finally {
@@ -214,7 +206,6 @@ export function useApps({
 
   return {
     selectScript,
-    selectTemplate,
     selectRequirementsFile,
     openAi,
     prepareAiDraft,

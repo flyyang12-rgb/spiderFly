@@ -587,9 +587,24 @@ def rollback(task_id:int,version_id:int,request:Request,user:dict=Depends(admin_
             task=task_record(conn,task_id)
             item=conn.execute('SELECT * FROM task_code_versions WHERE id=? AND task_id=? AND approved=1',(version_id,task_id)).fetchone()
             if not item: raise ValueError('只能回退到本任务已保存的原始或已验证版本')
-            from .task_versions import publish
-            publish(conn,task_id,version_id)
-        write_audit(request,user,'maintenance_rollback',target_type='task',target_id=task_id,summary=f'回退代码版本 {item["sequence"]}')
+            item=dict(item)
+            source_path=Path(item['path']).resolve()
+            if (not source_path.is_relative_to(RPA_APPS_DIR.resolve()) or not source_path.is_file()
+                    or source_path.read_text('utf-8-sig')!=item['source']):
+                raise ValueError('历史版本文件已改变或丢失')
+            from .task_versions import ensure_details, publish
+            policy=conn.execute('SELECT * FROM maintenance_policies WHERE task_id=?',(task_id,)).fetchone()
+            detail=ensure_details(conn,task,item)
+            next_sequence=conn.execute('SELECT COALESCE(MAX(sequence),0)+1 FROM task_code_versions WHERE task_id=?',(task_id,)).fetchone()[0]
+            seed=dict(task,requirements_text=item['requirements'],_version_spec=json.dumps({
+                'rollback_from':item['id'],'sequence':next_sequence,'spec':detail['spec'],'contract':detail['contract']
+            },sort_keys=True,ensure_ascii=False))
+            copied=version(conn,seed,item['source'],approved=True,kind='rollback')
+            conn.execute('INSERT INTO task_version_details(version_id,spec,contract,runtime,env_path,base_version_id,origin,evidence,created_at) VALUES(?,?,?,?,?,?,?,?,?)',(
+                copied['id'],detail['spec'],detail['contract'],detail['runtime'],detail['env_path'],
+                policy['active_version_id'],'rollback',f"复制 v{item['sequence']} 的内容",utc_now()))
+            publish(conn,task_id,copied['id'])
+        write_audit(request,user,'maintenance_rollback',target_type='task',target_id=task_id,summary=f'将 v{item["sequence"]} 内容复制为 v{copied["sequence"]} 并启用')
         return policy_view(task_id)
     except ValueError as error: raise HTTPException(400,str(error)) from None
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator
 
 from .config import DEFAULT_TASK_TIMEOUT_SECONDS
 
@@ -48,6 +48,7 @@ class TaskPayload(BaseModel):
     app_id: int = Field(ge=1)
     trigger_type: Literal["manual", "daily", "weekly"] = "manual"
     trigger_config: dict[str, Any] = Field(default_factory=dict)
+    target_host_id: int | None = Field(default=None, ge=1)
     enabled: bool = True
     timeout_seconds: int = Field(default=DEFAULT_TASK_TIMEOUT_SECONDS, ge=0, le=604800)
     notify_on_success: bool = True
@@ -80,6 +81,7 @@ class TaskPatch(BaseModel):
     app_id: int | None = Field(default=None, ge=1)
     trigger_type: Literal["manual", "daily", "weekly"] | None = None
     trigger_config: dict[str, Any] | None = None
+    target_host_id: int | None = Field(default=None, ge=1)
     enabled: bool | None = None
     timeout_seconds: int | None = Field(default=None, ge=0, le=604800)
     notify_on_success: bool | None = None
@@ -89,9 +91,9 @@ class TaskPatch(BaseModel):
 
     @field_validator("*", mode="before")
     @classmethod
-    def reject_explicit_null(cls, value: Any) -> Any:
-        # Omitted fields keep their defaults; none of the stored fields is nullable.
-        if value is None:
+    def reject_explicit_null(cls, value: Any, info: ValidationInfo) -> Any:
+        # Omitted fields keep their defaults; only the optional host binding can be cleared.
+        if value is None and info.field_name != "target_host_id":
             raise ValueError("修改字段不能为 null；不修改的字段请省略")
         return value
 

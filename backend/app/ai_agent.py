@@ -41,6 +41,7 @@ browser_extract 由平台用 Scrapling 提取真实 DOM，自动保留累计结�
 已提取数据跨轮保留；沿用上下文给出的 fields 和 unique_by，只修正选择器。重复提取同一主键会补齐原来为空的字段；以返回 sample 的实际持久数据核对，不宣称空字段已完整。需要人工登录时直接 browser_open 后 browser_wait_user 保留现场，不再问用户是否要打开；登录后仍需验证实际数量，不能保证一定有 100 条。最终答复只报告结果和必要动作，不输出内部思考或反复的计划。
 探索会话与 collection-v1 的匿名 WSL 试跑环境不同：浏览器中已登录不代表生成脚本具有登录态。公开脚本仍保存并 test_collection；依赖人工登录的结果先用 browser_extract 交付，不宣称已实现无人值守定时采集。正常脚本执行不重复调用模型。
 需要生成采集脚本时，先检索采集知识，选择 collection-v1 或 drissionpage-v1，生成单文件 Python，save_draft 后必须调用 test_collection 实际试跑；工具返回成功才可称试跑通过。失败按日志修改草稿再试跑，最多三次，不放宽用户条件。collection-v1 静态请求用 Scrapling FetcherSession，动态页面用 DynamicSession，复杂操作保留 Playwright；批量采集用 crawl 的并发和断点，匿名会话用 session。均由 spiderfly_collection 接口提供，JavaScript 嵌在 Python 中。不使用 Node.js 入口。DP 是可选的原生 Windows 方案，用户指定 DP 时必须使用，不可悄悄改成 Scrapling。先调用 dp_probe 用 DP 查看真实页面结构，未知选择器传 css:body；从返回的链接 class 和 HTML 确定定位，再保存脚本并试跑。dp_probe 每次重新开关匿名浏览器，同样排队、同样使用普通任务端口，不保留交互会话。先 read_knowledge 读取 drissionpage/runtime.md，依赖 DrissionPage==4.1.1.4；开头标记 # spiderfly-runtime: drissionpage-v1。通过 ChromiumOptions(read_file=False).set_address(os.environ["SPIDERFLY_BROWSER_ADDRESS"]).existing_only().headless() 和 Chromium(co).latest_tab 连接平台本次浏览器。不要 auto_port、set_local_port、quit 或新建页签；由平台按普通任务配置端口启动和关闭浏览器。DP 脚本使用原生 API、标准库和 SPIDERFLY_ARTIFACT_DIR，不导入 spiderfly_collection 或平台 app。声明 SPIDERFLY_ACCEPTANCE 的 urls、file、format、required、min_rows、max_rows、effects=artifacts_only。DP 是普通 Windows 子进程权限，不是 WSL 沙箱；匿名新资料目录不能继承探索登录态。环境未准备或端口占用时如实报告 test_collection 的错误。新任务试跑通过后说明可点击“使用草稿”保存任务，不把新任务创建说成提交已有任务的候选版本。明确修改已有任务时，保存草稿后用 submit_task_update 提交候选版本验证；验证通过后等待用户确认使用，不直接改计划、启用版本或发送消息。
+已有任务的代码更新是例外：submit_task_update 只保存未运行候选 vN，不排队验证；管理员确认后才启用。不得声称候选已执行或验证。
 生成程序必须使用 Python 3.12，结果写入平台 SPIDERFLY_ARTIFACT_DIR，读取上传表格使用 SPIDERFLY_TEMPLATE_FILE。
 采集脚本用 print('SPIDERFLY_PROGRESS ' + json.dumps(payload, ensure_ascii=False), flush=True) 上报单行 JSON；payload.event 为 progress、error 或 summary，stage 为当前阶段，page 为当前页，collected 为累计实际条数；total 仅在已知目标总条数时提供，否则省略或 null，不估算百分比。失败用 error 并在 message 写失败页及原因。结束用 summary，带 collected、failed_pages、missing（未知用 null）、completeness（complete/partial/unknown）和 message；仅有独立业务依据才报 complete，不把退出码为零等同采全。每页或每批上报，不逐条刷日志；每行不超过 4096 字符。进度不代替结果回执和原验收，失败仍须抛错或返回失败。不得把凭据、Cookie 放入进度。
 程序要有真实结果校验，记录实际数量，失败保留已保存的数据。不要编造样本、岗位、文件、运行结果或跳过用户条件。
@@ -228,7 +229,7 @@ async def dispatch(name: str, arguments: dict, thread: dict, turn_id: int, messa
         if not draft: raise ValueError('草稿不属于当前任务对话')
         user_messages=[row['content'] for row in messages if row['role']=='user']
         evidence=user_messages[-1] if user_messages else ''
-        return submit(thread['task_id'],draft['source'],draft['requirements'],json.loads(arguments['spec_patch']),evidence,thread['owner_id'],base_id=int(arguments['base_version_id']),origin='ai')
+        return submit(thread['task_id'],draft['source'],draft['requirements'],json.loads(arguments['spec_patch']),evidence,thread['owner_id'],base_id=int(arguments['base_version_id']),origin='ai_candidate')
     if name == "save_draft":
         return save_draft(thread["id"], turn_id, arguments)
     raise ValueError("工具未实现")
@@ -248,7 +249,7 @@ def tool_result_summary(name, result):
         return ''
     parts = []
     if name == 'save_draft' and 'version' in result:
-        return f"，已保存草稿 V{result['version']}（未试运行）"
+        return f"，已保存草稿 v{result['version']}（未试运行）"
     if result.get('engine'):
         parts.append(str(result['engine']))
     if type(result.get('status')) is int:
@@ -498,6 +499,9 @@ async def worker_loop() -> None:
             from .maintenance import generate_next
             try:
                 if await generate_next():
+                    continue
+                from .remote_maintenance import generate_next as generate_remote_maintenance
+                if await generate_remote_maintenance():
                     continue
             except asyncio.CancelledError: raise
             except Exception:

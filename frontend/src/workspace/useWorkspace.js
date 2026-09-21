@@ -70,6 +70,8 @@ export function useWorkspace() {
     taskIsActive: (...args) => executions.taskIsActive(...args),
     taskModalOpen: tasksState.taskModalOpen,
     tasks: tasksState.tasks,
+    targetHosts: tasksState.targetHosts,
+    targetHostsLoading: tasksState.targetHostsLoading,
   })
 
   const schedule = useSchedule({

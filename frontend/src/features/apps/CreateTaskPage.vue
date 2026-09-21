@@ -1,4 +1,5 @@
 <script setup>
+import { onMounted } from 'vue'
 import { useWorkspaceContext } from '../../workspace/context'
 
 const {
@@ -7,8 +8,10 @@ const {
   openAi,
   selectRequirementsFile,
   selectScript,
-  selectTemplate,
   settings,
+  loadTargetHosts,
+  targetHosts,
+  targetHostsLoading,
   toggleCreateWeekday,
   triggerOptions,
   uploadApp,
@@ -17,6 +20,8 @@ const {
   view,
   weekdayOptions,
 } = useWorkspaceContext()
+
+onMounted(loadTargetHosts)
 </script>
 
 <template>
@@ -31,7 +36,7 @@ const {
         <header class="upload-form-heading">
           <div>
             <h2>上传 Python 创建任务</h2>
-            <p>填写基本信息并选择运行文件</p>
+            <p>只保存一个 .py 和可选 requirements.txt；运行错误会在日志中报告</p>
           </div>
           <span><b>1</b> 任务与文件</span>
         </header>
@@ -73,20 +78,6 @@ const {
             >
             <span class="upload-file-action">{{ appForm.requirements_filename ? '更换' : '选择文件' }}</span>
           </label>
-          <label class="upload-file-card" :class="{ selected: appForm.template }">
-            <input
-              :key="'template-' + uploadKey"
-              type="file"
-              accept=".xlsx,.xlsm,.xltx,.xltm"
-              @change="selectTemplate"
-            />
-            <span class="upload-file-mark excel-file">XLS</span>
-            <span class="upload-file-copy"
-              ><strong>Excel 模板 <em>可选</em></strong
-              ><small>{{ appForm.template?.name || '选择 Excel 模板文件' }}</small></span
-            >
-            <span class="upload-file-action">{{ appForm.template ? '更换' : '选择文件' }}</span>
-          </label>
         </div>
         <details class="manual-requirements">
           <summary>
@@ -101,6 +92,7 @@ const {
             ></textarea>
           </label>
         </details>
+        <p class="field-help">保存前不安装依赖、不运行代码，也不做 Python 语法或业务验证。实际错误由目标宿主机运行后回传。</p>
         <section class="schedule-card create-task-settings">
           <div class="schedule-card-heading">
             <div><strong>运行设置</strong></div>
@@ -117,6 +109,21 @@ const {
               <i></i>{{ option.label }}
             </button>
           </div>
+          <label class="field schedule-target-field">
+            <span>计划运行宿主机</span>
+            <select v-model="appForm.target_host_id" :disabled="targetHostsLoading">
+              <option value="">主控本机（旧执行链路）</option>
+              <option
+                v-for="host in targetHosts"
+                :key="host.id"
+                :value="String(host.id)"
+                :disabled="host.approval_status !== 'approved'"
+              >
+                {{ host.name }}{{ host.approval_status === 'approved' ? '' : '（不可用）' }}
+              </option>
+            </select>
+            <small>计划到点时固定发往这台电脑；离线或忙碌时仍保留在该机器队列。</small>
+          </label>
           <div v-if="appForm.trigger_type === 'manual'" class="schedule-hint">手动点击“运行”执行</div>
           <label v-else-if="appForm.trigger_type === 'daily'" class="field"
             ><span>每天执行时间</span><input v-model="appForm.daily_time" type="time"

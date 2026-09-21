@@ -1,4 +1,5 @@
 <script setup>
+import { ref } from 'vue'
 import { useWorkspace } from './workspace/useWorkspace'
 import AiAssistant from './AiAssistant.vue'
 import MaintenanceNotices from './MaintenanceNotices.vue'
@@ -13,6 +14,7 @@ import ModelSettingsPage from './features/settings/ModelSettingsPage.vue'
 import SystemSettingsPage from './features/settings/SystemSettingsPage.vue'
 import MembersPage from './features/members/MembersPage.vue'
 import AuditPage from './features/members/AuditPage.vue'
+import HostsPage from './features/hosts/HostsPage.vue'
 import TaskEditor from './features/tasks/TaskEditor.vue'
 import ExecutionDetail from './features/executions/ExecutionDetail.vue'
 import StopExecutionDialog from './features/executions/StopExecutionDialog.vue'
@@ -63,6 +65,27 @@ const {
   users,
   view,
 } = useWorkspace()
+const remoteRunTarget = ref(null)
+
+const initialRemoteRun = Number(new URLSearchParams(window.location.search).get('remote_run'))
+if (Number.isInteger(initialRemoteRun) && initialRemoteRun > 0) {
+  remoteRunTarget.value = initialRemoteRun
+  view.value = 'management'
+  managementTab.value = 'hosts'
+}
+
+function openRemoteRun(id) {
+  remoteRunTarget.value = id
+  view.value = 'management'
+  managementTab.value = 'hosts'
+}
+
+function clearRemoteRunTarget() {
+  remoteRunTarget.value = null
+  const url = new URL(window.location.href)
+  url.searchParams.delete('remote_run')
+  window.history.replaceState({}, '', url)
+}
 </script>
 
 <template>
@@ -146,6 +169,7 @@ const {
               }
             "
             @open-execution="(id) => openExecution({ id })"
+            @open-remote-run="openRemoteRun"
             @notify="(title, message) => showToast('info', title, message)"
           />
           <button v-if="view === 'tasks' && isAdmin" class="button ghost" type="button" @click="openAi()">
@@ -208,6 +232,8 @@ const {
         <MembersPage v-else-if="view === 'management' && managementTab === 'users' && isAdmin" />
 
         <AuditPage v-else-if="view === 'management' && managementTab === 'audit' && isAdmin" />
+
+        <HostsPage v-else-if="view === 'management' && managementTab === 'hosts' && isAdmin" :open-run-id="remoteRunTarget" @run-opened="clearRemoteRunTarget" />
       </template>
     </main>
 

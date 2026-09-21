@@ -5,7 +5,7 @@ const props=defineProps({taskId:{type:Number,required:true}})
 const state=ref(null), error=ref(''), busy=ref(false), uploadFile=ref(null), requirements=ref(''), evidence=ref(''), showUpload=ref(false), detail=ref(null)
 const names={request:'原始要求',summary:'用途',input:'输入',urls:'站点',scope:'范围',quantity:'数量',fields:'字段',filters:'筛选',sort:'排序',concurrency:'并发',output:'输出',acceptance:'验收'}
 const origins={user:'用户要求',inferred:'从代码推断',unspecified:'未说明'}
-const labels={pending:'等待验证',testing:'正在验证',repairing:'正在修复',conflict:'需要确认差异',ready:'验证通过，等待确认',activated:'已启用',failed:'更新失败',cancelled:'已取消',interrupted:'已中断'}
+const labels={candidate:'未运行，等待确认',pending:'等待验证',testing:'正在验证',repairing:'正在修复',conflict:'需要确认差异',ready:'验证通过，等待确认',activated:'已启用',failed:'更新失败',cancelled:'已取消',interrupted:'已中断'}
 const latestUpdate=computed(()=>state.value?.updates?.[0])
 const updateNotice=computed(()=>state.value ? updateContext(state.value,latestUpdate.value) : null)
 const uploadNotice=ref(''), loadError=ref('')
@@ -21,7 +21,7 @@ async function upload(){
  if(!uploadFile.value)return
  busy.value=true;error.value=''
  try{const form=new FormData();form.append('script',uploadFile.value);form.append('requirements',requirements.value);form.append('evidence',evidence.value);form.append('base_version_id',state.value.active_version_id)
- const result=await api('/tasks/'+props.taskId+'/upload',{method:'POST',body:form});uploadNotice.value=`V${result.version} 已提交。验证失败会尝试自动修复，修复版需确认后使用。`;showUpload.value=false;await load()
+ const result=await api('/tasks/'+props.taskId+'/upload',{method:'POST',body:form});uploadNotice.value=`v${result.version} 已保存为未运行候选，确认后才会启用。`;showUpload.value=false;await load()
  }catch(e){error.value=e.message}finally{busy.value=false}
 }
 async function action(path){busy.value=true;error.value='';uploadNotice.value='';try{await api(path,{method:'POST'});await load()}catch(e){error.value=e.message}finally{busy.value=false}}
@@ -31,7 +31,7 @@ async function dismiss(id){await action(`/updates/${id}/stop`)}
 function formatted(value){return value==null?'未说明':typeof value==='object'?JSON.stringify(value):String(value)}
 function versionState(version){
  if(version.id===state.value?.active_version_id)return {label:'使用中',tone:'current'}
- if(version.update_status==='ready')return {label:'待确认',tone:'pending'}
+ if(['candidate','ready'].includes(version.update_status))return {label:'待确认',tone:'pending'}
  if(repairFor(state.value,version))return {label:'验证未通过',tone:'failed'}
  if(version.approved)return {label:'可切换',tone:'approved'}
  return {label:'未启用',tone:'draft'}
@@ -39,7 +39,7 @@ function versionState(version){
 function versionBase(version){
  if(!version.base_version_id)return '原始版本'
  const base=state.value?.versions.find(item=>item.id===version.base_version_id)
- return base?`V${base.sequence}`:'历史版本'
+ return base?`v${base.sequence}`:'历史版本'
 }
 function specRows(source){
  let spec
@@ -59,13 +59,13 @@ onBeforeUnmount(()=>{alive=false;clearInterval(timer)})
   <div v-if="updateNotice" class="version-update-notice" :class="{ 'needs-attention': updateNotice.repaired || ['repairing','failed','ready'].includes(latestUpdate.status) }" role="status">
    <strong>{{updateNotice.title}}</strong>
    <small>{{updateNotice.current}}</small>
-   <div v-if="latestUpdate.status==='ready'" class="version-notice-actions"><button class="button compact" :disabled="busy" @click="activate(latestUpdate.id)">确认使用 V{{latestUpdate.sequence}}</button><button class="button ghost compact" :disabled="busy" @click="dismiss(latestUpdate.id)">暂不使用</button></div>
+   <div v-if="['candidate','ready'].includes(latestUpdate.status)" class="version-notice-actions"><button class="button compact" :disabled="busy" @click="activate(latestUpdate.id)">确认使用 v{{latestUpdate.sequence}}</button><button class="button ghost compact" :disabled="busy" @click="dismiss(latestUpdate.id)">暂不使用</button></div>
    <details v-if="(updateNotice.repaired || ['repairing','failed'].includes(latestUpdate.status)) && updateNotice.originalLog"><summary>查看上传版本的验证信息</summary><pre>{{updateNotice.originalLog}}</pre></details>
   </div>
   <details class="version-section">
    <summary class="version-section-summary">
     <span class="summary-chevron" aria-hidden="true"></span>
-    <span class="summary-copy"><strong>代码版本</strong><small>{{state.versions.length}} 个版本 · 当前 V{{state.versions.find(v=>v.id===state.active_version_id)?.sequence||'—'}}</small></span>
+    <span class="summary-copy"><strong>代码版本</strong><small>{{state.versions.length}} 个版本 · 当前 v{{state.versions.find(v=>v.id===state.active_version_id)?.sequence||'—'}}</small></span>
    </summary>
    <div class="version-section-body">
     <div class="version-toolbar">
@@ -73,7 +73,7 @@ onBeforeUnmount(()=>{alive=false;clearInterval(timer)})
      <button type="button" class="button version-upload-trigger" :aria-expanded="showUpload" @click="openUpload"><span aria-hidden="true">＋</span>{{showUpload?'收起更新':'更新脚本'}}</button>
     </div>
     <form v-if="showUpload" @submit.prevent="upload" class="version-upload">
-     <div class="version-upload-heading"><strong>上传新版本</strong><small>先验证；失败会尝试生成修复版，验证通过后由你确认使用</small></div>
+     <div class="version-upload-heading"><strong>上传新版本</strong><small>保存为后续 vN，不安装、不试跑；由管理员确认后启用</small></div>
      <div class="version-upload-grid">
       <label class="version-file-picker" :class="{ selected: uploadFile }">
        <input type="file" accept=".py" required @change="uploadFile=$event.target.files[0]">
@@ -84,30 +84,32 @@ onBeforeUnmount(()=>{alive=false;clearInterval(timer)})
       <label>修改说明（可选）<input v-model="evidence" placeholder="例如：修正翻页逻辑"></label>
       <label class="upload-requirements">Python 依赖<textarea v-model="requirements" rows="2" placeholder="沿用原依赖或填写新依赖"></textarea></label>
      </div>
-     <div class="version-upload-actions"><button type="button" class="button ghost" @click="showUpload=false">取消</button><button class="button" :disabled="busy">{{busy?'正在提交…':'上传并验证'}}</button></div>
+     <div class="version-upload-actions"><button type="button" class="button ghost" @click="showUpload=false">取消</button><button class="button" :disabled="busy">{{busy?'正在保存…':'保存候选版本'}}</button></div>
     </form>
     <div class="version-list">
      <article class="version-card" :class="`is-${versionState(v).tone}`" v-for="v in state.versions" :key="v.id">
       <span class="version-marker" aria-hidden="true"></span>
       <div class="version-card-main">
        <div class="version-identity">
-        <strong>V{{v.sequence}}</strong>
+        <strong>v{{v.sequence}}</strong>
         <span class="version-badge" :class="`is-${versionState(v).tone}`">{{versionState(v).label}}</span>
         <span v-if="v.origin==='repair'||v.kind==='repair'" class="version-badge">自动修复</span>
-        <span v-else-if="v.origin==='upload'||v.kind==='upload'" class="version-badge">手动上传</span>
+        <span v-else-if="v.origin==='manual_candidate'||v.kind==='manual_candidate'||v.origin==='upload'||v.kind==='upload'" class="version-badge">手动上传</span>
+        <span v-else-if="v.origin==='ai_candidate'||v.kind==='ai_candidate'" class="version-badge">AI 建议</span>
+        <span v-else-if="v.origin==='rollback'||v.kind==='rollback'" class="version-badge">历史内容副本</span>
        </div>
        <div class="version-meta"><span>运行环境：{{v.runtime||'原任务环境'}}</span><span>基于：{{versionBase(v)}}</span></div>
-       <p v-if="repairFor(state,v)" class="version-lineage">验证未通过，已生成修复版 V{{repairFor(state,v).sequence}}</p>
+       <p v-if="repairFor(state,v)" class="version-lineage">验证未通过，已生成修复版 v{{repairFor(state,v).sequence}}</p>
        <p v-else-if="v.origin==='repair'" class="version-lineage">由 {{versionBase(v)}} 自动修复生成</p>
       </div>
       <div class="version-actions">
        <a class="version-action" :href="`/api/task-versions/versions/${v.id}/download`"><span aria-hidden="true">↓</span> 下载 PY</a>
        <button type="button" class="version-action" :aria-expanded="detail===v.id" @click="detail=detail===v.id?null:v.id">{{detail===v.id?'收起':'详情'}}</button>
-       <template v-if="v.update_status==='ready'&&v.update_id"><button type="button" class="version-action" :disabled="busy" @click="dismiss(v.update_id)">暂不使用</button><button type="button" class="version-action activate" :disabled="busy" @click="activate(v.update_id)">确认使用</button></template>
-       <button type="button" class="version-action rollback" v-else-if="v.approved&&v.id!==state.active_version_id" :disabled="busy" @click="rollback(v.id)">{{v.sequence<(state.versions.find(item=>item.id===state.active_version_id)?.sequence||0)?'回退至此':'使用此版本'}}</button>
+       <template v-if="['candidate','ready'].includes(v.update_status)&&v.update_id"><button type="button" class="version-action" :disabled="busy" @click="dismiss(v.update_id)">暂不使用</button><button type="button" class="version-action activate" :disabled="busy" @click="activate(v.update_id)">确认使用</button></template>
+       <button type="button" class="version-action rollback" v-else-if="v.approved&&v.id!==state.active_version_id" :disabled="busy" @click="rollback(v.id)">复制此版并启用</button>
       </div>
       <div class="version-detail" v-if="detail===v.id">
-       <div class="version-detail-heading"><strong>保存的任务信息</strong><small>随 V{{v.sequence}} 一起保存</small></div>
+       <div class="version-detail-heading"><strong>保存的任务信息</strong><small>随 v{{v.sequence}} 一起保存</small></div>
        <div v-if="requirementRows(v).length" class="version-requirements"><article v-for="item in requirementRows(v)" :key="item.key"><span>{{item.label}}</span><strong>{{item.value}}</strong><small>{{item.origin}}</small></article></div>
        <div v-else class="version-empty-requirements">该版本没有记录具体任务要求</div>
       </div>

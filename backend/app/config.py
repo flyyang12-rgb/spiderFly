@@ -72,3 +72,4 @@ COOKIE_SECURE = os.getenv("SPIDERFLY_COOKIE_SECURE", "false").strip().lower() in
     "on",
 }
 SESSION_COOKIE_NAME = "spiderfly_session"
+SERVER_URL = os.getenv("SPIDERFLY_SERVER_URL", "").strip().rstrip("/")
