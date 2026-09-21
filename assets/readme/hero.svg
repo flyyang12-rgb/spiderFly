@@ -1,17 +1,35 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="390" viewBox="0 0 1200 390" role="img" aria-labelledby="title desc">
-<title id="title">SpiderFly · 团队共享的 Python 任务中心</title>
-<desc id="desc">一台 Windows，共享 Python 任务。成员从浏览器提交，任务串行运行，日志和结果统一留存。示意图，不是产品截图。</desc>
-<rect x="0" y="0" width="1200" height="390" rx="22" fill="#edf6ef" stroke="none"/>
-<rect x="48" y="48" width="6" height="226" rx="3" fill="#009139" stroke="none"/>
-<text x="80" y="72" font-family="Segoe UI, Microsoft YaHei, PingFang SC, sans-serif" font-size="20" font-weight="600" fill="#427154">SHARED WINDOWS / PYTHON TASKS</text>
-<text x="76" y="182" font-family="Segoe UI, Microsoft YaHei, PingFang SC, sans-serif" font-size="102" font-weight="700" fill="#163b28">SpiderFly</text>
-<text x="80" y="246" font-family="Segoe UI, Microsoft YaHei, PingFang SC, sans-serif" font-size="38" font-weight="600" fill="#163b28">一台电脑，运行整个团队的 Python 任务。</text>
-<rect x="80" y="294" width="1040" height="2" rx="0" fill="#bad5c4" stroke="none"/>
-<text x="80" y="350" font-family="Segoe UI, Microsoft YaHei, PingFang SC, sans-serif" font-size="34" font-weight="700" fill="#00752e">.py</text>
-<text x="248" y="350" font-family="Segoe UI, Microsoft YaHei, PingFang SC, sans-serif" font-size="32" font-weight="600" fill="#163b28">提交</text>
-<text x="494" y="350" font-family="Segoe UI, Microsoft YaHei, PingFang SC, sans-serif" font-size="32" font-weight="600" fill="#163b28">排队执行</text>
-<text x="906" y="350" font-family="Segoe UI, Microsoft YaHei, PingFang SC, sans-serif" font-size="32" font-weight="600" fill="#163b28">日志 / 结果</text>
-<path d="M155 338H210M352 338H455M654 338H866" fill="none" stroke="#6d9d7e" stroke-width="3"/>
-<text x="1090" y="144" font-family="Segoe UI, Microsoft YaHei, PingFang SC, sans-serif" font-size="66" font-weight="700" fill="#00752e" text-anchor="middle">01</text>
-<text x="1090" y="184" font-family="Segoe UI, Microsoft YaHei, PingFang SC, sans-serif" font-size="20" font-weight="500" fill="#427154" text-anchor="middle">串行执行</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="410" viewBox="0 0 1200 410" role="img" aria-labelledby="title desc">
+  <title id="title">SpiderFly · 局域网 Windows 自动化调度中心</title>
+  <desc id="desc">管理员在主控网页安排 Python 任务，局域网内获批的 Windows Agent 执行任务并回传进度、日志与结果。</desc>
+  <rect width="1200" height="410" rx="24" fill="#f3f7f3"/>
+  <path d="M0 24Q0 0 24 0H1176Q1200 0 1200 24V410H0Z" fill="#edf6ef"/>
+  <g id="title-block" transform="translate(58 52)">
+    <text x="0" y="20" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="18" font-weight="600" fill="#427154">WINDOWS · LAN · PYTHON AUTOMATION</text>
+    <text x="0" y="108" font-family="Segoe UI, Microsoft YaHei, PingFang SC, sans-serif" font-size="78" font-weight="700" fill="#163b28">SpiderFly</text>
+    <text x="2" y="160" font-family="Segoe UI, Microsoft YaHei, PingFang SC, sans-serif" font-size="30" font-weight="600" fill="#163b28">一台主控，调度局域网里的 Windows 电脑。</text>
+    <text x="2" y="204" font-family="Segoe UI, Microsoft YaHei, PingFang SC, sans-serif" font-size="22" fill="#52685a">网页安排任务 · Agent 执行 · 日志与结果集中回传</text>
+    <g transform="translate(0 254)">
+      <rect width="174" height="46" rx="8" fill="#009139"/>
+      <text x="87" y="30" text-anchor="middle" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="20" font-weight="600" fill="#ffffff">双击安装主控</text>
+      <rect x="190" width="188" height="46" rx="8" fill="#ffffff" stroke="#b9c9bd"/>
+      <text x="284" y="30" text-anchor="middle" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="20" font-weight="600" fill="#294333">下载并接入 Agent</text>
+    </g>
+  </g>
+  <g id="system-map" transform="translate(710 52)">
+    <rect width="432" height="306" rx="18" fill="#ffffff" stroke="#cdd9cf"/>
+    <text x="24" y="34" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="18" font-weight="600" fill="#587060">REAL WORKFLOW</text>
+    <rect x="24" y="58" width="152" height="92" rx="12" fill="#e7f4ea" stroke="#82b391"/>
+    <text x="100" y="92" text-anchor="middle" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="22" font-weight="700" fill="#163b28">主控网页</text>
+    <text x="100" y="123" text-anchor="middle" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="18" fill="#427154">任务 / 计划 / 审批</text>
+    <path d="M176 104H248" stroke="#009139" stroke-width="3"/>
+    <path d="M238 96L250 104L238 112" fill="none" stroke="#009139" stroke-width="3"/>
+    <rect x="252" y="58" width="156" height="92" rx="12" fill="#f7f8f6" stroke="#b9c9bd"/>
+    <text x="330" y="92" text-anchor="middle" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="22" font-weight="700" fill="#163b28">Windows Agent</text>
+    <text x="330" y="123" text-anchor="middle" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="18" fill="#52685a">浏览器 / Excel / .py</text>
+    <path d="M330 150V194" stroke="#789883" stroke-width="3"/>
+    <path d="M322 184L330 196L338 184" fill="none" stroke="#789883" stroke-width="3"/>
+    <rect x="24" y="198" width="384" height="72" rx="12" fill="#163b28"/>
+    <text x="216" y="228" text-anchor="middle" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="21" font-weight="600" fill="#ffffff">进度 · 日志 · 产物 · 失败状态</text>
+    <text x="216" y="254" text-anchor="middle" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="18" fill="#bcd2c2">统一回到主控，保留可追溯记录</text>
+  </g>
 </svg>
