@@ -107,7 +107,7 @@ async function copyCode() {
     <header class="host-heading">
       <div>
         <h2 id="hosts-heading">宿主机</h2>
-        <p>管理局域网 Windows 电脑并查看远程运行。选择运行电脑和启动任务请到任务中心。</p>
+        <p>接入局域网电脑，查看远程运行。运行电脑和任务在任务中心设置。</p>
       </div>
       <button class="host-button" type="button" :disabled="refreshing" @click="refresh()">
         {{ refreshing ? '正在刷新…' : '刷新状态' }}
@@ -135,11 +135,11 @@ async function copyCode() {
         <ol class="host-steps">
           <li>生成一次性接入码并下载 Agent 安装包。</li>
           <li>在新电脑解压后双击“安装并接入Agent”。</li>
-          <li>新电脑只需填写主控地址、接入码和电脑名称，不需要打开 PowerShell。</li>
+          <li>填写主控地址、接入码和电脑名称。</li>
           <li>电脑出现在下方待批准列表，管理员核对后批准。</li>
-          <li>在主控和新电脑上开启调度；随后在任务中心选择运行电脑并启动任务。</li>
+          <li>在两台电脑上开启调度，再到任务中心选择运行电脑并启动任务。</li>
         </ol>
-        <p class="host-help">Agent 需要在已登录的 Windows 桌面中运行。新电脑不需要部署数据库、模型或知识库。当前主控和 Agent 不能在同一台电脑同时运行，请先使用另一台电脑接入。</p>
+        <p class="host-help">Agent 需要已登录的 Windows 桌面。请在另一台电脑接入，无需部署数据库、模型或知识库。</p>
         <div class="host-card-actions">
           <button class="host-button primary" type="button" :disabled="Boolean(busy)" @click="createEnrollment">
             {{ busy === 'enrollment' ? '正在生成…' : '生成一次性接入码' }}
@@ -152,17 +152,17 @@ async function copyCode() {
             <input id="host-enrollment-code" ref="codeInput" :value="enrollment.code" readonly autocomplete="off" spellcheck="false" @focus="$event.target.select()" />
             <button class="host-button" type="button" @click="copyCode">复制</button>
           </div>
-          <p>有效期至 {{ formatTime(enrollment.expires_at) }}，仅供一台电脑申请一次。接入码只在生成时返回，离开本页后不再显示。</p>
+          <p>有效期至 {{ formatTime(enrollment.expires_at) }}，只供一台电脑使用。离开本页后无法再次查看接入码。</p>
           <label for="host-server-url">主控地址</label>
           <input id="host-server-url" :value="enrollment.server_url" readonly @focus="$event.target.select()" />
-          <p>请使用新电脑能访问的局域网地址；如果这里显示 127.0.0.1 或 localhost，请换成主控电脑的局域网 IP。</p>
+          <p>填写新电脑能访问的主控地址。若显示 127.0.0.1 或 localhost，请改用主控的局域网 IP。</p>
           <button class="host-button quiet" type="button" @click="enrollment = null">隐藏接入码</button>
         </div>
       </section>
 
       <section class="host-panel" aria-labelledby="host-list-heading">
         <header class="host-section-heading">
-          <div><h3 id="host-list-heading">已登记的宿主机</h3><p>心跳自动刷新。主控和本机均允许调度，且有交互式会话时才会领取任务。</p></div>
+          <div><h3 id="host-list-heading">已登记的宿主机</h3><p>状态自动刷新。主控和 Agent 都开启调度、桌面会话可用时，电脑才会领取任务。</p></div>
           <div class="host-filter"><label for="host-filter">显示</label><select id="host-filter" v-model="hostFilter"><option value="all">全部电脑</option><option value="pending">待批准</option><option value="approved">已批准</option></select></div>
         </header>
         <div v-if="!visibleHosts.length" class="host-empty"><strong>{{ hosts.length ? '没有符合条件的电脑' : '还没有电脑申请接入' }}</strong><p>{{ hosts.length ? '切换筛选查看其他电脑。' : '生成接入码，在另一台 Windows 电脑启动 Agent 后，申请会显示在这里。' }}</p></div>
@@ -200,7 +200,7 @@ async function copyCode() {
       </section>
 
       <section class="host-panel" aria-labelledby="remote-runs-heading">
-        <header class="host-section-heading"><div><h3 id="remote-runs-heading">远程运行记录</h3><p>最近 {{ runs.length }} 条，最多显示 100 条。本机旧运行仍在运行中心查看。</p></div><div class="host-filter"><label for="run-filter">显示</label><select id="run-filter" v-model="runFilter"><option value="all">全部状态</option><option value="active">尚未结束</option><option value="attention">失败或待确认</option></select></div></header>
+        <header class="host-section-heading"><div><h3 id="remote-runs-heading">远程运行记录</h3><p>显示最近 {{ runs.length }} 条，最多 100 条。本机运行请到运行中心查看。</p></div><div class="host-filter"><label for="run-filter">显示</label><select id="run-filter" v-model="runFilter"><option value="all">全部状态</option><option value="active">尚未结束</option><option value="attention">失败或待确认</option></select></div></header>
         <div v-if="!visibleRuns.length" class="host-empty"><strong>{{ runs.length ? '没有符合条件的运行' : '还没有远程运行' }}</strong><p>{{ runs.length ? '切换筛选查看其他状态。' : '在任务中心选择运行电脑并启动后，远程运行记录会显示在这里。' }}</p></div>
         <ul v-else class="host-runs">
           <li v-for="run in visibleRuns" :key="run.id" :class="{ selected: selectedRunId === run.id }">
@@ -216,8 +216,8 @@ async function copyCode() {
         <div v-if="detailError" class="host-feedback error" role="alert"><span>运行详情刷新失败：{{ detailError }}</span><button class="host-button" type="button" @click="loadRunDetail(selectedRunId)">重试</button></div>
         <template v-if="runDetail">
           <div class="host-detail-summary"><div><strong>{{ runDetail.task_name }} · v{{ runDetail.version_sequence ?? '?' }}</strong><p>{{ runDetail.host_name }} · <span class="host-badge" :class="tone(runDetail.status)"><i aria-hidden="true"></i>{{ runStatusLabels[runDetail.status] || runDetail.status }}</span></p></div><button v-if="activeRunStates.has(runDetail.status) && !runDetail.stop_requested" class="host-button danger" type="button" :disabled="Boolean(busy)" @click="stopRun(runDetail)">{{ busy === `stop:${runDetail.id}` ? '正在请求…' : runDetail.status === 'queued' ? '取消排队' : '请求停止' }}</button></div>
-          <p v-if="runDetail.stop_requested && activeRunStates.has(runDetail.status)" class="host-inline-warning">已请求停止，正在等待宿主机确认。请求发出不代表进程已经结束。</p>
-          <p v-if="runDetail.status === 'uncertain'" class="host-inline-warning">连接中断或重启后，旧运行尚未确认结束。宿主机继续保持占用，不会接收新任务。</p>
+          <p v-if="runDetail.stop_requested && activeRunStates.has(runDetail.status)" class="host-inline-warning">已请求停止，等待宿主机确认进程结束。</p>
+          <p v-if="runDetail.status === 'uncertain'" class="host-inline-warning">旧运行尚未确认结束，宿主机暂不接收新任务。</p>
           <p v-if="runDetail.waiting_reason" class="host-help">{{ runDetail.waiting_reason }}</p>
           <p v-if="runDetail.error" class="host-feedback" :class="runDetail.status === 'succeeded' ? 'success' : ['failed', 'timed_out'].includes(runDetail.status) ? 'error' : ''">{{ runDetail.error }}</p>
           <div v-if="runDetail.collection_progress" class="host-progress">
@@ -226,7 +226,7 @@ async function copyCode() {
             <small>{{ runDetail.collection_progress.latest.message || `已收到 ${runDetail.collection_progress.event_count} 条结构化进度` }}</small>
           </div>
           <div v-if="runDetail.maintenance" class="host-maintenance" :class="{ ready: runDetail.maintenance.status === 'candidate' }">
-            <div><strong>AI 维护建议</strong><p v-if="['pending','generating'].includes(runDetail.maintenance.status)">正在根据冻结版本和远程失败日志生成参考建议。不会自动启用或运行。</p><p v-else-if="runDetail.maintenance.status === 'candidate'">已生成候选 v{{ runDetail.maintenance.sequence }}。该版本尚未试跑，确认后才会启用并在原宿主机创建一条新运行。</p><p v-else-if="runDetail.maintenance.status === 'activated'">候选已由管理员确认；远程重跑 #{{ runDetail.maintenance.rerun_remote_run_id }} 已单独记录。</p><p v-else>{{ runDetail.maintenance.note || '本次未生成代码候选。' }}</p></div>
+            <div><strong>AI 维护建议</strong><p v-if="['pending','generating'].includes(runDetail.maintenance.status)">正根据本次代码和失败日志生成建议，生成后需管理员确认。</p><p v-else-if="runDetail.maintenance.status === 'candidate'">候选 v{{ runDetail.maintenance.sequence }} 尚未试跑。确认后会启用，并在原宿主机新建运行。</p><p v-else-if="runDetail.maintenance.status === 'activated'">管理员已确认候选，远程重跑 #{{ runDetail.maintenance.rerun_remote_run_id }} 已单独记录。</p><p v-else>{{ runDetail.maintenance.note || '本次未生成代码候选。' }}</p></div>
             <div v-if="runDetail.maintenance.status === 'candidate'" class="host-maintenance-actions"><a class="host-button" :href="`/api/task-versions/versions/${runDetail.maintenance.candidate_version_id}/download`" download>下载候选源码</a><button class="host-button" type="button" :disabled="Boolean(busy)" @click="dismissCandidate(runDetail.maintenance)">暂不使用</button><button class="host-button primary" type="button" :disabled="Boolean(busy)" @click="activateCandidate(runDetail.maintenance)">{{ busy === `candidate:${runDetail.maintenance.update_id}` ? '正在确认…' : '确认并重新运行' }}</button></div>
           </div>
           <dl class="host-run-facts"><div><dt>提交时间</dt><dd>{{ formatTime(runDetail.created_at) }}</dd></div><div><dt>开始时间</dt><dd>{{ formatTime(runDetail.started_at) }}</dd></div><div><dt>结束时间</dt><dd>{{ formatTime(runDetail.finished_at) }}</dd></div><div><dt>退出码</dt><dd>{{ runDetail.exit_code ?? '—' }}</dd></div></dl>

@@ -31,7 +31,7 @@ const {
         /></label>
         <label class="field"
           ><span>任务说明</span
-          ><input v-model="taskForm.description" type="text" maxlength="500" placeholder="这个计划负责什么"
+          ><input v-model="taskForm.description" type="text" maxlength="500" placeholder="说明任务用途"
         /></label>
 
         <section class="schedule-card">
@@ -52,7 +52,7 @@ const {
                 {{ host.name }}{{ host.approval_status === 'approved' ? '' : '（不可用）' }}
               </option>
             </select>
-            <small>手动点击“运行”和每天／每周计划都会发往这台电脑；离线或忙碌时留在原电脑排队，不会改投主控。</small>
+            <small>手动和计划运行都发往这台电脑；离线或忙碌时在原电脑排队。</small>
           </label>
           <div class="trigger-choice-grid">
             <button

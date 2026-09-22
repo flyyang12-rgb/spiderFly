@@ -1,28 +1,41 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="700" viewBox="0 0 1200 700" role="img" aria-labelledby="title desc">
-  <title id="title">SpiderFly：知识、Agent 与执行</title>
-  <desc id="desc">知识库供 AI 检索，Agent 结合真实页面生成 Python，统一队列负责试跑和任务执行，结果与日志留存。添加资料不等于接入执行能力。</desc>
-  <rect width="1200" height="700" rx="22" fill="#f5f7f4"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="680" viewBox="0 0 1200 680" role="img" aria-labelledby="title desc">
+  <title id="title">SpiderFly 的主控、AI 与两条执行链路</title>
+  <desc id="desc">主控保存任务、版本和运行记录。知识库为 AI 生成脚本和维护候选提供资料。本机任务进入主控串行队列；远程任务由指定的 Windows Agent 领取并回传结果。正常运行已保存脚本不调用 AI。</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 8 5 1 9" fill="none" stroke="#64816b" stroke-width="1.5"/></marker>
+  </defs>
+  <rect width="1200" height="680" rx="22" fill="#f5f7f4"/>
   <g font-family="Segoe UI, Microsoft YaHei, PingFang SC, sans-serif">
-    <text x="56" y="78" font-size="46" font-weight="700" fill="#163b28">知识有依据，执行有记录。</text>
+    <text x="52" y="74" font-size="43" font-weight="700" fill="#163b28">SpiderFly 如何分工</text>
+    <text x="52" y="113" font-size="23" fill="#53685b">主控管理任务；本机和远程任务分别执行</text>
+    <g id="controller">
+      <rect x="52" y="148" width="1096" height="118" rx="16" fill="#163b28"/>
+      <text x="82" y="194" font-size="32" font-weight="700" fill="#fff">主控网页</text>
+      <text x="82" y="234" font-size="23" fill="#e2f0e7">账号 · 任务 · 计划 · 版本 · 运行记录 · Agent 审批</text>
+    </g>
     <g id="knowledge">
-      <rect x="56" y="120" width="1088" height="120" rx="12" fill="#fff"/>
-      <rect x="56" y="120" width="6" height="120" rx="3" fill="#009139"/>
-      <text x="92" y="193" font-size="48" font-weight="650" fill="#163b28">知识库</text>
-      <text x="430" y="190" font-size="34" fill="#53685b">工具用法 · 版本来源 · 平台规则</text>
+      <rect x="52" y="294" width="532" height="108" rx="14" fill="#fff" stroke="#dce5dd"/>
+      <text x="80" y="340" font-size="28" font-weight="700" fill="#163b28">知识库</text>
+      <text x="80" y="375" font-size="21" fill="#53685b">工具用法、来源和平台规则</text>
     </g>
-    <path d="M600 250v26m-10-10 10 10 10-10" fill="none" stroke="#009139" stroke-width="4"/>
-    <g id="agent">
-      <rect x="56" y="288" width="1088" height="120" rx="12" fill="#fff"/>
-      <rect x="56" y="288" width="6" height="120" rx="3" fill="#009139"/>
-      <text x="92" y="361" font-size="48" font-weight="650" fill="#163b28">AI Agent</text>
-      <text x="430" y="358" font-size="34" fill="#53685b">查资料 · 看页面 · 生成 Python</text>
+    <g id="ai">
+      <rect x="616" y="294" width="532" height="108" rx="14" fill="#fff" stroke="#dce5dd"/>
+      <text x="644" y="340" font-size="28" font-weight="700" fill="#163b28">AI 助手</text>
+      <text x="644" y="375" font-size="21" fill="#53685b">生成脚本草稿和失败维护候选</text>
     </g>
-    <path d="M600 418v26m-10-10 10 10 10-10" fill="none" stroke="#009139" stroke-width="4"/>
-    <g id="execution">
-      <rect x="56" y="456" width="1088" height="120" rx="12" fill="#163b28"/>
-      <text x="92" y="529" font-size="48" font-weight="650" fill="#fff">统一队列</text>
-      <text x="430" y="526" font-size="34" fill="#e2f0e7">试跑验收 · 任务执行 · 结果日志</text>
+    <path d="M592 348h16" fill="none" stroke="#64816b" stroke-width="3" marker-end="url(#arrow)"/>
+    <g id="local">
+      <rect x="52" y="448" width="532" height="144" rx="14" fill="#e8f4eb" stroke="#b9d5c0"/>
+      <text x="80" y="494" font-size="29" font-weight="700" fill="#163b28">本机执行器</text>
+      <text x="80" y="531" font-size="21" fill="#425c4b">主控电脑的串行队列</text>
+      <text x="80" y="563" font-size="21" fill="#425c4b">运行脚本，保存日志和结果</text>
     </g>
-    <text x="56" y="644" font-size="34" fill="#53685b">普通 Python 脚本执行业务；正常运行不重复调用 AI。</text>
+    <g id="remote">
+      <rect x="616" y="448" width="532" height="144" rx="14" fill="#eef3ef" stroke="#c5d5c8"/>
+      <text x="644" y="494" font-size="29" font-weight="700" fill="#163b28">Windows Agent</text>
+      <text x="644" y="531" font-size="21" fill="#425c4b">在指定电脑领取远程任务</text>
+      <text x="644" y="563" font-size="21" fill="#425c4b">运行脚本，回传日志和结果</text>
+    </g>
+    <text x="52" y="637" font-size="22" fill="#53685b">正常运行已保存脚本时不调用 AI；远程任务不进入旧本机队列。</text>
   </g>
 </svg>

@@ -1,53 +1,41 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="780" viewBox="0 0 1200 780" role="img" aria-labelledby="title desc">
-  <title id="title">SpiderFly 失败自动维护流程</title>
-  <desc id="desc">任务失败或超时后，AI 根据日志生成修复候选，进入串行队列按原要求验证。符合启用条件则启用修复并在预算及任务状态允许时自动重跑一次；验证未通过则保留原版本。原失败记录始终保留，自动重跑失败不再循环修复。</desc>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="640" viewBox="0 0 1200 640" role="img" aria-labelledby="title desc">
+  <title id="title">SpiderFly 本机与远程任务的失败处理</title>
+  <desc id="desc">本机任务失败后，AI 生成修复版并验证，通过后按配置启用，最多自动重跑一次。远程任务失败后，AI 生成未试跑候选，管理员确认后才启用，并在原电脑新建运行。两条流程都保留原失败记录。</desc>
   <defs>
-    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M1 1 8 5 1 9" fill="none" stroke="#6a8070" stroke-width="1.5"/></marker>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 8 5 1 9" fill="none" stroke="#64816b" stroke-width="1.5"/></marker>
   </defs>
-  <rect width="1200" height="780" rx="22" fill="#f5f7f4"/>
+  <rect width="1200" height="640" rx="22" fill="#f5f7f4"/>
   <g font-family="Segoe UI, Microsoft YaHei, PingFang SC, sans-serif">
-    <text x="56" y="82" font-size="46" font-weight="700" fill="#163b28">失败后，自动维护怎么走？</text>
-    <text x="56" y="130" font-size="25" fill="#53685b">修复先验证，再启用；原失败记录始终保留。</text>
-    <g id="failure">
-      <rect x="56" y="176" width="320" height="184" rx="14" fill="#fff" stroke="#dce5dd"/>
-      <text x="84" y="219" font-size="22" font-weight="700" fill="#98633a">01 / 发现故障</text>
-      <text x="84" y="270" font-size="32" font-weight="700" fill="#163b28">任务失败或超时</text>
-      <text x="84" y="319" font-size="24" fill="#53685b">保留日志、源码与原要求</text>
+    <text x="52" y="72" font-size="43" font-weight="700" fill="#163b28">任务失败后如何处理</text>
+    <text x="52" y="113" font-size="23" fill="#53685b">本机和远程任务采用不同的启用规则</text>
+    <g id="local">
+      <rect x="52" y="146" width="1096" height="192" rx="16" fill="#fff" stroke="#dce5dd"/>
+      <rect x="52" y="146" width="8" height="192" rx="4" fill="#009139"/>
+      <text x="80" y="187" font-size="28" font-weight="700" fill="#163b28">本机任务</text>
+      <text x="80" y="217" font-size="19" fill="#53685b">旧单机兼容流程</text>
+      <g font-size="21" font-weight="600" fill="#163b28" text-anchor="middle">
+        <rect x="248" y="222" width="170" height="58" rx="10" fill="#e8f4eb"/><text x="333" y="258">失败或超时</text>
+        <rect x="467" y="222" width="170" height="58" rx="10" fill="#e8f4eb"/><text x="552" y="258">生成修复版</text>
+        <rect x="686" y="222" width="170" height="58" rx="10" fill="#e8f4eb"/><text x="771" y="258">验证并启用</text>
+        <rect x="905" y="222" width="190" height="58" rx="10" fill="#163b28"/><text x="1000" y="258" fill="#fff">最多自动重跑一次</text>
+      </g>
+      <g fill="none" stroke="#64816b" stroke-width="3" marker-end="url(#arrow)"><path d="M425 251h34"/><path d="M644 251h34"/><path d="M863 251h34"/></g>
+      <text x="248" y="311" font-size="19" fill="#53685b">只有验证通过且任务状态、预算允许时才启用和重跑。</text>
     </g>
-    <g id="repair">
-      <rect x="440" y="176" width="320" height="184" rx="14" fill="#fff" stroke="#dce5dd"/>
-      <text x="468" y="219" font-size="22" font-weight="700" fill="#009139">02 / 分析并修复</text>
-      <text x="468" y="270" font-size="32" font-weight="700" fill="#163b28">AI 生成修复候选</text>
-      <text x="468" y="319" font-size="24" fill="#53685b">按故障修改，另存新版本</text>
+    <g id="remote">
+      <rect x="52" y="356" width="1096" height="192" rx="16" fill="#fff" stroke="#dce5dd"/>
+      <rect x="52" y="356" width="8" height="192" rx="4" fill="#5b7f69"/>
+      <text x="80" y="397" font-size="28" font-weight="700" fill="#163b28">远程任务</text>
+      <text x="80" y="427" font-size="19" fill="#53685b">Windows Agent 流程</text>
+      <g font-size="21" font-weight="600" fill="#163b28" text-anchor="middle">
+        <rect x="248" y="432" width="170" height="58" rx="10" fill="#eef3ef"/><text x="333" y="468">失败或超时</text>
+        <rect x="467" y="432" width="170" height="58" rx="10" fill="#eef3ef"/><text x="552" y="468">未试跑候选</text>
+        <rect x="686" y="432" width="170" height="58" rx="10" fill="#eef3ef"/><text x="771" y="468">管理员确认</text>
+        <rect x="905" y="432" width="190" height="58" rx="10" fill="#163b28"/><text x="1000" y="468" fill="#fff">在原电脑新建运行</text>
+      </g>
+      <g fill="none" stroke="#64816b" stroke-width="3" marker-end="url(#arrow)"><path d="M425 461h34"/><path d="M644 461h34"/><path d="M863 461h34"/></g>
+      <text x="248" y="521" font-size="19" fill="#53685b">候选不会自动启用或运行；证据不足时可能只生成建议。</text>
     </g>
-    <g id="verification">
-      <rect x="824" y="176" width="320" height="184" rx="14" fill="#fff" stroke="#009139" stroke-width="2"/>
-      <text x="852" y="219" font-size="22" font-weight="700" fill="#009139">03 / 排队验证</text>
-      <text x="852" y="270" font-size="32" font-weight="700" fill="#163b28">按原要求试跑</text>
-      <text x="852" y="319" font-size="24" fill="#53685b">核对产物、字段与数量</text>
-    </g>
-    <g id="flow" fill="none" stroke="#6a8070" stroke-width="3" marker-end="url(#arrow)">
-      <path d="M388 268H427"/>
-      <path d="M772 268H811"/>
-      <path d="M984 372V397H560V448"/>
-      <path d="M984 397H1080V448"/>
-    </g>
-    <text x="76" y="433" font-size="23" fill="#087538">验证通过且符合启用条件</text>
-    <text x="664" y="433" font-size="23" fill="#98633a">验证未通过 / 不满足条件</text>
-    <g id="activated">
-      <rect x="56" y="462" width="548" height="146" rx="14" fill="#163b28"/>
-      <text x="84" y="516" font-size="32" font-weight="700" fill="#fff">启用修复 · 自动重跑一次</text>
-      <text x="84" y="565" font-size="24" fill="#e2f0e7">任务状态与剩余预算允许时入队</text>
-    </g>
-    <g id="retained">
-      <rect x="628" y="462" width="516" height="146" rx="14" fill="#fff" stroke="#dce5dd"/>
-      <text x="656" y="516" font-size="32" font-weight="700" fill="#163b28">保留原版本</text>
-      <text x="656" y="565" font-size="24" fill="#53685b">记录维护结果，供人工处理</text>
-    </g>
-    <g id="rerun-boundary">
-      <path d="M84 638H1116" stroke="#dce5dd" stroke-width="2"/>
-      <text x="56" y="685" font-size="29" font-weight="650" fill="#163b28">重跑仍失败 → 记录结果，不再循环修复</text>
-      <text x="56" y="736" font-size="23" fill="#53685b">仅支持已接入的运行环境；停止、停用、源码变化和维护预算继续约束流程。</text>
-    </g>
+    <text x="52" y="600" font-size="22" fill="#53685b">两条流程都保留原失败记录；后续运行另记一条结果。</text>
   </g>
 </svg>

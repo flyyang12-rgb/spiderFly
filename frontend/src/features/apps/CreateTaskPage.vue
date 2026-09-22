@@ -28,7 +28,7 @@ onMounted(loadTargetHosts)
   <section class="view-stack">
     <section class="panel create-ai-entry">
       <div class="create-ai-entry-icon" aria-hidden="true">AI</div>
-      <div><strong>让 AI 帮你创建</strong><small>描述需求，AI 会生成脚本和任务配置供你确认</small></div>
+      <div><strong>让 AI 帮你创建</strong><small>描述需求，确认 AI 生成的脚本和任务设置</small></div>
       <button class="button primary" type="button" @click="openAi()">开始 AI 创建</button>
     </section>
     <section v-if="isAdmin" class="panel">
@@ -36,7 +36,7 @@ onMounted(loadTargetHosts)
         <header class="upload-form-heading">
           <div>
             <h2>上传 Python 创建任务</h2>
-            <p>只保存一个 .py 和可选 requirements.txt；运行错误会在日志中报告</p>
+            <p>上传一个 .py，可附带 requirements.txt。运行错误会记录在日志中。</p>
           </div>
           <span><b>1</b> 任务与文件</span>
         </header>
@@ -51,7 +51,7 @@ onMounted(loadTargetHosts)
               v-model="appForm.description"
               type="text"
               maxlength="500"
-              placeholder="简单说明这个任务负责什么"
+              placeholder="说明任务用途"
           /></label>
         </div>
         <div class="upload-file-grid">
@@ -92,7 +92,7 @@ onMounted(loadTargetHosts)
             ></textarea>
           </label>
         </details>
-        <p class="field-help">保存前不安装依赖、不运行代码，也不做 Python 语法或业务验证。实际错误由目标宿主机运行后回传。</p>
+        <p class="field-help">保存时不安装依赖或验证脚本。运行错误会由目标电脑回传。</p>
         <section class="schedule-card create-task-settings">
           <div class="schedule-card-heading">
             <div><strong>运行设置</strong></div>
@@ -110,7 +110,7 @@ onMounted(loadTargetHosts)
             </button>
           </div>
           <label class="field schedule-target-field">
-            <span>计划运行宿主机</span>
+            <span>默认运行电脑（手动和计划）</span>
             <select v-model="appForm.target_host_id" :disabled="targetHostsLoading">
               <option value="">主控本机（旧执行链路）</option>
               <option
@@ -122,7 +122,7 @@ onMounted(loadTargetHosts)
                 {{ host.name }}{{ host.approval_status === 'approved' ? '' : '（不可用）' }}
               </option>
             </select>
-            <small>计划到点时固定发往这台电脑；离线或忙碌时仍保留在该机器队列。</small>
+            <small>手动和计划运行都发往这台电脑；离线或忙碌时在原电脑排队。</small>
           </label>
           <div v-if="appForm.trigger_type === 'manual'" class="schedule-hint">手动点击“运行”执行</div>
           <label v-else-if="appForm.trigger_type === 'daily'" class="field"

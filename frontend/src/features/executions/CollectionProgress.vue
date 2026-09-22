@@ -36,7 +36,7 @@ function eventTime(value) {
       <div v-if="finished"><small>缺失条数</small><strong>{{ latest.missing ?? '未确认' }}</strong></div>
     </div>
     <p class="collection-stage">{{ latest.stage || (finished ? '最后上报' : '正在采集') }}<span v-if="latest.message"> · {{ latest.message }}</span></p>
-    <small class="collection-updated">最后上报 {{ eventTime(latest.at) }}（北京时间）；数量由脚本上报，最终以结果文件和验收为准。</small>
+    <small class="collection-updated">最后上报：{{ eventTime(latest.at) }}（北京时间）。数量由脚本上报，请按结果文件验收。</small>
     <details class="collection-events">
       <summary>查看采集过程（{{ events.length }} 条{{ progress.event_count > events.length ? '，仅显示最近记录' : '' }}）</summary>
       <ol>
