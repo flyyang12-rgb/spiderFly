@@ -1,3 +1,7 @@
+## 2026-09-22 宿主机页移除重复分发表单（前端已更新）
+
+用户确认不需要“临时指定电脑运行”入口。已从宿主机页移除“分发任务”表单及其前端选机、选任务、重试暂存逻辑；保留电脑接入、审批、状态、远程运行记录与日志。运行统一从任务中心按保存的默认运行电脑发起。旧 `POST /api/hosts/{host_id}/runs` 后端接口暂留兼容及管理员权限，不再在页面暴露。隔离前端构建通过，新静态资源 `index-XibAeU2C.js` / `index-DdrEpXaG.css` 已由当前 8383 服务返回；打开中的旧页面需刷新。未修改正式数据库或重启后端；A/B 实机目标一致性仍未验收。提交与推送状态以 Git 记录为准。
+
 ## 2026-09-22 任务中心目标路由发布与主控重启
 
 修复提交 `2bc6270` 已推送至 GitHub `main`。重启前主控数据库 quick_check 为 ok，本机无待运行/执行中任务，远程有 1 条 queued；项目运维脚本安全停止主控后，创建仓库外备份 `D:\AI_Project\Workspace\Project_01_Py任务分发管理项目\SpiderFly-controller-backup-20260922-142615.zip`，再启动 A 主控。启动后 `0.0.0.0:8383` 正常监听，`/health` 显示 scheduler、queue/environment/AI worker 运行，首页已引用新版前端 `index-Se0UZsT8.js`，原 1 条远程 queued 记录仍在，数据库 quick_check 仍为 ok。未在真实 B 电脑执行新的手动目标一致性测试，也未调整 B Agent 或正式任务。

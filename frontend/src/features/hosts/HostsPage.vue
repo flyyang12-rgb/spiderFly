@@ -4,16 +4,16 @@ import { formatFileSize, formatTime } from '../../lib/format'
 import { useWorkspaceContext } from '../../workspace/context'
 import { activeRunStates, hostStateLabels, runStatusLabels, useHosts } from './useHosts'
 
-const { me, handleSessionExpired } = useWorkspaceContext()
+const { handleSessionExpired } = useWorkspaceContext()
 const props = defineProps({ openRunId: { type: Number, default: null } })
 const emit = defineEmits(['run-opened'])
 const {
-  hosts, tasks, runs, loading, refreshing, loadError, actionError, notice, busy, enrollment,
-  selectedHostId, selectedTaskId, selectedHost, selectedRunId, runDetail, detailLoading, detailError,
-  approvedHosts, retryPending, refresh, createEnrollment, hostAction, setMode, dispatch, stopRun,
+  hosts, runs, loading, refreshing, loadError, actionError, notice, busy, enrollment,
+  selectedRunId, runDetail, detailLoading, detailError,
+  refresh, createEnrollment, hostAction, setMode, stopRun,
   activateCandidate, dismissCandidate,
   openRun, closeRun, loadRunDetail,
-} = useHosts({ userId: me.value.id, onSessionExpired: handleSessionExpired })
+} = useHosts({ onSessionExpired: handleSessionExpired })
 
 const confirmation = ref(null)
 const codeInput = ref(null)
@@ -28,7 +28,6 @@ const visibleHosts = computed(() => hosts.value.filter((host) => hostFilter.valu
   || (hostFilter.value === 'pending' ? host.approval_status === 'pending' : host.approval_status === 'approved')))
 const visibleRuns = computed(() => runs.value.filter((run) => runFilter.value === 'all'
   || (runFilter.value === 'active' ? activeRunStates.has(run.status) : ['failed', 'timed_out', 'uncertain'].includes(run.status))))
-const unavailableHostSelected = computed(() => selectedHostId.value && !approvedHosts.value.some((host) => host.id === Number(selectedHostId.value)))
 
 function tone(state) {
   if (['idle', 'succeeded'].includes(state)) return 'good'
@@ -108,17 +107,13 @@ async function copyCode() {
     <header class="host-heading">
       <div>
         <h2 id="hosts-heading">宿主机</h2>
-        <p>管理局域网 Windows 电脑，向指定机器分发任务。</p>
+        <p>管理局域网 Windows 电脑并查看远程运行。选择运行电脑和启动任务请到任务中心。</p>
       </div>
       <button class="host-button" type="button" :disabled="refreshing" @click="refresh()">
         {{ refreshing ? '正在刷新…' : '刷新状态' }}
       </button>
     </header>
 
-    <div class="host-scope-note">
-      <strong>当前支持指定机器手动运行普通 Python 任务。</strong>
-      <span>带输入模板、受限环境和原生 DP 专用任务暂不支持。远程定时计划、托盘与桌面状态条尚未接入；远程失败会生成站内提醒，并按任务开关发送飞书摘要，AI 候选需管理员确认后才会重跑。</span>
-    </div>
     <p v-if="notice" class="host-feedback success" role="status">{{ notice }}</p>
     <p v-if="actionError" class="host-feedback error" role="alert">{{ actionError }}</p>
     <div v-if="loadError" class="host-feedback error" role="alert">
@@ -135,60 +130,35 @@ async function copyCode() {
         <div><span>近期未结束</span><strong>{{ activeCount }}</strong></div>
       </div>
 
-      <div class="host-setup-grid">
-        <section class="host-panel" aria-labelledby="enrollment-heading">
-          <header class="host-section-heading"><h3 id="enrollment-heading">接入新电脑</h3></header>
-          <ol class="host-steps">
-            <li>下载 Agent 并解压到另一台 Windows 电脑，按包内说明启动。</li>
-            <li>生成接入码并下载 Agent，在新电脑解压后双击“安装并接入Agent”。</li>
-            <li>新电脑只需填写主控地址、接入码和电脑名称，不需要打开 PowerShell。</li>
-            <li>电脑出现在下方待批准列表，管理员核对后批准。</li>
-            <li>开启主控调度，并在电脑上运行 <code>start.ps1 -Dispatch</code>。</li>
-          </ol>
-          <p class="host-help">Agent 需要在已登录的 Windows 桌面中运行。新电脑不需要部署数据库、模型或知识库。当前主控和 Agent 不能在同一台电脑同时运行，请先使用另一台电脑接入。</p>
-          <div class="host-card-actions">
-            <button class="host-button primary" type="button" :disabled="Boolean(busy)" @click="createEnrollment">
-              {{ busy === 'enrollment' ? '正在生成…' : '生成一次性接入码' }}
-            </button>
-            <a class="host-button" href="/api/hosts/agent-download" download>下载 Agent 安装包</a>
+      <section class="host-panel" aria-labelledby="enrollment-heading">
+        <header class="host-section-heading"><h3 id="enrollment-heading">接入新电脑</h3></header>
+        <ol class="host-steps">
+          <li>生成一次性接入码并下载 Agent 安装包。</li>
+          <li>在新电脑解压后双击“安装并接入Agent”。</li>
+          <li>新电脑只需填写主控地址、接入码和电脑名称，不需要打开 PowerShell。</li>
+          <li>电脑出现在下方待批准列表，管理员核对后批准。</li>
+          <li>在主控和新电脑上开启调度；随后在任务中心选择运行电脑并启动任务。</li>
+        </ol>
+        <p class="host-help">Agent 需要在已登录的 Windows 桌面中运行。新电脑不需要部署数据库、模型或知识库。当前主控和 Agent 不能在同一台电脑同时运行，请先使用另一台电脑接入。</p>
+        <div class="host-card-actions">
+          <button class="host-button primary" type="button" :disabled="Boolean(busy)" @click="createEnrollment">
+            {{ busy === 'enrollment' ? '正在生成…' : '生成一次性接入码' }}
+          </button>
+          <a class="host-button" href="/api/hosts/agent-download" download>下载 Agent 安装包</a>
+        </div>
+        <div v-if="enrollment" class="host-enrollment" aria-live="polite">
+          <label for="host-enrollment-code">接入码</label>
+          <div class="host-copy-row">
+            <input id="host-enrollment-code" ref="codeInput" :value="enrollment.code" readonly autocomplete="off" spellcheck="false" @focus="$event.target.select()" />
+            <button class="host-button" type="button" @click="copyCode">复制</button>
           </div>
-          <div v-if="enrollment" class="host-enrollment" aria-live="polite">
-            <label for="host-enrollment-code">接入码</label>
-            <div class="host-copy-row">
-              <input id="host-enrollment-code" ref="codeInput" :value="enrollment.code" readonly autocomplete="off" spellcheck="false" @focus="$event.target.select()" />
-              <button class="host-button" type="button" @click="copyCode">复制</button>
-            </div>
-            <p>有效期至 {{ formatTime(enrollment.expires_at) }}，仅供一台电脑申请一次。接入码只在生成时返回，离开本页后不再显示。</p>
-            <label for="host-server-url">主控地址</label>
-            <input id="host-server-url" :value="enrollment.server_url" readonly @focus="$event.target.select()" />
-            <p>请使用新电脑能访问的局域网地址；如果这里显示 127.0.0.1 或 localhost，请换成主控电脑的局域网 IP。</p>
-            <button class="host-button quiet" type="button" @click="enrollment = null">隐藏接入码</button>
-          </div>
-        </section>
-
-        <section class="host-panel" aria-labelledby="dispatch-heading">
-          <header class="host-section-heading"><h3 id="dispatch-heading">分发任务</h3></header>
-          <form class="host-dispatch-form" @submit.prevent="dispatch">
-            <label for="dispatch-host">目标宿主机</label>
-            <select id="dispatch-host" v-model="selectedHostId" :disabled="busy === 'dispatch' || !approvedHosts.length" required>
-              <option value="" disabled>{{ approvedHosts.length ? '选择已批准的电脑' : '请先批准一台宿主机' }}</option>
-              <option v-if="unavailableHostSelected" :value="selectedHostId" disabled>{{ selectedHost ? `${selectedHost.name} · ${hostStateLabels[selectedHost.state] || '不可用'}` : '原宿主机不可用，请重新选择' }}</option>
-              <option v-for="host in approvedHosts" :key="host.id" :value="String(host.id)">{{ host.name }} · {{ hostStateLabels[host.state] || host.state }}</option>
-            </select>
-            <p v-if="selectedHost" class="host-help">{{ hostHint(selectedHost) }}</p>
-            <label for="dispatch-task">任务</label>
-            <select id="dispatch-task" v-model="selectedTaskId" :disabled="busy === 'dispatch' || !tasks.length" required>
-              <option value="" disabled>{{ tasks.length ? '选择现有普通 Python 任务' : '请先在任务中心创建任务' }}</option>
-              <option v-for="task in tasks" :key="task.id" :value="String(task.id)">{{ task.name }}</option>
-            </select>
-            <p class="host-help">提交时保存本次源码与依赖快照。目标机器离线、忙碌或非调度时保持排队，不会自动换电脑。</p>
-            <p v-if="retryPending" class="host-inline-warning">上次分发未完成。重试将沿用同一请求编号，避免重复创建运行。</p>
-            <button class="host-button primary" type="submit" :disabled="Boolean(busy) || !selectedHostId || !selectedTaskId || selectedHost?.approval_status !== 'approved'">
-              {{ busy === 'dispatch' ? '正在分发…' : retryPending ? '重试分发' : '分发到这台电脑' }}
-            </button>
-          </form>
-        </section>
-      </div>
+          <p>有效期至 {{ formatTime(enrollment.expires_at) }}，仅供一台电脑申请一次。接入码只在生成时返回，离开本页后不再显示。</p>
+          <label for="host-server-url">主控地址</label>
+          <input id="host-server-url" :value="enrollment.server_url" readonly @focus="$event.target.select()" />
+          <p>请使用新电脑能访问的局域网地址；如果这里显示 127.0.0.1 或 localhost，请换成主控电脑的局域网 IP。</p>
+          <button class="host-button quiet" type="button" @click="enrollment = null">隐藏接入码</button>
+        </div>
+      </section>
 
       <section class="host-panel" aria-labelledby="host-list-heading">
         <header class="host-section-heading">
@@ -231,7 +201,7 @@ async function copyCode() {
 
       <section class="host-panel" aria-labelledby="remote-runs-heading">
         <header class="host-section-heading"><div><h3 id="remote-runs-heading">远程运行记录</h3><p>最近 {{ runs.length }} 条，最多显示 100 条。本机旧运行仍在运行中心查看。</p></div><div class="host-filter"><label for="run-filter">显示</label><select id="run-filter" v-model="runFilter"><option value="all">全部状态</option><option value="active">尚未结束</option><option value="attention">失败或待确认</option></select></div></header>
-        <div v-if="!visibleRuns.length" class="host-empty"><strong>{{ runs.length ? '没有符合条件的运行' : '还没有远程运行' }}</strong><p>{{ runs.length ? '切换筛选查看其他状态。' : '选择任务和目标宿主机后，运行记录会显示在这里。' }}</p></div>
+        <div v-if="!visibleRuns.length" class="host-empty"><strong>{{ runs.length ? '没有符合条件的运行' : '还没有远程运行' }}</strong><p>{{ runs.length ? '切换筛选查看其他状态。' : '在任务中心选择运行电脑并启动后，远程运行记录会显示在这里。' }}</p></div>
         <ul v-else class="host-runs">
           <li v-for="run in visibleRuns" :key="run.id" :class="{ selected: selectedRunId === run.id }">
             <div class="host-run-summary"><strong>{{ run.task_name }}</strong><span>#{{ run.id }} · v{{ run.version_sequence ?? '?' }} · {{ run.host_name }} · {{ formatTime(run.created_at) }}</span><p v-if="run.waiting_reason">{{ run.waiting_reason }}</p></div>
@@ -297,9 +267,6 @@ async function copyCode() {
 .host-button.quiet { border-color: transparent; background: transparent; }
 .host-button:disabled, .hosts-page input:disabled, .hosts-page select:disabled { opacity: .55; cursor: not-allowed; }
 .hosts-page :is(button, a, input, select, summary, [tabindex]):focus-visible { outline: 3px solid #00913945; outline-offset: 3px; }
-.host-scope-note { display: grid; gap: 4px; padding: 12px 16px; border: 1px solid var(--host-border); border-radius: 8px; background: var(--host-soft); }
-.host-scope-note strong { font-size: 13px; font-weight: 600; }
-.host-scope-note span { font-size: 12px; color: var(--host-muted); }
 .host-feedback { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding: 12px 16px; border: 1px solid var(--host-border); border-radius: 8px; overflow-wrap: anywhere; }
 .host-feedback.success { background: #edf8f0; border-color: #bddfc9; color: #176b35; }
 .host-feedback.error { background: #fff4f0; border-color: #efd0c6; color: #a53721; }
@@ -307,7 +274,6 @@ async function copyCode() {
 .host-metrics > div { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 16px; border: 1px solid var(--host-border); border-radius: 12px; background: #fff; }
 .host-metrics span { color: var(--host-muted); font-size: 12px; }
 .host-metrics strong { color: var(--host-ink); font-size: 24px; line-height: 32px; font-weight: 600; }
-.host-setup-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
 .host-panel { min-width: 0; padding: 20px; border: 1px solid var(--host-border); border-radius: 12px; background: #fff; }
 .host-section-heading { margin-bottom: 16px; align-items: flex-start; }
 .host-steps { display: grid; gap: 8px; margin: 0 0 12px; padding-left: 20px; }
@@ -329,9 +295,6 @@ async function copyCode() {
 .hosts-page input, .hosts-page select { width: 100%; min-width: 0; height: 38px; padding: 0 11px; border: 1px solid var(--host-border); border-radius: 8px; background: #fff; color: var(--host-text); font-family: inherit; font-size: 13px; line-height: 20px; }
 .hosts-page input:hover, .hosts-page select:hover { border-color: #b8c2b8; }
 .hosts-page input:focus, .hosts-page select:focus { border-color: var(--host-green); }
-.host-dispatch-form { display: grid; gap: 8px; }
-.host-dispatch-form > label:not(:first-child) { margin-top: 4px; }
-.host-dispatch-form > .host-button { margin-top: 8px; justify-self: start; }
 .host-inline-warning { padding: 10px 12px; border: 1px solid #e7dca8; border-radius: 8px; background: #fffbeb; color: #715912; font-size: 12px; overflow-wrap: anywhere; }
 .host-filter { display: flex; flex: 0 0 auto; align-items: center; gap: 8px; }
 .host-filter select { width: auto; min-width: 110px; }
@@ -385,7 +348,7 @@ async function copyCode() {
 .host-artifacts li > div { display: grid; min-width: 0; gap: 4px; }
 .host-artifacts strong { font-size: 12px; overflow-wrap: anywhere; }
 .host-artifacts span { color: var(--host-muted); font-size: 11px; }
-@media (max-width: 1000px) { .host-setup-grid { grid-template-columns: minmax(0, 1fr); } .host-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 1000px) { .host-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 720px) { .host-panel { padding: 16px; } .host-section-heading { flex-wrap: wrap; } .host-facts, .host-run-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); } .host-runs > li { align-items: flex-start; flex-direction: column; padding: 12px 8px; } .host-card-footer, .host-maintenance { align-items: flex-start; flex-direction: column; } .host-maintenance-actions { width: 100%; justify-content: flex-start; } .host-run-summary + .host-card-actions { align-self: stretch; justify-content: space-between; } }
 @media (max-width: 400px) { .host-heading { flex-wrap: wrap; } .host-panel { padding: 12px; } .host-card { padding: 12px; } .host-metrics { gap: 8px; } .host-metrics > div { padding: 8px 12px; } .host-metrics strong { font-size: 20px; } .host-card-header { align-items: flex-start; } .host-badge { padding: 3px 5px; } .host-card-actions { gap: 6px; } .host-button { padding: 7px 10px; } .host-enrollment { padding: 12px; } .host-detail-summary { flex-wrap: wrap; } }
 @media (prefers-reduced-motion: reduce) { .host-button { transition: none; } .host-button:active:not(:disabled) { transform: none; } }
