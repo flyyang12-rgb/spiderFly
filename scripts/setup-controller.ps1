@@ -11,14 +11,24 @@ $startPath = Join-Path $projectRoot 'start.bat'
 $lanPath = Join-Path $projectRoot 'configure_lan_access.ps1'
 
 function Test-Python312 {
-    try {
-        $version = & python -c 'import sys; print("%d.%d" % sys.version_info[:2])' 2>$null
-        return $LASTEXITCODE -eq 0 -and ([string]$version).Trim() -eq '3.12'
-    } catch { return $false }
+    $candidates = @()
+    if ($env:LOCALAPPDATA) { $candidates += Join-Path $env:LOCALAPPDATA 'Programs\Python\Python312\python.exe' }
+    if ($env:ProgramFiles) { $candidates += Join-Path $env:ProgramFiles 'Python312\python.exe' }
+    $candidates += 'python'
+    foreach ($candidate in $candidates) {
+        try {
+            & $candidate -c 'import sys; raise SystemExit(0 if sys.version_info[:2] == (3,12) and sys.maxsize > 2**32 else 1)' 2>$null
+            if ($LASTEXITCODE -eq 0) { return $true }
+        } catch { }
+    }
+    return $false
 }
 
 function Set-EnvValues([hashtable]$Values) {
-    $lines = if (Test-Path -LiteralPath $envPath) { [System.Collections.Generic.List[string]](Get-Content -LiteralPath $envPath) } else { [System.Collections.Generic.List[string]]::new() }
+    $lines = New-Object 'System.Collections.Generic.List[string]'
+    if (Test-Path -LiteralPath $envPath) {
+        foreach ($line in Get-Content -LiteralPath $envPath) { [void]$lines.Add([string]$line) }
+    }
     foreach ($name in $Values.Keys) {
         $replaced = $false
         for ($index = 0; $index -lt $lines.Count; $index++) {
@@ -36,7 +46,7 @@ function Set-EnvValues([hashtable]$Values) {
 }
 
 $form = [System.Windows.Forms.Form]::new()
-$form.Text = '安装 SpiderFly 主控'
+$form.Text = '配置并启动 SpiderFly 主控'
 $form.ClientSize = [System.Drawing.Size]::new(560, 440)
 $form.StartPosition = 'CenterScreen'
 $form.FormBorderStyle = 'FixedDialog'
@@ -44,20 +54,31 @@ $form.MaximizeBox = $false
 $form.BackColor = [System.Drawing.Color]::White
 $form.Font = [System.Drawing.Font]::new('Microsoft YaHei UI', 9)
 
-$title = [System.Windows.Forms.Label]::new(); $title.Text = '安装并启动主控'; $title.Font = [System.Drawing.Font]::new('Microsoft YaHei UI', 17, [System.Drawing.FontStyle]::Bold); $title.ForeColor = [System.Drawing.ColorTranslator]::FromHtml('#221814'); $title.SetBounds(28, 24, 500, 34)
-$intro = [System.Windows.Forms.Label]::new(); $intro.Text = "只需确认端口和使用范围。程序会准备运行环境并自动打开管理页面。`r`n首次安装需要联网下载 Python 依赖，可能需要几分钟。"; $intro.ForeColor = [System.Drawing.ColorTranslator]::FromHtml('#656d65'); $intro.SetBounds(30, 66, 500, 48)
+$title = [System.Windows.Forms.Label]::new(); $title.Text = '配置并启动主控'; $title.Font = [System.Drawing.Font]::new('Microsoft YaHei UI', 17, [System.Drawing.FontStyle]::Bold); $title.ForeColor = [System.Drawing.ColorTranslator]::FromHtml('#221814'); $title.SetBounds(28, 24, 500, 34)
+$intro = [System.Windows.Forms.Label]::new(); $intro.Text = "检测 Python 后，程序会创建 SpiderFly 独立运行环境并安装项目依赖。`r`n首次准备可能需要几分钟，以后直接启动即可。"; $intro.ForeColor = [System.Drawing.ColorTranslator]::FromHtml('#656d65'); $intro.SetBounds(30, 66, 500, 48)
 $pythonState = [System.Windows.Forms.Label]::new(); $pythonState.SetBounds(30, 126, 500, 24)
 $portLabel = [System.Windows.Forms.Label]::new(); $portLabel.Text = '访问端口'; $portLabel.SetBounds(30, 166, 120, 22)
 $port = [System.Windows.Forms.TextBox]::new(); $port.Text = '8000'; $port.SetBounds(30, 190, 500, 34)
-$lan = [System.Windows.Forms.CheckBox]::new(); $lan.Text = '允许同一局域网的其他电脑访问（需要确认 Windows 管理员提示）'; $lan.Checked = $true; $lan.SetBounds(30, 244, 500, 28)
-$hint = [System.Windows.Forms.Label]::new(); $hint.Text = '请只在可信的公司、家庭网络或自己的热点中开启，不要直接暴露到公网。'; $hint.ForeColor = [System.Drawing.ColorTranslator]::FromHtml('#757a75'); $hint.SetBounds(52, 274, 475, 36)
+$lan = [System.Windows.Forms.CheckBox]::new(); $lan.Text = '允许局域网其他电脑访问'; $lan.Checked = $true; $lan.SetBounds(30, 244, 500, 28)
+$hint = [System.Windows.Forms.Label]::new(); $hint.Text = '勾选后会为当前端口创建 Windows 防火墙入站规则。'; $hint.ForeColor = [System.Drawing.ColorTranslator]::FromHtml('#757a75'); $hint.SetBounds(52, 274, 475, 36)
 $status = [System.Windows.Forms.Label]::new(); $status.Text = '准备就绪。'; $status.ForeColor = [System.Drawing.ColorTranslator]::FromHtml('#656d65'); $status.SetBounds(30, 326, 500, 30)
 $pythonButton = [System.Windows.Forms.Button]::new(); $pythonButton.Text = '下载 Python 3.12'; $pythonButton.SetBounds(30, 374, 150, 38); $pythonButton.FlatStyle = 'Flat'; $pythonButton.FlatAppearance.BorderColor = [System.Drawing.ColorTranslator]::FromHtml('#dfe3df'); $pythonButton.BackColor = [System.Drawing.Color]::White
-$install = [System.Windows.Forms.Button]::new(); $install.Text = '安装并启动'; $install.SetBounds(380, 374, 150, 38); $install.FlatStyle = 'Flat'; $install.FlatAppearance.BorderSize = 0; $install.BackColor = [System.Drawing.ColorTranslator]::FromHtml('#009139'); $install.ForeColor = [System.Drawing.Color]::White
+$install = [System.Windows.Forms.Button]::new(); $install.Text = '准备环境并启动'; $install.SetBounds(360, 374, 170, 38); $install.FlatStyle = 'Flat'; $install.FlatAppearance.BorderSize = 0; $install.BackColor = [System.Drawing.ColorTranslator]::FromHtml('#009139'); $install.ForeColor = [System.Drawing.Color]::White
 
 $refresh = {
-    if (Test-Python312) { $pythonState.Text = '✓ 已检测到 64 位 Python 3.12'; $pythonState.ForeColor = [System.Drawing.ColorTranslator]::FromHtml('#007a31'); $install.Enabled = $true }
-    else { $pythonState.Text = '× 未检测到 Python 3.12，请先下载安装并勾选“Add Python to PATH”'; $pythonState.ForeColor = [System.Drawing.ColorTranslator]::FromHtml('#c34f3a'); $install.Enabled = $false }
+    if (Test-Python312) {
+        $pythonState.Text = '✓ 已检测到 64 位 Python 3.12'
+        $pythonState.ForeColor = [System.Drawing.ColorTranslator]::FromHtml('#007a31')
+        $pythonButton.Text = 'Python 已就绪'
+        $pythonButton.Enabled = $false
+        $install.Enabled = $true
+    } else {
+        $pythonState.Text = '× 未检测到 Python 3.12，请先下载安装并勾选“Add Python to PATH”'
+        $pythonState.ForeColor = [System.Drawing.ColorTranslator]::FromHtml('#c34f3a')
+        $pythonButton.Text = '下载 Python 3.12'
+        $pythonButton.Enabled = $true
+        $install.Enabled = $false
+    }
 }
 $pythonButton.Add_Click({ Start-Process 'https://www.python.org/downloads/release/python-31210/' })
 $install.Add_Click({
