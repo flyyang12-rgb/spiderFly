@@ -4,7 +4,7 @@
 
 ## 接入
 
-小白用户先在主控网页“宿主机”中生成接入码并下载 Agent 安装包。在已登录且未锁屏的 Windows 用户会话中解压 ZIP，双击 `安装并接入Agent.bat`，填写主控地址、接入码和电脑名称。向导会检查 Python 3.12 与主控连接，可选择登录 Windows 后自动启动；申请成功后等待管理员在主控网页批准，不需要打开 PowerShell。
+小白用户先在主控网页“宿主机”中生成接入码并下载 Agent 安装包。在已登录且未锁屏的 Windows 用户会话中解压 ZIP，双击 `安装并接入Agent.bat`。如果这台电脑缺少 64 位 Python 3.12，可点击“自动安装 Python 3.12”：向导会从 python.org 下载 Python 3.12.10，验证安装程序签名，为当前 Windows 用户安装并加入 PATH，完成后自动复检。随后填写主控地址、接入码和电脑名称；向导还会检查主控连接，可选择登录 Windows 后自动启动。申请成功后等待管理员在主控网页批准，不需要打开 PowerShell。自动安装失败时查看 `%TEMP%\SpiderFlyAgent-python-install.log`；依赖或接入失败时查看 `%LOCALAPPDATA%\SpiderFlyAgent\logs\`。
 
 需要诊断或自动化安装时，也可以打开 PowerShell，进入本目录后执行：
 

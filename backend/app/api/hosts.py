@@ -106,7 +106,8 @@ def hosts(user: dict = Depends(admin_user)):
 def agent_download(user: dict = Depends(admin_user)):
     # Explicit source allowlist: never include local identity, environments or journals.
     sources = [AGENT_ROOT / name for name in (
-        "README.md", "requirements.txt", "start.ps1", "manage.ps1", "setup.ps1", "安装并接入Agent.bat",
+        "README.md", "requirements.txt", "start.ps1", "manage.ps1", "setup.ps1",
+        "install-python.ps1", "安装并接入Agent.bat",
     )]
     sources += [AGENT_ROOT / "spiderfly_agent" / (name + ".py") for name in (
         "__init__", "__main__", "api", "client", "desktop", "identity", "journal", "windows", "worker",

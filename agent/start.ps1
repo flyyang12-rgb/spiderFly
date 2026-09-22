@@ -7,12 +7,28 @@
     [switch]$Console
 )
 $ErrorActionPreference = 'Stop'
+
+function Get-Python312Command {
+    $candidates = @()
+    if ($env:LOCALAPPDATA) { $candidates += Join-Path $env:LOCALAPPDATA 'Programs\Python\Python312\python.exe' }
+    if ($env:ProgramFiles) { $candidates += Join-Path $env:ProgramFiles 'Python312\python.exe' }
+    $candidates += 'python'
+    foreach ($candidate in $candidates) {
+        try {
+            & $candidate -c 'import sys; raise SystemExit(0 if sys.version_info[:2] == (3,12) and sys.maxsize > 2**32 else 1)' 2>$null
+            if ($LASTEXITCODE -eq 0) { return $candidate }
+        } catch { }
+    }
+    throw '未检测到 64 位 Python 3.12；请在这台电脑安装后重试'
+}
+
 Push-Location $PSScriptRoot
 try {
     $agentPython = Join-Path $PSScriptRoot '.venv/Scripts/python.exe'
     $createdEnvironment = $false
     if (-not (Test-Path -LiteralPath $agentPython)) {
-        python -m venv (Join-Path $PSScriptRoot '.venv')
+        $systemPython = Get-Python312Command
+        & $systemPython -m venv (Join-Path $PSScriptRoot '.venv')
         if ($LASTEXITCODE -ne 0) { throw '创建 Agent 环境失败，需要 Python 3.12' }
         $createdEnvironment = $true
     }

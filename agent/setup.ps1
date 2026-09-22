@@ -10,13 +10,22 @@ $managePath = Join-Path $agentRoot 'manage.ps1'
 $dataRoot = Join-Path $env:LOCALAPPDATA 'SpiderFlyAgent'
 $configPath = Join-Path $dataRoot 'config.json'
 $setupLog = Join-Path $env:TEMP 'SpiderFlyAgent-setup.log'
+$pythonInstallLog = Join-Path $env:TEMP 'SpiderFlyAgent-python-install.log'
+$pythonInstallPath = Join-Path $agentRoot 'install-python.ps1'
 $configured = Test-Path -LiteralPath $configPath -PathType Leaf
 
 function Test-Python312 {
-    try {
-        $version = & python -c 'import sys; print("%d.%d" % sys.version_info[:2])' 2>$null
-        return $LASTEXITCODE -eq 0 -and ([string]$version).Trim() -eq '3.12'
-    } catch { return $false }
+    $candidates = @()
+    if ($env:LOCALAPPDATA) { $candidates += Join-Path $env:LOCALAPPDATA 'Programs\Python\Python312\python.exe' }
+    if ($env:ProgramFiles) { $candidates += Join-Path $env:ProgramFiles 'Python312\python.exe' }
+    $candidates += 'python'
+    foreach ($candidate in $candidates) {
+        try {
+            & $candidate -c 'import sys; raise SystemExit(0 if sys.version_info[:2] == (3,12) and sys.maxsize > 2**32 else 1)' 2>$null
+            if ($LASTEXITCODE -eq 0) { return $true }
+        } catch { }
+    }
+    return $false
 }
 function Test-ServerUrl([string]$Value) {
     $uri = $null
@@ -55,9 +64,11 @@ $autoStart = [System.Windows.Forms.CheckBox]::new(); $autoStart.Text='登录 Win
 $dispatch = [System.Windows.Forms.CheckBox]::new(); $dispatch.Text='启动后允许接收任务（主控页面也必须开启调度）'; $dispatch.Checked=$true; $dispatch.SetBounds(30,396,540,26)
 $status = [System.Windows.Forms.Label]::new(); $status.Text='先检查主控连接，再安装。'; $status.ForeColor=[System.Drawing.ColorTranslator]::FromHtml('#656d65'); $status.SetBounds(30,438,540,46)
 $check = [System.Windows.Forms.Button]::new(); $check.Text='检查连接'; $check.SetBounds(30,506,130,38); $check.FlatStyle='Flat'; $check.FlatAppearance.BorderColor=[System.Drawing.ColorTranslator]::FromHtml('#dfe3df'); $check.BackColor=[System.Drawing.Color]::White
+$installPython = [System.Windows.Forms.Button]::new(); $installPython.Text='自动安装 Python 3.12'; $installPython.SetBounds(174,506,205,38); $installPython.FlatStyle='Flat'; $installPython.FlatAppearance.BorderColor=[System.Drawing.ColorTranslator]::FromHtml('#dfe3df'); $installPython.BackColor=[System.Drawing.Color]::White
 $install = [System.Windows.Forms.Button]::new(); $install.Text=$(if($configured){'启动现有 Agent'}else{'安装并申请接入'}); $install.SetBounds(402,506,168,38); $install.FlatStyle='Flat'; $install.FlatAppearance.BorderSize=0; $install.BackColor=[System.Drawing.ColorTranslator]::FromHtml('#009139'); $install.ForeColor=[System.Drawing.Color]::White
 $timer = [System.Windows.Forms.Timer]::new(); $timer.Interval=500
 $script:process = $null
+$script:pythonProcess = $null
 
 if ($configured) {
     try { $saved = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json; $server.Text=[string]$saved.server; $machineName.Text=[string]$saved.name } catch {}
@@ -65,12 +76,46 @@ if ($configured) {
     $intro.Text='这台电脑已经接入。可以重新启动 Agent，并更新登录 Windows 后的自动启动设置。'
 }
 
-$refresh = { if(Test-Python312){$pythonState.Text='✓ 已检测到 Python 3.12';$pythonState.ForeColor=[System.Drawing.ColorTranslator]::FromHtml('#007a31');$install.Enabled=$true}else{$pythonState.Text='× 未检测到 Python 3.12，请先安装并勾选“Add Python to PATH”';$pythonState.ForeColor=[System.Drawing.ColorTranslator]::FromHtml('#c34f3a');$install.Enabled=$false} }
+$refresh = { if(Test-Python312){$pythonState.Text='✓ 已检测到 64 位 Python 3.12';$pythonState.ForeColor=[System.Drawing.ColorTranslator]::FromHtml('#007a31');$installPython.Enabled=$false;$install.Enabled=$true}else{$pythonState.Text='× 未检测到 64 位 Python 3.12，可点击下方按钮自动安装';$pythonState.ForeColor=[System.Drawing.ColorTranslator]::FromHtml('#c34f3a');$installPython.Enabled=$true;$install.Enabled=$false} }
+$installPython.Add_Click({
+    if (Test-Path -LiteralPath $pythonInstallLog) { Remove-Item -LiteralPath $pythonInstallLog -Force }
+    $installPython.Enabled=$false; $install.Enabled=$false; $check.Enabled=$false
+    $status.Text='正在下载并安装 Python 3.12，完成后会自动检查…'
+    $status.ForeColor=[System.Drawing.ColorTranslator]::FromHtml('#656d65')
+    try {
+        $info=[Diagnostics.ProcessStartInfo]::new()
+        $info.FileName='powershell.exe'
+        $info.Arguments="-NoLogo -NoProfile -ExecutionPolicy Bypass -File `"$pythonInstallPath`" -LogPath `"$pythonInstallLog`""
+        $info.UseShellExecute=$false; $info.CreateNoWindow=$true
+        $script:pythonProcess=[Diagnostics.Process]::Start($info)
+        $timer.Start()
+    } catch {
+        $status.Text='无法启动 Python 安装：'+$_.Exception.Message
+        $status.ForeColor=[System.Drawing.ColorTranslator]::FromHtml('#c34f3a')
+        $installPython.Enabled=$true; $check.Enabled=$true
+    }
+})
 $check.Add_Click({
     if(-not (Test-ServerUrl $server.Text.Trim())){$status.Text='主控地址格式不正确，请填写完整的 http://地址:端口。';$status.ForeColor=[System.Drawing.ColorTranslator]::FromHtml('#c34f3a');return}
     try { $status.Text='正在连接主控…';[System.Windows.Forms.Application]::DoEvents(); Invoke-WebRequest -UseBasicParsing -Uri ($server.Text.TrimEnd('/')+'/health') -TimeoutSec 5 | Out-Null; $status.Text='✓ 主控连接正常，可以继续安装。';$status.ForeColor=[System.Drawing.ColorTranslator]::FromHtml('#007a31') } catch { $status.Text='无法连接主控。请检查地址、两台电脑的网络以及主控防火墙。';$status.ForeColor=[System.Drawing.ColorTranslator]::FromHtml('#c34f3a') }
 })
 $timer.Add_Tick({
+    if($script:pythonProcess -and $script:pythonProcess.HasExited){
+        $exitCode=$script:pythonProcess.ExitCode
+        $script:pythonProcess.Dispose(); $script:pythonProcess=$null
+        $timer.Stop(); $check.Enabled=$true
+        if($exitCode -eq 0 -and (Test-Python312)){
+            & $refresh
+            $status.Text='✓ Python 3.12 已就绪，可以继续申请接入。'
+            $status.ForeColor=[System.Drawing.ColorTranslator]::FromHtml('#007a31')
+        }else{
+            $details=if(Test-Path -LiteralPath $pythonInstallLog){Get-Content -LiteralPath $pythonInstallLog -Tail 1}else{''}
+            $status.Text='自动安装未完成：'+$(if($details){$details}else{'请查看 Python 安装日志。'})
+            $status.ForeColor=[System.Drawing.ColorTranslator]::FromHtml('#c34f3a')
+            $installPython.Enabled=$true
+        }
+        return
+    }
     if($script:process -and $script:process.HasExited){
         $timer.Stop(); $output=if(Test-Path -LiteralPath $setupLog){Get-Content -LiteralPath $setupLog -Raw -ErrorAction SilentlyContinue}else{''}
         if($script:process.ExitCode -eq 0){
@@ -97,6 +142,6 @@ $install.Add_Click({
     $script:process=[Diagnostics.Process]::Start($info);$timer.Start()
 })
 
-$form.Controls.AddRange(@($title,$intro,$pythonState,$autoStart,$dispatch,$status,$check,$install))
+$form.Controls.AddRange(@($title,$intro,$pythonState,$autoStart,$dispatch,$status,$check,$installPython,$install))
 & $refresh
 [void]$form.ShowDialog()

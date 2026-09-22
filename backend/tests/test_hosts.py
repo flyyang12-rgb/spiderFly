@@ -347,7 +347,8 @@ class HostApiTests(unittest.TestCase):
         modules = ("__init__", "__main__", "api", "client", "desktop", "identity", "journal", "windows", "worker")
         sources = {"README.md": "Synthetic Agent instructions\n", "requirements.txt": "cryptography\n",
                    "start.ps1": "# synthetic launcher\n", "manage.ps1": "# synthetic operations\n",
-                   "setup.ps1": "# synthetic setup wizard\n", "安装并接入Agent.bat": "@echo off\n"}
+                   "setup.ps1": "# synthetic setup wizard\n", "install-python.ps1": "# synthetic Python installer\n",
+                   "安装并接入Agent.bat": "@echo off\n"}
         sources.update({f"spiderfly_agent/{name}.py": f"# synthetic {name}\n" for name in modules})
         for relative, content in sources.items():
             if relative == missing:
@@ -387,7 +388,7 @@ class HostApiTests(unittest.TestCase):
                 self.assertEqual(self.request("GET", "/api/hosts/agent-download", user=user).status_code, expected)
 
     def test_agent_download_refuses_incomplete_launcher_or_module_package(self):
-        for missing in ("start.ps1", "manage.ps1", "setup.ps1", "安装并接入Agent.bat",
+        for missing in ("start.ps1", "manage.ps1", "setup.ps1", "install-python.ps1", "安装并接入Agent.bat",
                         "spiderfly_agent/worker.py", "spiderfly_agent/desktop.py"):
             with self.subTest(missing=missing):
                 root, _ = self.make_agent_sources(missing=missing)
