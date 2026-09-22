@@ -6,12 +6,13 @@ export function createWorkspaceDataState() {
   const view = ref('overview')
   const runtimeTab = ref('active')
   const managementTab = ref('apps')
+  const remoteRunTarget = ref(null)
   const loading = ref(false)
   const overview = ref({})
   const settings = ref({})
   const saving = ref(false)
   const toast = reactive({ visible: false, type: 'success', title: '', message: '' })
-  return { view, runtimeTab, managementTab, loading, overview, settings, saving, toast }
+  return { view, runtimeTab, managementTab, remoteRunTarget, loading, overview, settings, saving, toast }
 }
 
 export function useWorkspaceData({

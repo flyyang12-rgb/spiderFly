@@ -64,6 +64,7 @@ export function useWorkspace() {
     loadAll: (...args) => workspace.loadAll(...args),
     me: authState.me,
     navigateTo: (...args) => workspace.navigateTo(...args),
+    remoteRunTarget: workspaceState.remoteRunTarget,
     saving: workspaceState.saving,
     showToast: (...args) => workspace.showToast(...args),
     taskForm: tasksState.taskForm,

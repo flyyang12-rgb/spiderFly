@@ -3,6 +3,11 @@ import { triggerConfig, taskOwnerKey } from '../../lib/format'
 import { triggerOptions } from '../../lib/constants'
 import { request } from '../../lib/api'
 
+function manualRequestId() {
+  const bytes = crypto.getRandomValues(new Uint8Array(16))
+  return 'task-manual-' + [...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('')
+}
+
 export function createTasksState() {
   const tasks = ref([])
   const taskModalOpen = ref(false)
@@ -39,6 +44,7 @@ export function useTasks({
   loadAll,
   me,
   navigateTo,
+  remoteRunTarget,
   saving,
   showToast,
   taskForm,
@@ -48,6 +54,7 @@ export function useTasks({
   targetHosts,
   targetHostsLoading,
 }) {
+  const pendingRuns = new Map()
   const manualTasks = computed(() =>
     tasks.value.filter((task) => task.enabled && task.trigger_type === 'manual'),
   )
@@ -190,12 +197,24 @@ export function useTasks({
 
   async function runTask(task) {
     try {
-      const result = await request('/tasks/' + task.id + '/run', { method: 'POST' })
+      const requestId = pendingRuns.get(task.id) || manualRequestId()
+      pendingRuns.set(task.id, requestId)
+      const result = await request('/tasks/' + task.id + '/run', {
+        method: 'POST', body: JSON.stringify({ request_id: requestId }),
+      })
+      pendingRuns.delete(task.id)
+      if (result?.run_type === 'remote') {
+        showToast('success', '任务已提交到 ' + result.target_host_name,
+          result.waiting_reason || '只会在这台电脑执行，不会转到主控本机')
+        remoteRunTarget.value = result.remote_run_id
+        navigateTo('management', 'hosts')
+        return
+      }
       const position = result?.queue_position
       showToast(
         'success',
-        position ? '任务已加入队列' : '运行请求已提交',
-        position ? '当前排在第 ' + position + ' 位' : '共享电脑会按顺序执行',
+        position ? '任务已加入主控本机队列' : '已提交到主控本机',
+        position ? '当前排在第 ' + position + ' 位' : '主控本机会按顺序执行',
       )
       navigateTo('runtime', 'active')
       await loadAll({ quiet: true, includeAdmin: false })

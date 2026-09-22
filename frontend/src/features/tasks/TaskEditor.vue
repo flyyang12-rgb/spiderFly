@@ -40,9 +40,9 @@ const {
             <span>北京时间 UTC+8</span>
           </div>
           <label v-if="isAdmin" class="field schedule-target-field">
-            <span>计划运行宿主机</span>
+            <span>默认运行电脑（手动和计划）</span>
             <select v-model="taskForm.target_host_id" :disabled="targetHostsLoading">
-              <option value="">主控本机（旧执行链路）</option>
+              <option value="">主控本机 A（旧执行链路）</option>
               <option
                 v-for="host in targetHosts"
                 :key="host.id"
@@ -52,7 +52,7 @@ const {
                 {{ host.name }}{{ host.approval_status === 'approved' ? '' : '（不可用）' }}
               </option>
             </select>
-            <small>每天或每周到点后固定发往这台电脑；离线或忙碌时继续排队，不会改投其他机器。</small>
+            <small>手动点击“运行”和每天／每周计划都会发往这台电脑；离线或忙碌时留在原电脑排队，不会改投主控。</small>
           </label>
           <div class="trigger-choice-grid">
             <button

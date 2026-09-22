@@ -134,7 +134,7 @@ const {
                 <div class="primary-cell">
                   <strong>{{ triggerLabel(task.trigger_type) }}</strong
                   ><small>{{ triggerDetail(task) }}</small>
-                  <small>{{ task.target_host_name ? '计划宿主机：' + task.target_host_name : '计划宿主机：主控本机' }}</small>
+                  <small>{{ '默认运行电脑：' + (task.target_host_name || '主控本机 A') + '（手动和计划）' }}</small>
                 </div>
               </td>
               <td>
@@ -171,7 +171,8 @@ const {
                     v-else
                     class="button primary compact"
                     type="button"
-                    :disabled="!task.enabled || task.environment_status !== 'ready'"
+                    :disabled="!task.enabled || (task.target_host_id ? !isAdmin : task.environment_status !== 'ready')"
+                    :title="task.target_host_id && !isAdmin ? '远程电脑上的任务需由管理员运行' : '将在 ' + (task.target_host_name || '主控本机 A') + ' 运行'"
                     @click="runTask(task)"
                   >
                     运行

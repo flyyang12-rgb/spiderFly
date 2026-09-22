@@ -20,7 +20,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import ExitStack
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 from urllib.parse import unquote
 
 import httpx
@@ -28,7 +28,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from app import database, main, maintenance, remote_maintenance, security
-from app.api import hosts as hosts_api
+from app.api import hosts as hosts_api, tasks as tasks_api
 from app.services import host_dispatch
 
 
@@ -1013,6 +1013,54 @@ class HostApiTests(unittest.TestCase):
         self.assertEqual(run["controller_url"], "http://192.168.1.50:9356")
         self.assertEqual(run["status"], "queued")
         self.assertIsNotNone(run["code_version_id"])
+
+    def test_task_center_manual_run_stays_on_bound_offline_host_and_retries_once(self):
+        host_id = self.register(enabled=False)
+        database.execute("UPDATE tasks SET target_host_id=? WHERE id=?", (host_id, self.task_id))
+        request_id = "task-manual-" + uuid.uuid4().hex
+        url = f"/api/tasks/{self.task_id}/run"
+        first = self.success(self.request("POST", url, {"request_id": request_id}))
+        self.assertEqual(first["run_type"], "remote")
+        self.assertEqual(first["target_host_id"], host_id)
+        self.assertEqual(first["status"], "queued")
+        self.assertTrue(first["waiting_reason"])
+        self.assertEqual(database.fetch_one("SELECT COUNT(*) AS count FROM executions")["count"], 0)
+        again = self.success(self.request("POST", url, {"request_id": request_id}))
+        self.assertEqual(again["remote_run_id"], first["remote_run_id"])
+        self.assertEqual(database.fetch_one("SELECT COUNT(*) AS count FROM remote_runs")["count"], 1)
+        database.execute("UPDATE tasks SET target_host_id=NULL WHERE id=?", (self.task_id,))
+        retried = self.success(self.request("POST", url, {"request_id": request_id}))
+        self.assertEqual(retried["remote_run_id"], first["remote_run_id"])
+        self.assertEqual(database.fetch_one("SELECT COUNT(*) AS count FROM executions")["count"], 0)
+
+    def test_task_center_remote_run_rejects_member_and_revoked_host_without_local_fallback(self):
+        host_id = self.register(enabled=False)
+        database.execute("UPDATE tasks SET target_host_id=? WHERE id=?", (host_id, self.task_id))
+        url = f"/api/tasks/{self.task_id}/run"
+        self.assertEqual(self.request("POST", url, user="member").status_code, 403)
+        self.success(self.request("POST", f"/api/hosts/{host_id}/revoke"))
+        # Revocation disables scheduled tasks; re-enable only in this synthetic test
+        # to verify the manual endpoint rejects the revoked target itself.
+        database.execute("UPDATE tasks SET enabled=1 WHERE id=?", (self.task_id,))
+        self.assertEqual(self.request("POST", url).status_code, 409)
+        self.assertEqual(database.fetch_one("SELECT COUNT(*) AS count FROM executions")["count"], 0)
+        self.assertEqual(database.fetch_one("SELECT COUNT(*) AS count FROM remote_runs")["count"], 0)
+
+    def test_manual_local_queue_guard_rejects_bound_remote_task(self):
+        from app.services.execution_queue import _enqueue_task_sync
+        host_id = self.register(enabled=False)
+        database.execute("UPDATE tasks SET target_host_id=? WHERE id=?", (host_id, self.task_id))
+        with self.assertRaisesRegex(Exception, "不能在主控本机运行"):
+            _enqueue_task_sync(self.task_id, "manual", 1)
+        self.assertEqual(database.fetch_one("SELECT COUNT(*) AS count FROM executions")["count"], 0)
+
+    def test_task_center_unbound_task_keeps_local_route(self):
+        with patch.object(tasks_api, "_enqueue_task", new_callable=AsyncMock, return_value=42) as enqueue:
+            result = self.success(self.request("POST", f"/api/tasks/{self.task_id}/run"))
+        self.assertEqual(result["run_type"], "local")
+        self.assertEqual(result["execution_id"], 42)
+        self.assertIsNone(result["target_host_id"])
+        enqueue.assert_awaited_once_with(self.task_id, "manual", unittest.mock.ANY)
 
     def test_revoking_target_host_disables_future_schedule_and_cancels_queued_run(self):
         host_id = self.register()

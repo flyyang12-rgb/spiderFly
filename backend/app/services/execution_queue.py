@@ -26,7 +26,7 @@ def _enqueue_task_sync(
             task = conn.execute(
                 """
                 SELECT
-                    t.id, t.enabled, t.archived, t.app_id,
+                    t.id, t.enabled, t.archived, t.app_id, t.target_host_id,
                     a.id AS current_app_id, a.name AS app_name,
                     a.script_path, a.env_path, a.environment_status,
                     a.archived AS app_archived
@@ -40,6 +40,8 @@ def _enqueue_task_sync(
                 raise HTTPException(status_code=404, detail="任务不存在")
             if not task["enabled"]:
                 raise HTTPException(status_code=409, detail="任务已停用")
+            if source == "manual" and task["target_host_id"] is not None:
+                raise HTTPException(status_code=409, detail="任务已绑定远程电脑，不能在主控本机运行；请刷新后重试")
             if not task["current_app_id"] or task["app_archived"]:
                 raise HTTPException(
                     status_code=409, detail="自动化程序不存在或已经移除"

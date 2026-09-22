@@ -1,5 +1,4 @@
 <script setup>
-import { ref } from 'vue'
 import { useWorkspace } from './workspace/useWorkspace'
 import AiAssistant from './AiAssistant.vue'
 import MaintenanceNotices from './MaintenanceNotices.vue'
@@ -52,6 +51,7 @@ const {
   pageTitle,
   prepareAiDraft,
   queuedExecutions,
+  remoteRunTarget,
   roleLabel,
   runningExecution,
   runtimeTab,
@@ -65,7 +65,6 @@ const {
   users,
   view,
 } = useWorkspace()
-const remoteRunTarget = ref(null)
 
 const initialRemoteRun = Number(new URLSearchParams(window.location.search).get('remote_run'))
 if (Number.isInteger(initialRemoteRun) && initialRemoteRun > 0) {
