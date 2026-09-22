@@ -10,6 +10,7 @@ $managePath = Join-Path $agentRoot 'manage.ps1'
 $dataRoot = Join-Path $env:LOCALAPPDATA 'SpiderFlyAgent'
 $configPath = Join-Path $dataRoot 'config.json'
 $setupLog = Join-Path $env:TEMP 'SpiderFlyAgent-setup.log'
+$agentErrorLog = Join-Path $dataRoot 'logs\agent.error.log'
 $pythonInstallLog = Join-Path $env:TEMP 'SpiderFlyAgent-python-install.log'
 $pythonInstallPath = Join-Path $agentRoot 'install-python.ps1'
 $configured = Test-Path -LiteralPath $configPath -PathType Leaf
@@ -69,6 +70,7 @@ $install = [System.Windows.Forms.Button]::new(); $install.Text=$(if($configured)
 $timer = [System.Windows.Forms.Timer]::new(); $timer.Interval=500
 $script:process = $null
 $script:pythonProcess = $null
+$script:installStartedAt = $null
 
 if ($configured) {
     try { $saved = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json; $server.Text=[string]$saved.server; $machineName.Text=[string]$saved.name } catch {}
@@ -121,7 +123,23 @@ $timer.Add_Tick({
         if($script:process.ExitCode -eq 0){
             try { Set-StartupShortcut $autoStart.Checked $dispatch.Checked } catch { $output += "`r`n自动启动设置失败：$($_.Exception.Message)" }
             $status.Text=$(if($configured){'✓ Agent 已启动，可以在右下角托盘查看状态。'}else{'✓ 接入申请已提交，请让管理员在主控页面批准这台电脑。'});$status.ForeColor=[System.Drawing.ColorTranslator]::FromHtml('#007a31');$install.Text='完成';$install.Enabled=$false
-        } else { $last=($output -split "`r?`n" | Where-Object {$_} | Select-Object -Last 1);$status.Text='未完成：'+$(if($last){$last}else{'请检查接入码、网络和安装日志。'});$status.ForeColor=[System.Drawing.ColorTranslator]::FromHtml('#c34f3a');$install.Enabled=$true }
+        } else {
+            $details=@($output -split "`r?`n" | Where-Object { $_ -match 'Agent 启动失败：|Agent 启动或运行失败:|接入码无效' })
+            if ((Test-Path -LiteralPath $agentErrorLog) -and
+                    (Get-Item -LiteralPath $agentErrorLog).LastWriteTime -ge $script:installStartedAt) {
+                $details+=@(Get-Content -LiteralPath $agentErrorLog -ErrorAction SilentlyContinue |
+                    Where-Object { $_ -match 'Agent 启动或运行失败:|接入码无效' })
+            }
+            $detail=$details | Select-Object -Last 1
+            if ($detail -match '接入码无效、已使用或已过期') {
+                $status.Text='接入码不可用：请重新生成，并在此处清空后只粘贴一次。'
+            } elseif ($detail) {
+                $status.Text='未完成：'+([string]$detail).Trim()
+            } else {
+                $status.Text='未完成：请查看 '+$agentErrorLog
+            }
+            $status.ForeColor=[System.Drawing.ColorTranslator]::FromHtml('#c34f3a');$install.Enabled=$true
+        }
         $check.Enabled=$true
     }
 })
@@ -132,6 +150,7 @@ $install.Add_Click({
         if([string]::IsNullOrWhiteSpace($machineName.Text)){[System.Windows.Forms.MessageBox]::Show('请填写这台电脑的名称。','检查电脑名称')|Out-Null;return}
     }
     if(Test-Path -LiteralPath $setupLog){Remove-Item -LiteralPath $setupLog -Force}
+    $script:installStartedAt=Get-Date
     $install.Enabled=$false;$check.Enabled=$false;$status.Text='正在准备 Agent 环境，首次安装可能需要几分钟…';$status.ForeColor=[System.Drawing.ColorTranslator]::FromHtml('#656d65')
     $command="& "+(Quote-Ps $managePath)+" Start"
     if(-not $configured){$command+=' -Server '+(Quote-Ps $server.Text.Trim())+' -Code '+(Quote-Ps $code.Text)+' -Name '+(Quote-Ps $machineName.Text.Trim())}

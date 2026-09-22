@@ -24,14 +24,29 @@ $logRoot = Join-Path $dataRoot 'logs'
 $stdoutLog = Join-Path $logRoot 'agent.out.log'
 $stderrLog = Join-Path $logRoot 'agent.error.log'
 
+function Quote-Ps([string]$Value) { return "'" + $Value.Replace("'", "''") + "'" }
+
 function Get-AgentProcess {
     if (-not (Test-Path -LiteralPath $pidPath -PathType Leaf)) { return $null }
     try {
         $record = Get-Content -LiteralPath $pidPath -Raw | ConvertFrom-Json
         $process = Get-CimInstance Win32_Process -Filter "ProcessId=$([int]$record.pid)" -ErrorAction Stop
+        if (-not $process) { return $null }
         $expectedPython = [System.IO.Path]::GetFullPath((Join-Path $agentRoot '.venv\Scripts\python.exe'))
-        if ([System.IO.Path]::GetFullPath($process.ExecutablePath) -ne $expectedPython -or
-                $process.CommandLine -notmatch 'spiderfly_agent') {
+        $allowedExecutables = @($expectedPython)
+        $venvConfig = Join-Path $agentRoot '.venv\pyvenv.cfg'
+        if (Test-Path -LiteralPath $venvConfig -PathType Leaf) {
+            $baseExecutable = Get-Content -LiteralPath $venvConfig | Where-Object { $_ -match '^executable\s*=\s*(.+)$' } | Select-Object -First 1
+            if ($baseExecutable -match '^executable\s*=\s*(.+)$') {
+                $allowedExecutables += [System.IO.Path]::GetFullPath($Matches[1].Trim())
+            }
+        }
+        $commandLine = [string]$process.CommandLine
+        $dataArgument = '(?i)(?:^|\s)--data-dir\s+"?' + [regex]::Escape($dataRoot) + '"?(?:\s|$)'
+        if (-not $process.ExecutablePath -or
+                [System.IO.Path]::GetFullPath($process.ExecutablePath) -notin $allowedExecutables -or
+                $commandLine -notmatch '(?i)(?:^|\s)-m\s+spiderfly_agent(?:\s|$)' -or
+                $commandLine -notmatch $dataArgument) {
             throw "PID $($record.pid) 已被其他进程占用，未执行操作；请人工核对 $pidPath"
         }
         return @{ Process = $process; Record = $record }
@@ -61,24 +76,38 @@ switch ($Action) {
     'Start' {
         if (Get-AgentProcess) { throw 'Agent 已在运行，不会重复启动' }
         New-Item -ItemType Directory -Force -Path $logRoot | Out-Null
-        $arguments = @('-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $agentRoot 'start.ps1'), '-DataDir', $dataRoot)
-        if ($Server) { $arguments += @('-Server', $Server) }
-        if ($Code) { $arguments += @('-Code', $Code) }
-        if ($Name) { $arguments += @('-Name', $Name) }
-        if ($Dispatch) { $arguments += '-Dispatch' }
         if ($Console) {
+            $arguments = @('-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $agentRoot 'start.ps1'), '-DataDir', $dataRoot)
+            if ($Server) { $arguments += @('-Server', $Server) }
+            if ($Code) { $arguments += @('-Code', $Code) }
+            if ($Name) { $arguments += @('-Name', $Name) }
+            if ($Dispatch) { $arguments += '-Dispatch' }
             & powershell.exe @arguments -Console
             exit $LASTEXITCODE
         }
-        Start-Process powershell.exe -ArgumentList $arguments -WindowStyle Hidden `
-            -RedirectStandardOutput $stdoutLog -RedirectStandardError $stderrLog | Out-Null
-        $deadline = (Get-Date).AddSeconds(30)
+        $command = '& ' + (Quote-Ps (Join-Path $agentRoot 'start.ps1')) + ' -DataDir ' + (Quote-Ps $dataRoot)
+        if ($Server) { $command += ' -Server ' + (Quote-Ps $Server) }
+        if ($Code) { $command += ' -Code ' + (Quote-Ps $Code) }
+        if ($Name) { $command += ' -Name ' + (Quote-Ps $Name) }
+        if ($Dispatch) { $command += ' -Dispatch' }
+        $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
+        $child = Start-Process powershell.exe -ArgumentList @('-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', $encoded) `
+            -WindowStyle Hidden -RedirectStandardOutput $stdoutLog -RedirectStandardError $stderrLog -PassThru
+        $deadline = (Get-Date).AddMinutes($(if (Test-Path -LiteralPath (Join-Path $agentRoot '.venv\.dependencies.sha256')) { 1 } else { 10 }))
         do {
             Start-Sleep -Milliseconds 250
             $state = Get-AgentProcess
             if ($state) { Show-Status; exit 0 }
+            if ($child.HasExited) {
+                $lastError = if (Test-Path -LiteralPath $stderrLog) {
+                    Get-Content -LiteralPath $stderrLog -ErrorAction SilentlyContinue |
+                        Where-Object { $_ -match 'Agent 启动或运行失败:|安装 Agent 依赖失败|Agent 注册失败|创建 Agent 环境失败' } |
+                        Select-Object -Last 1
+                }
+                throw "Agent 启动失败：$(if ($lastError) { $lastError } else { "请查看 $stderrLog" })"
+            }
         } while ((Get-Date) -lt $deadline)
-        throw "Agent 未在 30 秒内就绪，请查看 $stderrLog 和 $stdoutLog"
+        throw "Agent 未在等待时间内就绪，请查看 $stderrLog 和 $stdoutLog"
     }
     'Stop' {
         $state = Get-AgentProcess
@@ -195,12 +224,15 @@ switch ($Action) {
             Expand-Archive -LiteralPath $PackagePath -DestinationPath $temporary
             $sourceRoot = Join-Path $temporary 'SpiderFlyAgent'
         } else { $sourceRoot = [System.IO.Path]::GetFullPath($PackagePath) }
-        $required = @('README.md', 'requirements.txt', 'start.ps1', 'manage.ps1', 'spiderfly_agent\__init__.py')
+        $required = @('README.md', 'requirements.txt', 'start.ps1', 'manage.ps1',
+            'setup.ps1', 'install-python.ps1', '安装并接入Agent.bat', 'spiderfly_agent\__init__.py')
         foreach ($name in $required) { if (-not (Test-Path -LiteralPath (Join-Path $sourceRoot $name) -PathType Leaf)) { throw "升级包缺少 $name" } }
         $archive = Join-Path (Split-Path $agentRoot -Parent) ("SpiderFlyAgent-program-{0}.zip" -f (Get-Date -Format 'yyyyMMdd-HHmmss'))
-        $programFiles = @('README.md', 'requirements.txt', 'start.ps1', 'manage.ps1', 'spiderfly_agent') | ForEach-Object { Join-Path $agentRoot $_ }
+        $programNames = @('README.md', 'requirements.txt', 'start.ps1', 'manage.ps1',
+            'setup.ps1', 'install-python.ps1', '安装并接入Agent.bat', 'spiderfly_agent')
+        $programFiles = $programNames | ForEach-Object { Join-Path $agentRoot $_ } | Where-Object { Test-Path -LiteralPath $_ }
         Compress-Archive -Path $programFiles -DestinationPath $archive -CompressionLevel Optimal
-        foreach ($name in @('README.md', 'requirements.txt', 'start.ps1', 'manage.ps1', 'spiderfly_agent')) {
+        foreach ($name in $programNames) {
             Copy-Item -LiteralPath (Join-Path $sourceRoot $name) -Destination $agentRoot -Recurse -Force
         }
         if (Test-Path -LiteralPath $temporary) { Remove-Item -LiteralPath $temporary -Recurse -Force }
