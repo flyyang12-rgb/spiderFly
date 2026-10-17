@@ -10,10 +10,12 @@ import subprocess
 import sys
 import threading
 import time
+from datetime import datetime, timezone
 
 import psutil
 
 from .windows import ProcessJob
+from .environment import PROBE, REPORT_VERSION, bounded_report, read_probe, requirements_hash, verify_packages
 
 MAX_ARTIFACT = 16 * 1024 * 1024
 _GATE = "import subprocess,sys\nif sys.stdin.buffer.readline()!=b'GO\\n': sys.exit(125)\nsys.exit(subprocess.call(sys.argv[1:], stdin=subprocess.DEVNULL))"
@@ -87,7 +89,7 @@ class Worker(threading.Thread):
 
     def environment(self) -> dict:
         env = {key: value for key, value in os.environ.items()
-               if not key.startswith(("SPIDERFLY_", "FEISHU_", "DEEPSEEK_", "OPENAI_"))
+               if not key.startswith(("SPIDERFLY_", "FEISHU_", "DEEPSEEK_", "OPENAI_", "LARK_"))
                and key not in {"PYTHONPATH", "PYTHONHOME"}}
         env.update({"PYTHONUTF8": "1", "PYTHONUNBUFFERED": "1",
                     "SPIDERFLY_ARTIFACT_DIR": str(self.artifacts),
@@ -205,6 +207,9 @@ class Worker(threading.Thread):
         # common temp/deployment roots. Keep a 128-bit prefix in the path, but
         # validate/store the entire digest so a collision never reuses an env.
         cache = self.root / "envs" / content_hash[:32]
+        if (cache.parent.resolve() != cache.parent.absolute() or cache.resolve() != cache.absolute()
+                or cache.is_symlink() or getattr(cache, 'is_junction', lambda: False)()):
+            raise ValueError('环境缓存目录不能是链接或目录外路径')
         cache.mkdir(parents=True, exist_ok=True)
         digest_file = cache / ".package-hash"
         if digest_file.exists():
@@ -214,26 +219,69 @@ class Worker(threading.Thread):
             digest_file.write_text(content_hash, encoding="ascii")
         python = cache / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
         marker = cache / ".ready"
-        if marker.is_file() and python.is_file() and marker.read_text(encoding="ascii") == content_hash:
+        reused = marker.is_file() and python.is_file() and marker.read_text(encoding="ascii") == content_hash
+        facts = {'report_version': REPORT_VERSION, 'package_hash': content_hash,
+                 'requirements_hash': requirements_hash(requirements), 'cache_reused': reused,
+                 'python': None, 'bits': None, 'packages': [], 'pip_check': False,
+                 'interpreter_verified': False, 'requirements_verified': False}
+        stage = 'create'
+        try:
+            if not reused:
+                marker.unlink(missing_ok=True)
+                self.emit("stdout", "准备本机 Python 环境…\n")
+                # Rebuild an unfinished cache in place; never leave stale packages
+                # from a previous failed install in an environment marked ready.
+                if self.command([sys.executable, "-m", "venv", "--clear", str(cache)]) != 0:
+                    raise RuntimeError("创建 Python 环境失败，详见标准错误")
+                digest_file.write_text(content_hash, encoding="ascii")
+                if requirements.strip():
+                    stage = 'install'
+                    requirement_file = self.work / "requirements.txt"
+                    requirement_file.write_text(requirements, encoding="utf-8", newline="")
+                    if self.command([str(python), "-m", "pip", "install", "--disable-pip-version-check",
+                                      "--no-input", "-r", str(requirement_file)]) != 0:
+                        raise RuntimeError("安装 Python 依赖失败，详见标准错误")
+            stage = 'interpreter'
+            probe = self.work / '.environment-probe.json'
+            probe.unlink(missing_ok=True)
+            if self.command([str(python), '-I', '-c', PROBE, str(probe)]) != 0:
+                raise RuntimeError('业务环境解释器检查失败，详见标准错误')
+            facts.update(read_probe(probe, python, cache))
+            facts['interpreter_verified'] = True
+            stage = 'pip_check'
+            if self.command([str(python), '-I', '-m', 'pip', 'check']) != 0:
+                raise RuntimeError('业务环境依赖一致性检查失败，详见标准错误')
+            facts['pip_check'] = True
+            stage = 'requirements'
+            verify_packages(facts['packages'], requirements)
+            facts['requirements_verified'] = True
+            self.check_stop()
+            report = bounded_report({**facts, 'status': 'ready', 'stage': 'ready', 'error': '',
+                                     'verified_at': datetime.now(timezone.utc).isoformat()})
+            temporary = cache / '.ready.tmp'
+            temporary.write_text(content_hash, encoding='ascii')
+            temporary.replace(marker)
+            # Save replayable facts before allowing any business process.
+            self.journal.append(self.run_id, 'environment', environment=report)
             return python
-        self.emit("stdout", "准备本机 Python 环境…\n")
-        if self.command([sys.executable, "-m", "venv", str(cache)]) != 0:
-            hint = "；数据目录路径过长时请使用较短的 --data-dir" if os.name == "nt" else ""
-            raise RuntimeError(f"创建 Python 环境失败，详见标准错误{hint}")
-        if requirements.strip():
-            requirement_file = self.work / "requirements.txt"
-            requirement_file.write_text(requirements, encoding="utf-8", newline="")
-            if self.command([str(python), "-m", "pip", "install", "--disable-pip-version-check",
-                             "--no-input", "-r", str(requirement_file)]) != 0:
-                raise RuntimeError("安装 Python 依赖失败，详见标准错误")
-        self.check_stop()
-        marker.write_text(content_hash, encoding="ascii")
-        return python
+        except BaseException as error:
+            marker.unlink(missing_ok=True)
+            report = {**facts, 'status': 'failed', 'stage': stage, 'error': str(error)[:1000],
+                      'verified_at': datetime.now(timezone.utc).isoformat()}
+            try:
+                bounded_report(report)
+            except ValueError:
+                report['packages'] = []
+                report['error'] = '环境记录超过 256 KiB，未回传包明细；' + str(error)[:900]
+            self.journal.append(self.run_id, 'environment', environment=report)
+            raise
 
     def run(self):
         self.deadline = time.monotonic() + max(1, int(self.run_info["timeout_seconds"]))
         status, text, exit_code = "failed", "执行端未完成运行", None
         try:
+            if self.run_info.get('environment_report_version') != REPORT_VERSION:
+                raise ValueError('主控尚不支持业务环境记录，请先升级主控；本次未执行脚本')
             expected = self.run_info["package_hash"]
             if not re.fullmatch(r"[a-f0-9]{64}", expected):
                 raise ValueError("无效的任务包哈希")
@@ -252,6 +300,7 @@ class Worker(threading.Thread):
             entrypoint = self.work / "main.py"
             entrypoint.write_text(script, encoding="utf-8", newline="")
             python = self.prepare_environment(requirements, expected)
+            self.check_stop()
             self.emit("started", "开始执行")
             exit_code = self.command([str(python), "-u", str(entrypoint)])
             status = "succeeded" if exit_code == 0 else "failed"

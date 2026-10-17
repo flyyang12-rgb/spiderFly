@@ -29,7 +29,7 @@ const {
     <section class="modal log-modal" role="dialog" aria-modal="true" aria-label="执行日志">
       <header>
         <div>
-          <span class="eyebrow">EXECUTION #{{ detail.id }}</span>
+          <span class="execution-id">运行 #{{ detail.id }}</span>
           <h2>{{ detail.task_name }}</h2>
         </div>
         <button class="modal-close" type="button" aria-label="关闭" @click="detail = null">×</button>
@@ -152,13 +152,13 @@ const {
           </p>
         </div>
         <div>
-          <span class="log-label">标准输出 stdout</span>
+          <span class="log-label">运行日志</span>
           <pre>{{
             detail.stdout || (['pending', 'running'].includes(detail.status) ? '等待程序输出…' : '（无输出）')
           }}</pre>
         </div>
         <div v-if="detail.stderr || (detail.error_message && detail.status !== 'pending')">
-          <span class="log-label danger-text">错误输出 stderr</span>
+          <span class="log-label danger-text">错误日志</span>
           <pre class="error-log">{{ detail.stderr || detail.error_message }}</pre>
         </div>
         <div v-if="detail.notification_error" class="notice warning">
@@ -186,13 +186,14 @@ const {
         >
           {{ detail.stop_requested ? '正在停止…' : '强制停止' }}
         </button>
-        <button class="button secondary" type="button" @click="detail = null">关闭日志</button>
+        <button class="button secondary" type="button" @click="detail = null">关闭</button>
       </footer>
     </section>
   </div>
 </template>
 
 <style scoped>
+.execution-id { display: block; margin-bottom: 4px; color: var(--muted); font-size: 12px; }
 .execution-maintenance{align-items:flex-start;padding:12px 14px;gap:10px}
 .execution-maintenance .notice-icon{margin-top:1px}
 .execution-maintenance-content{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 18px;min-width:0;flex:1}

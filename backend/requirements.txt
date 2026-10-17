@@ -6,3 +6,4 @@ requests>=2.31,<3
 pillow>=10,<13
 python-multipart>=0.0.9,<1
 cryptography>=44,<47
+packaging>=24,<27

@@ -41,6 +41,11 @@ async def force_stop_execution(
         raise HTTPException(status_code=404, detail="执行记录不存在")
     if item["status"] != "running":
         raise HTTPException(status_code=409, detail="只能强制停止正在运行的任务")
+    from ..services import workflows
+    with transaction() as conn:
+        step = workflows.execution_step(conn, execution_id)
+        if step:
+            workflows.request_stop(step["run_id"], user["id"], conn=conn)
     try:
         accepted = request_execution_stop(execution_id, user["username"])
     except ValueError as exc:
@@ -81,6 +86,12 @@ def cancel_execution(
             """,
             (now, execution_id),
         )
+        from ..native_process import confirm_unstarted
+        confirm_unstarted(conn, execution_id)
+        from ..services import workflows
+        step = workflows.execution_step(conn, execution_id)
+        if step:
+            workflows.request_stop(step["run_id"], user["id"], conn=conn)
         conn.execute(
             f"UPDATE tasks SET last_status = {TASK_EXECUTION_STATUS_SQL}, updated_at = ? WHERE id = ?",
             ("cancelled", now, item["task_id"]),

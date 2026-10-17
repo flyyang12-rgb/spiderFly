@@ -1,0 +1,744 @@
+{
+  "verified_at": "2026-10-15T05:47:50.295701+00:00",
+  "source_root": "D:/AI_Project/Workspace/Project_01_Py任务分发管理项目/SpiderFly",
+  "checked_root": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-ui-eb3b71995a644ccf9a824cee5cd69739",
+  "baseline": "AI助手界面优化指纹_2026-10-15.json",
+  "changed_sources": [
+    "backend/app/api/settings.py",
+    "backend/app/feishu.py",
+    "backend/app/feishu_settings.py",
+    "backend/tests/test_feishu_settings.py",
+    "frontend/src/AiSettings.vue",
+    "frontend/src/App.vue",
+    "frontend/src/MaintenanceNotices.vue",
+    "frontend/src/features/apps/CreateTaskPage.vue",
+    "frontend/src/features/auth/LoginPage.vue",
+    "frontend/src/features/auth/PasswordDialog.vue",
+    "frontend/src/features/executions/ActiveQueue.vue",
+    "frontend/src/features/executions/CollectionProgress.vue",
+    "frontend/src/features/executions/ExecutionDetail.vue",
+    "frontend/src/features/executions/ExecutionHistory.vue",
+    "frontend/src/features/executions/RunHistoryPage.vue",
+    "frontend/src/features/hosts/HostsPage.vue",
+    "frontend/src/features/members/AuditPage.vue",
+    "frontend/src/features/members/DeleteMemberDialog.vue",
+    "frontend/src/features/members/MemberEditor.vue",
+    "frontend/src/features/members/MembersPage.vue",
+    "frontend/src/features/schedule/CronEditor.vue",
+    "frontend/src/features/schedule/PlanEditor.vue",
+    "frontend/src/features/schedule/SchedulePage.vue",
+    "frontend/src/features/schedule/WorkflowTriggerHistory.vue",
+    "frontend/src/features/settings/AccountBalance.vue",
+    "frontend/src/features/settings/FeishuSettings.vue",
+    "frontend/src/features/settings/ServiceSettingsPage.vue",
+    "frontend/src/features/settings/SystemSettingsPage.vue",
+    "frontend/src/features/taskCenter/CreationDialog.vue",
+    "frontend/src/features/taskCenter/TaskCenterPage.vue",
+    "frontend/src/features/tasks/DeleteTaskDialog.vue",
+    "frontend/src/features/tasks/TaskEditor.vue",
+    "frontend/src/features/tasks/TasksPage.vue",
+    "frontend/src/features/workflows/WorkflowEditor.vue",
+    "frontend/src/features/workflows/WorkflowHistory.vue",
+    "frontend/src/features/workflows/WorkflowRunDetail.vue",
+    "frontend/src/lib/constants.js",
+    "frontend/src/pages/OverviewPage.vue",
+    "frontend/src/style.css",
+    "frontend/src/workspace/useWorkspaceData.js"
+  ],
+  "source_sha256": {
+    "backend/app/__init__.py": "65a3f0f2c6e2a7dfe49c4f7324e5a79de56620c0911c0f32889ad1e9dc1dc45a",
+    "backend/app/ai_agent.py": "e8da8a09997a3bf99ec24d6bf249e4b083058a8e0b418c0b10e09bb444f9866e",
+    "backend/app/ai_browser.py": "9705bd08fb303b01b761717bb49e62a38d6329d49bc63b20d7893330f212a111",
+    "backend/app/ai_knowledge.py": "0b110db1c32435a2932559fd629368fbbb50d780faa1ffc11f9f0648137de48a",
+    "backend/app/ai_scraping.py": "d4c93dc741f8666003f7ba6b8131eb78f50bb5d39b9a4601ffb286d53fcb0883",
+    "backend/app/ai_settings.py": "f56aa7c810b31619dab6922a680e8fa70e08905b4de1e80491d82c13f4ad2cc3",
+    "backend/app/ai_titles.py": "cac197e05c846b0cb67362c91c5805b4ac639a2123dff97130349e5a382d5580",
+    "backend/app/ai_tools.py": "4dc6ae77d434bdb317959ffd9058c5e74b2e9120f5373cb1066c5f9d2fad0cc2",
+    "backend/app/api/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "backend/app/api/apps.py": "9180f5256670f11fedb919110a51cfb3ac67f52f257f1e89a7afe86d1455b162",
+    "backend/app/api/audit.py": "950bd4cd02c848ebc2df5ed81c55ec6f5a5454d86e76abd55370fa10509ef823",
+    "backend/app/api/auth.py": "407c59c19942f95170b768bb013f4b851dfb41ac6afdd6c7915aace294bbb9d3",
+    "backend/app/api/executions.py": "13115e2b471af1f8a513a2839c4016cc566cc1234da4a6a14e00e518109e71b4",
+    "backend/app/api/hosts.py": "ab251bf4a919eb52200b839509d81eb2e79d9c941031201f6d75499820d563a9",
+    "backend/app/api/overview.py": "853c4dd6941b914d67a10e758ecf1f4e85288fad24721c4d1fa473702808ba77",
+    "backend/app/api/schedules.py": "736df8c00e89f6300c25373b25f8c3867dc5c8ee05f4cf84550a30468f74a743",
+    "backend/app/api/settings.py": "6dc271b68a11d3435bf95a8baf2226642d5f484b0c010ecfb77fc7915f200003",
+    "backend/app/api/tasks.py": "812ab363eee2548394104735071f16031db0b13c4a6a4230865901d3d1fe7db0",
+    "backend/app/api/users.py": "ffc94d7cff087a158ad6947a90253d6a97666c5ed805590882d874dca4b5f940",
+    "backend/app/api/workflows.py": "1246d99e58ee7c82b648d4a5b4ba32cb22f901fbd3a70f91b3a1395f274ed5c8",
+    "backend/app/collection.py": "e2853dda3285e1b10c6f497df4ab0696555d96d33f9503cfba2913e411cd5ce5",
+    "backend/app/collection_progress.py": "6aa6220ae48f0cc44737d612a1e0de06084def8346103f7c7f1e8086785eb442",
+    "backend/app/config.py": "63d33bab83337645ceb2e107c4e8de6de6f19a33d5ba2d46c8364e1d13bdfa55",
+    "backend/app/cron_schedule.py": "d7630ed19ee89087d2fafc72b1548622b759134c656569748bd765210e1544ff",
+    "backend/app/database.py": "f685e4583fdeaa4289c86b6c886a19606e71aeb8a166ab74f6c90bc2070f49b6",
+    "backend/app/dp_probe.py": "2db68717432ae5bd8662e8cae577a4fcd4910a02c2a84f91b550752181d26171",
+    "backend/app/dp_runtime.py": "522394160f8ca6f7968b7f7b4e535138155d2c2ae88e4a08d7fbb4fce04e9f03",
+    "backend/app/environments.py": "7b36d1e62cdff684982153a000eb0459657b659cc81921a0b0dba16069cea9af",
+    "backend/app/execution_artifacts.py": "52aa9a925f32bc239881bbae53088db1bfea1af6184a172c1eb837c456805981",
+    "backend/app/execution_results.py": "cf6ee3417e828fc19fff7f5ec5c26a58983683f3975f4a94f6a0eb4b96d2729c",
+    "backend/app/feishu.py": "e3748a195feda8e41287a5178e14bfc9e8552fd7a6697d214869c815e1effc75",
+    "backend/app/feishu_settings.py": "04b68a13f40a79148bc6cabc2812904d37ed6a09188c217c2a8a30d51690fbea",
+    "backend/app/host_runtime.py": "6d4b8fff1fb6e63a68b8a80cc17262564eaad340d390843a13a23fa61b5ff319",
+    "backend/app/instance_lock.py": "34341a62be3878625f09dc14af48e77ab152e450f60bb0320a63228acc72cf7f",
+    "backend/app/main.py": "f4a820786ee56922033b4aa63c2fd0c066350837e14d33d48c470705b8487dee",
+    "backend/app/maintenance.py": "804227cfd15071109383815742f687c2679d16f8b4dfe908a0e567108d144a74",
+    "backend/app/maintenance_runtime.py": "7c8b190e8c6dfa417319729c8b4c70bae32e7ad3dd9414753050a9e3cede5749",
+    "backend/app/native_process.py": "0d4d60279268697e55b63b48246ff5f6a23b68669235101cde8125324c71c561",
+    "backend/app/remote_maintenance.py": "15ac74bb1ec1880932c960d4be0a80c407027b50db98ee1a35c47d3f062fd178",
+    "backend/app/runner.py": "7f5f2b8764c5092304843113554c6cb5e66ffbf39060d5630c364b3be6532c34",
+    "backend/app/scheduling.py": "8e3b131f72497612f2b3ed493bf4f8bf6cf5862d665e05e2e37ae3334c671682",
+    "backend/app/schemas.py": "46b74147be3dd9152348a1c3abef66207697978f76cc0086fd42f832ed2f4eae",
+    "backend/app/security.py": "b38c77a2e1dff420e66c73086e1cbab8e1ce0dd39d285a7a7c224596690666fa",
+    "backend/app/services/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "backend/app/services/cron_runs.py": "e9c0db78ac30ff3511b708e49232d1aa4cd40f3315dfd1e9adf8aecf3e8e7c57",
+    "backend/app/services/execution_queue.py": "d27cfe0c5d0ea482ab8506975d9d5fe7b4d7f4ac47dceb925279e5f2494362ab",
+    "backend/app/services/host_dispatch.py": "90c9c91c1450c00c6e70e08ecd4752968e90410c86693c878d709964e2fd9403",
+    "backend/app/services/runtime.py": "6da071caf03a0412d735ce2997f739775a7335749aa66a0c6eab138a077f0a3e",
+    "backend/app/services/task_queries.py": "4f62f4b3f15337c8163f6839663e5f06b394abd04154d1a32a9dcf1bbb6be3fb",
+    "backend/app/services/workflow_schedules.py": "2f3214ea4edf9161af9832dacb9e03725b2a4744a27a1a450d15fad1a91b1278",
+    "backend/app/services/workflows.py": "1527e072baae77af1cb80463ecc37fd24578eda56b800bb299e1443b1363084c",
+    "backend/app/task_versions.py": "198b97301d1a814235f95a4228f621471e4e567bf53ea94c66f4cc56a7276a2b",
+    "backend/native/dp_driver.py": "afdfde97cbe8ac9799c796fd3413e3ffde82d015a592e5d0f20ae2054eec98e4",
+    "backend/sandbox/collection_api.py": "6f21c4fbee3904018986fe2cb9f789895b31912db4bb1fa2846eaf12066353c0",
+    "backend/sandbox/collection_net.py": "bbc4c6f97dbef413b91bd48859431a6901c92641c13ce35cad68ccf9097308fb",
+    "backend/sandbox/driver.py": "360e588c23dc1e0859ca721ec9fb70fea2ea4aa50f9849439105c60a22c45cb1",
+    "backend/sandbox/entry.py": "7d924a0153fe40806576b61a29cb9eb2222bc3c14e066aac0004737158a49087",
+    "backend/sandbox/setup_collection.py": "d61e5cd7f9d261ef920daafa854babf1b5b601ac38a45f234d6f376ac99e25a5",
+    "backend/sandbox/setup_runtime.py": "faf5e43bdba070fc84347b5bc830ce7eb2f0a6ed85cc62b06d2b51d601f04298",
+    "backend/tests/__init__.py": "6f47cc823fe97f49698896d82d285cf5fd037c2462d34ee80c94d182c617640a",
+    "backend/tests/collection_native_probe.py": "cd3a5c56ca53747ec8833eb611b1ca65d630daeba6659818448c621addd9fb67",
+    "backend/tests/fixtures/slow_task.py": "d9e9c31f64476fb601fa1e54214c2b4c2e5d923c6c71bcc7d0d6b1bee6edc381",
+    "backend/tests/test_ai_agent.py": "e9ddce607c90a989c06fb7c0615dc37721099460c252c15c0db1cb3518c0531d",
+    "backend/tests/test_ai_balance.py": "9557b84442956c91f5f4058a664d37af3cc4ec46cc8516f4b30dd609832a70b9",
+    "backend/tests/test_ai_browser.py": "3e52d1897900bdbff8a6a0ab1b9882f9b95c7c9a32405bdf60bb0e804b39010d",
+    "backend/tests/test_ai_key_display.py": "3e301751dc81cce0434e7f74b234122ade501531a7f16c7bc0a40788a6639515",
+    "backend/tests/test_ai_knowledge.py": "e3d087d84e640b5747cfdbe4d238d1634b6eebb5adfbb0eb9e5d2ae448454fde",
+    "backend/tests/test_ai_scraping.py": "0369e070ed97232cf38f7f4ee4e1f11d83b1cff8f0d35328b3c08fccc309fcef",
+    "backend/tests/test_ai_settings.py": "069ca5aa9ea38acfdef865b3798efd2a886496d647a0133f8000ba3fd5e0ac14",
+    "backend/tests/test_ai_titles.py": "ad0ea299fa1861ecc24536a31b7d4b8ccd48030c68badca3dade5352cdf5e5c8",
+    "backend/tests/test_app_api.py": "3b952d92ba792d15e6fe5dc38e3b5abf9001c192506118436a01010853f6db63",
+    "backend/tests/test_collection.py": "04d3c5c0c9afdb942e627c259171e1752cfa1e178f9f8d7938213c6c289f834d",
+    "backend/tests/test_collection_core.py": "fdac6f4d51e39c7b5b68325b037524ca9f6e50ca97193df7ec4b504fead9c4db",
+    "backend/tests/test_collection_progress.py": "95b82d0721746052e92a43263c28c9040e0b3d26347c0d99f7059bd6235f9eb1",
+    "backend/tests/test_cron_integration.py": "4af78804c6b82f9afd416bcb0648e45bfccfd3634e587dcb77428de64b7e512b",
+    "backend/tests/test_cron_maintenance.py": "72b2f9018b657759bb6cc53cddd7e8fb07f0b405903aee59a4f3212d0219b9e7",
+    "backend/tests/test_cron_runs.py": "641ccc438ecaa524948d9bdbf91a3d9f756ccf1206f21c1db6268bda312ea457",
+    "backend/tests/test_cron_schedule.py": "6d64297406241ab8bd79b655ee38d18c281d266f06577fdf38b213bce6ec9715",
+    "backend/tests/test_database_migrations.py": "e9897609c174257faf08ff0c2ac8654c2636d21492261d0bc7cbb2ca81ab7131",
+    "backend/tests/test_dp_runtime.py": "04ff9ac3b044ca48c133ec2b918bb48fdc96e3288d89b00ef2e50f90ebe4e50a",
+    "backend/tests/test_environments.py": "c658ac68a9e217f112b6209a04aa78e63b3f61b3927f71652f31546b2e5409ec",
+    "backend/tests/test_execution_artifact_api.py": "8124c09900aacd880ef90cee24ede9af9b88fa8c4cd856ac3d3abfb9a6c7a1c9",
+    "backend/tests/test_execution_artifact_files.py": "54ef74252cc58496284968ddc38957be6f15898fb8d8da259cbfdd8de238d8d1",
+    "backend/tests/test_execution_history.py": "f3a922d088980dfc61382c0601d08af2f1877b247ec3a0e96d227ccdfd30e902",
+    "backend/tests/test_execution_results.py": "bee60ac4ba513a05ce7cf51a65b65f5b6aac7b563844ef2bb70b415ccf221b33",
+    "backend/tests/test_failure_screenshot.py": "889a61a320ba0c148c8d95392647025e859776ed92918f593b9aa7d7950de6c9",
+    "backend/tests/test_feishu.py": "b667941f13bdd9f65cb35c8e9ad91b8382a1b5419bf2ee94ced17d5068b20a8b",
+    "backend/tests/test_feishu_settings.py": "2725ffc8a5174cee7bbff523e3f34a72138acb0b285f04ab66123fa8cbcd0cee",
+    "backend/tests/test_force_stop.py": "9fb6f42e7f1341f7484a9605ef9737e76ecc65f1e6bf1587bcd99f5f72f319e9",
+    "backend/tests/test_host_runtime.py": "fe5f6022e04686790916b73b09728b89725846d9f3cc981894c934bf9575695e",
+    "backend/tests/test_hosts.py": "1ead238af9702663eac655edd501a6543374327d1d323d6564489877008148db",
+    "backend/tests/test_instance_lock.py": "625cfa5d1aa415ee9ae0ba740d5569bc93b90cd7e201088fb12ed5fdcf527171",
+    "backend/tests/test_legacy_cleanup.py": "0d151b299d5454a88af172b3e5f6653396b5d860d662e7434361a455943d735c",
+    "backend/tests/test_maintenance.py": "fd58faf60fc8d2deec2d5d2034fe3c634b7c73925e1b50a8224f5890b6cf300a",
+    "backend/tests/test_member_management.py": "d38a368feea53363296a1fbe9207c059fa3a43629e853bf165e5a959f57c66d5",
+    "backend/tests/test_native_process.py": "c8df25d8abb7cdb0d28918f1703fd6db2ee5d985279a17ba54bd0395be2fad7e",
+    "backend/tests/test_overview_timezone.py": "838ecc0790866bc0ae4dbbcf5381e6ed2268a97a9606b4875b26c918cc7e82e6",
+    "backend/tests/test_project_audit.py": "be14bde0186996488e570499f99c9b4b38f20abf46b62c4d300cd27b0cc4de9c",
+    "backend/tests/test_runner.py": "836525bfec420f137e034570169c910a3d2a4a15e4123f551fe873128f5c16bb",
+    "backend/tests/test_scheduled_queue.py": "2b3f5e6ba3caeb4aeeb01feaf85484c6b3fa494a42835878d3c55fcc244ee213",
+    "backend/tests/test_scheduling.py": "d17d0424c7ab698b6f8e5aca70ce1cdadc21da179e0b465118d2dbc472102d04",
+    "backend/tests/test_schemas.py": "1016901289eba4ec019c7500076e61724a54f99b1f098d12a75aee3e7426ff18",
+    "backend/tests/test_security.py": "eaf8b0cf267b761e74b775c975a22d386bc2e2ff4d7af21deba0b6a7efc9e0ba",
+    "backend/tests/test_task_versions.py": "7d720e7485226bb0ae7671687be7302b3f1a45f1febdfd771206a723f872204e",
+    "backend/tests/test_templates_and_timeouts.py": "7f30fdfc7a9e2c713138a415c4ca24e1b2c0b264ccfacbf464a1392d6a3654e4",
+    "backend/tests/test_workers.py": "aa2754f8447f9a718fb30fbc7af0aa13178214bdf09a6bf4b5e1eef679b72007",
+    "backend/tests/test_workflow_api.py": "1a4c0b6fa05113dc7f9fa08199c7d27c34be623ddb87269a0da84f01dcbcf0ca",
+    "backend/tests/test_workflow_runtime.py": "55e2e21cf642dd2f7095ab9afdfcef1e26e00ea79416b470b17a7ff94790441d",
+    "backend/tests/test_workflow_schedule_runtime.py": "b9917abebb8cdc375f223a76976faf9d9ee08ced66260bf31050674e5f13806b",
+    "backend/tests/test_workflow_schedules.py": "ba41beed97f1ea285925c0a73fbd70622031e13434c335501e527b64283734d9",
+    "backend/tests/test_workflows.py": "9b55ae602d2eb7f8adc46ca2b078e78d8331faba74c2b5a5970865cd081252cf",
+    "frontend/index.html": "27676af365d18737774d625ef7fa79e7ba4f65bda4b8de5c78ebdf8c8a42fc32",
+    "frontend/package-lock.json": "b623172f10f3e86dc5537e42b615d5dac52e2ac55c81bc4ee35ebd6d2172b77b",
+    "frontend/package.json": "802eafc2d15b4cab116786e22d22c52c9765d3618c8a97d092292d05b2263d77",
+    "frontend/public/favicon.svg": "9be3e30e0ad2dcd26cf9ce0546ad444286981ff9b8a7b8019de1e95750b4c634",
+    "frontend/src/AiAssistant.vue": "98d01a72a4e0cd72942b9f5522d2f69bad78babedde34b46e6ce6eb9b1a33d10",
+    "frontend/src/AiMaintenance.vue": "9bce39b16d9f180cc9f19d36a4fe600cd77dab7390d86a5d0bcfe7a224cfabc2",
+    "frontend/src/AiMessageContent.vue": "367da1276fcb440a2dcc4edf388c074d9ff290abcc7ccd0f181409d3b236951c",
+    "frontend/src/AiSettings.vue": "48f1875f994fdce5c141cfd7379cbc6bf59b2a8e82b425d60e8983b138df995a",
+    "frontend/src/AiThreadPicker.vue": "42da25a70b44294f721014390925335ff2f601d314c3b741ff5179a33ef3a826",
+    "frontend/src/App.vue": "a220989970a07b61d3319158621f41b83362fbf5282d5b494a4a067118cd746a",
+    "frontend/src/MaintenanceLog.vue": "7e15294773f0e17cf7b788f7b2c6a6e41d80f960231eff6260376209a2c08962",
+    "frontend/src/MaintenanceNotices.vue": "156ba9b9c038313a33ff93f94bca1f50e3709d0c3e5a3fc2f31c2af3e5d6274c",
+    "frontend/src/TaskVersions.vue": "628b6af934321e9db378a9a887ab4787a20d5b771c8111bcf1455fde924d39cc",
+    "frontend/src/components/ToastNotice.vue": "89fcd80fecfcd67f0cab99049983c4aac7a20822753d42041b4a2674f7df40a1",
+    "frontend/src/features/apps/CreateTaskPage.vue": "94d37022646b3d84989776c9623bccb2688589be8107370a1627fc8238e9d188",
+    "frontend/src/features/apps/useApps.js": "3075c4a2f07719e3504cc3f77c215b4b8d2d1496c543fbf9e9b995318959dc51",
+    "frontend/src/features/auth/LoginPage.vue": "88ef32eddf5235d4b90c0c59f248aaf4709df25482ccc6e3d7a3dfa35c5a6f8c",
+    "frontend/src/features/auth/PasswordDialog.vue": "ee79f00a4adae34adf6eccfb6a5aecc8cfe14be36d59c2a58fdc15553326c809",
+    "frontend/src/features/auth/useAuth.js": "acc3f849da5dc09fa73dc7c7862a02817d751a561a78a62ef0fb27e217ef84a9",
+    "frontend/src/features/executions/ActiveQueue.vue": "aa8b5b7c681a3e8e7e2ea1a539b5a75039ff9ae2eef7591d4157da116a039be9",
+    "frontend/src/features/executions/CollectionProgress.vue": "ff9c5d76061658e238de1e3f028cf223b84f4152c8f253738feb7289b8051c79",
+    "frontend/src/features/executions/ExecutionDetail.vue": "a66199a5f1166072e078a461d704073a2fb0b91adb4e44ed0f289970e450be68",
+    "frontend/src/features/executions/ExecutionHistory.vue": "4f6f9b9fafe7f0000099862e35fb0d11e712302f2bbb7986b3e57ffeffa48646",
+    "frontend/src/features/executions/RunHistoryPage.vue": "f6d821388864b98f93799eb18efdd58e8a13143f34533769d7029b298a1a5d8a",
+    "frontend/src/features/executions/StopExecutionDialog.vue": "67867b6d66e2f4968773d74cf1f51e45ee8cc3762663750cfb28df9d593ef327",
+    "frontend/src/features/executions/useExecutions.js": "634e3483cd962b049a92ef3dbd3315ff23a748b2f67e96c4d9972e160b21be16",
+    "frontend/src/features/hosts/HostsPage.vue": "f38cc88028bd5eb3baf12989b5c981ed9f3db3f21bb08fabb936cd42b555a9f6",
+    "frontend/src/features/hosts/useHosts.js": "b317eb3be67899dd1206a05d09ca603d49a215f5f6cc8153388ee688da266df3",
+    "frontend/src/features/members/AuditPage.vue": "7be4c7c6a60d617d9c8dd067f9b1e1fbe55f3e81f2e851556324d6148804eb64",
+    "frontend/src/features/members/DeleteMemberDialog.vue": "f81612cad43f8edc7f4181e0e5b38f2963ac868d3d94c7203aec57d07fb6c3b8",
+    "frontend/src/features/members/MemberEditor.vue": "740b596a4724283d478d5c610ba461bded8004cfd2229786e360de1317e3b895",
+    "frontend/src/features/members/MembersPage.vue": "4b51d7b650bca5fe55c586ce95e3413f80ed8d3b9233070c6e60e32e885e41ec",
+    "frontend/src/features/members/useMembers.js": "ce2449298b085aa348b3e9eae7507ac5132fb5aa160675fa6fbedde2d2d6b862",
+    "frontend/src/features/schedule/CronEditor.vue": "915b9fa462dcc6e52c657098e892bf6949a1dead929ef54c9f0954fc9909e2b0",
+    "frontend/src/features/schedule/CronEntryDetails.vue": "ae936927f149ea0f3cfde32f16002b39ab6abe27ddbd9d09591d18fa88f8f080",
+    "frontend/src/features/schedule/PlanEditor.vue": "943f3fa96cdf62dcaaae9228ebdf911d1c8f157747845bbb8d92c061ad29fc1b",
+    "frontend/src/features/schedule/SchedulePage.vue": "2a9d2f5bd4eeb005e13b64a8d8ea77bbb3e05500ddf25cc3201d597074547ec7",
+    "frontend/src/features/schedule/WorkflowPlanDetails.vue": "5a6d229340fc25be7f0acbc7d79e98d9b178f805a49c79f6715a38161131c2fc",
+    "frontend/src/features/schedule/WorkflowRunViewer.vue": "34861d1b53e4b0c4a8bb1ec1ee4d4405b69d092496ed1fdcf96dfa0642195988",
+    "frontend/src/features/schedule/WorkflowTriggerHistory.vue": "394dafeea99f37376f39a6d9d9bafb451406d024fe9a5699090ec59075fd8187",
+    "frontend/src/features/schedule/useSchedule.js": "246666a8dd3cdb6756d812c9c7f5f453d5cd6f6109c500e156a0a20af3e12dfa",
+    "frontend/src/features/settings/AccountBalance.vue": "78dd779f1ae87f8c5f1e9aa082fe729a67dd1ee4a332855b7d841e25a0744ed5",
+    "frontend/src/features/settings/FeishuSettings.vue": "6b43a49dd6d20efdeaa346e621ee3cbd02710df4286082098bdb72e7d9b82cbc",
+    "frontend/src/features/settings/ModelSettingsPage.vue": "a643ae5671ad898e66d5a86c776371f8ff515ad4f28e91fadf59eb44d2e28631",
+    "frontend/src/features/settings/ServiceSettingsPage.vue": "5bf1d1ca7fdc74d1497507b496863214c747587b848b391c2721f8276a183889",
+    "frontend/src/features/settings/SystemSettingsPage.vue": "feee4cd94c20d35991984e8d247cce37a6255aa9f18d0d123a1d9e6042fe1428",
+    "frontend/src/features/taskCenter/CreationDialog.vue": "f7c0b8735996347dd017376e8e3e0094bc0d3c2af1c0904c6d36800c5b1c99b1",
+    "frontend/src/features/taskCenter/TaskCenterPage.vue": "7a1ad89353a986ff81926f2f7d9363ac2daae30276f1006ce9e7914867b9eae2",
+    "frontend/src/features/tasks/DeleteTaskDialog.vue": "c23d2e29f98cc2c2b74d127a19831e9857db99212412b5ac7ca2e7470caf3a32",
+    "frontend/src/features/tasks/TaskEditor.vue": "d16688f450ca379f39155084141d52b8bb9443e3aa63f3dda1503fb873eb05a8",
+    "frontend/src/features/tasks/TasksPage.vue": "7290e5cc9e3711100caf0bd6fe7381a8215a6ac9681bc07d264fb67d0745fe34",
+    "frontend/src/features/tasks/useTasks.js": "54c5a81b2f4f4910ad41d1870528a7aa0b2a1123d07a1a05aa4b811b6d45ae4e",
+    "frontend/src/features/workflows/WorkflowDialog.vue": "9bcf74957595bcdae48916f0c0affd8caffd2a0f4c681f894c0eca16bc15dd05",
+    "frontend/src/features/workflows/WorkflowEditor.vue": "07b0058b42e101f743bd47a8f35cedbdf2f393664e4e6bd9fa35b93cb5148845",
+    "frontend/src/features/workflows/WorkflowHistory.vue": "8c63d222ee308eb2a2d379e1d9f4b15fd66359576ad23b4b224ab00743358b9f",
+    "frontend/src/features/workflows/WorkflowRunDetail.vue": "d87ec7822cce4dd55d9813a25c83fa58c659704cea3583084f1612952cff8278",
+    "frontend/src/features/workflows/WorkflowsPage.vue": "b020d48dd3e1b915262f9a026daf9f5ee4321581758e3bffb05e9c7595645072",
+    "frontend/src/features/workflows/useWorkflows.js": "b8573ae451a46da4ed6d313daff9b0b2330358a13c9ccafd1a7e4e176b26a03b",
+    "frontend/src/lib/aiMarkdown.js": "996b7619d1e10fc33bbfd096fcdc4ea7ff9a6290079c99d006f2c03d0b93e139",
+    "frontend/src/lib/api.js": "d4ea9a7ebc2b8bfb32bef3b3c3bf3af2107b704c2c92081744f2cde6506e01eb",
+    "frontend/src/lib/constants.js": "688abaf10064526ca9314f28c44655845b07894730c9d42b28d0bebb522a4554",
+    "frontend/src/lib/format.js": "ed00a0677c9c62ed6c6570f0cb1c7c4f4742f83568ecbc442605e79a69645f01",
+    "frontend/src/lib/versionUpdates.js": "9491cfd8243acd32faca72ebe2a04f872a9d5ad4d2ca4d24697b7176629530ad",
+    "frontend/src/main.js": "750ece2ac39ad59f1470bd5a1d758bd324841d06d14dae1720fce58b6dde292c",
+    "frontend/src/maintenanceSummary.js": "e97b2d7642ce841690a35fecda57045cad185b9e7b839965b3fe8251bb8db699",
+    "frontend/src/pages/OverviewPage.vue": "5ee13a90ac6251fe0fef10f23766a813885e678eb66e9cdb57ce37c7623ecacd",
+    "frontend/src/style.css": "48873be62510ba2aa79eb3e9fe2c1e8d5329f1295555ff180a45c3e1d42a3669",
+    "frontend/src/workspace/context.js": "a6238c01ffec9faaa44b8e676121561ed13fdbbc5ff8d27c634cc2507eff7224",
+    "frontend/src/workspace/useWorkspace.js": "fab3714d2ded840bb82a841cf54c317f118a2d865ef042a7c6a643ed32337803",
+    "frontend/src/workspace/useWorkspaceData.js": "ff464ba8bb8d0c442ed312d3e40845834cbca7634e33bb793ac35646aa4d781f",
+    "frontend/vite.config.js": "68d1a74578811a1c27b21270a4148f43d59be8e90821a6c4c6b82831ca60905f"
+  },
+  "checked_dist_sha256": {
+    "favicon.svg": "9be3e30e0ad2dcd26cf9ce0546ad444286981ff9b8a7b8019de1e95750b4c634",
+    "index.html": "1bf0becbd131b60c48e3a1a99e2876c71d55893214a3e27d5036629bbd4c187b",
+    "assets/index-jdFVLHtV.js": "762235b2452a1a13fb19c7efd8d23bc23b97ff7bc31784e95413415d0c4b80c9",
+    "assets/index-JynFjKuq.css": "7242c538ce4bf8dc0fe58b5d5bce141a2b97bc7ebd53b3798cd30c2ea7a182c8"
+  },
+  "regression": {
+    "total": 695,
+    "passed": 676,
+    "skipped": 19,
+    "failures": 0,
+    "errors": 0,
+    "skips": [
+      {
+        "test": "test_real_browser_observe_click_login_resume_scrapling_and_expiry (test_ai_browser.BrowserTests.test_real_browser_observe_click_login_resume_scrapling_and_expiry)",
+        "reason": "需要独立环境 Chromium"
+      },
+      {
+        "test": "test_native_live_session_keeps_context_filters_and_api_evidence (test_ai_scraping.NativeScrapingTests.test_native_live_session_keeps_context_filters_and_api_evidence)",
+        "reason": "需要独立环境 Chromium"
+      },
+      {
+        "test": "test_real_browser_executes_js_and_cannot_read_host_or_direct_network (test_collection.CollectionNetworkTests.test_real_browser_executes_js_and_cannot_read_host_or_direct_network)",
+        "reason": "requires prepared collection-v1 runtime"
+      },
+      {
+        "test": "test_real_browser_loads_assets_and_clicks_next_page_without_crashing (test_collection.CollectionNetworkTests.test_real_browser_loads_assets_and_clicks_next_page_without_crashing)",
+        "reason": "requires prepared collection-v1 runtime"
+      },
+      {
+        "test": "test_real_scrapling_request_and_independent_csv_validation (test_collection.CollectionNetworkTests.test_real_scrapling_request_and_independent_csv_validation)",
+        "reason": "requires prepared collection-v1 runtime"
+      },
+      {
+        "test": "test_uploaded_python_uses_same_collection_profile_on_scheduled_run (test_collection.CollectionScheduledTests.test_uploaded_python_uses_same_collection_profile_on_scheduled_run)",
+        "reason": "requires prepared collection-v1 runtime"
+      },
+      {
+        "test": "test_native_dynamic_session_and_action_failure (test_collection_core.NativeTests.test_native_dynamic_session_and_action_failure)",
+        "reason": "requires WSL collection"
+      },
+      {
+        "test": "test_native_transport_fixture (test_collection_core.NativeTests.test_native_transport_fixture)",
+        "reason": "requires WSL collection"
+      },
+      {
+        "test": "test_real_crawl_resume_then_fresh_scheduled_collection (test_collection_core.NativeTests.test_real_crawl_resume_then_fresh_scheduled_collection)",
+        "reason": "requires WSL collection"
+      },
+      {
+        "test": "test_prepared_wsl_worker_executes_cron_owned_repair_once (test_cron_maintenance.CronMaintenanceTests.test_prepared_wsl_worker_executes_cron_owned_repair_once)",
+        "reason": "requires prepared WSL runtime for Cron-owned repair rerun"
+      },
+      {
+        "test": "test_real_dp_probe_observes_question_links (test_dp_runtime.DPTests.test_real_dp_probe_observes_question_links)",
+        "reason": "requires native DP runtime"
+      },
+      {
+        "test": "test_real_queue_trial_and_execution_same_port (test_dp_runtime.DPTests.test_real_queue_trial_and_execution_same_port)",
+        "reason": "requires Windows DP and a free configured task port"
+      },
+      {
+        "test": "test_real_stop_releases_configured_port (test_dp_runtime.DPTests.test_real_stop_releases_configured_port)",
+        "reason": "requires native DP runtime"
+      },
+      {
+        "test": "test_file_and_directory_symlinks_are_excluded (test_execution_artifact_files.ArtifactFileTests.test_file_and_directory_symlinks_are_excluded)",
+        "reason": "系统未授予创建符号链接权限：1314"
+      },
+      {
+        "test": "test_removes_a_child_symlink_without_deleting_its_external_target (test_host_runtime.WorkDirectoryCleanupTests.test_removes_a_child_symlink_without_deleting_its_external_target)",
+        "reason": "当前 Windows 策略不允许创建符号链接：[WinError 1314] 客户端没有所需的特权。: 'C:\\\\Users\\\\20898\\\\AppData\\\\Local\\\\Temp\\\\tmp7me8ib19\\\\external' -> 'C:\\\\Users\\\\20898\\\\AppData\\\\Local\\\\Temp\\\\tmp7me8ib19\\\\work\\\\linked-folder'"
+      },
+      {
+        "test": "test_rejects_a_work_directory_that_is_a_symbolic_link (test_host_runtime.WorkDirectoryValidationTests.test_rejects_a_work_directory_that_is_a_symbolic_link)",
+        "reason": "当前 Windows 策略不允许创建符号链接：[WinError 1314] 客户端没有所需的特权。: 'C:\\\\Users\\\\20898\\\\AppData\\\\Local\\\\Temp\\\\tmpyvv309tj\\\\real-work' -> 'C:\\\\Users\\\\20898\\\\AppData\\\\Local\\\\Temp\\\\tmpyvv309tj\\\\work-link'"
+      },
+      {
+        "test": "test_serial_worker_really_reruns_repair_and_keeps_business_artifact (test_maintenance.MaintenanceTests.test_serial_worker_really_reruns_repair_and_keeps_business_artifact)",
+        "reason": "requires prepared WSL runtime"
+      },
+      {
+        "test": "test_real_kernel_sandbox_denies_host_network_and_processes (test_maintenance.RuntimeTests.test_real_kernel_sandbox_denies_host_network_and_processes)",
+        "reason": "WSL sandbox integration is explicitly enabled on a prepared host"
+      },
+      {
+        "test": "test_real_sandbox_reproduces_type_error_and_runs_repaired_script (test_maintenance.RuntimeTests.test_real_sandbox_reproduces_type_error_and_runs_repaired_script)",
+        "reason": "requires prepared WSL runtime"
+      }
+    ],
+    "failed_tests": [],
+    "error_tests": []
+  },
+  "frontend_checks": {
+    "center-behavior": 22,
+    "unified-history": 25,
+    "workflow-ui": 10,
+    "management-ui": 25,
+    "feishu-settings": 18,
+    "ai-models": 43,
+    "chat-ui": 19
+  },
+  "frontend_total": 162,
+  "repetitions": 3,
+  "vite_modules": 110,
+  "evidence": {
+    "ui-backend-full.log": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-ui-eb3b71995a644ccf9a824cee5cd69739/ui-backend-full.log",
+      "sha256": "749ba9b672c1d0716b71a2ea692ba002597c6211c43defa827bd65e2725b10b7"
+    },
+    "feature-regression-result.json": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-ui-eb3b71995a644ccf9a824cee5cd69739/feature-regression-result.json",
+      "sha256": "911d0145eb2230fb8402332df184c17b1dbbea167cc6e9d3e18c03984eca16f9"
+    },
+    "ui-build-final.log": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-ui-eb3b71995a644ccf9a824cee5cd69739/ui-build-final.log",
+      "sha256": "a18a1d5064ba3167bbb4c67484b65fadbc0da945c5ca265ccc556c0d856c51fe"
+    },
+    "ui-page-proof.json": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-ui-eb3b71995a644ccf9a824cee5cd69739/ui-page-proof.json",
+      "sha256": "75c38744f1877a729401d13f9aa7340ba11371b0f41176928262290a3882ab9c"
+    },
+    "run-regression.py": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-ui-eb3b71995a644ccf9a824cee5cd69739/run-regression.py",
+      "sha256": "e9dd119d6ca4b122c933df34553c4158232e254a61ff33f5778cb17387d27d1a"
+    },
+    "frontend/ai-models-loader.mjs": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-ui-eb3b71995a644ccf9a824cee5cd69739/frontend/ai-models-loader.mjs",
+      "sha256": "02d6cd441034360003e664651f5fa4984e91be7910f97f754597301d2ac661c9"
+    },
+    "frontend/feishu-settings-cases.mjs": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-ui-eb3b71995a644ccf9a824cee5cd69739/frontend/feishu-settings-cases.mjs",
+      "sha256": "6ee5ed42310bcaf0a5fb5059c0e54b4606edc36a25a59b62741f53b38c86e0ad"
+    },
+    "ui-seed.py": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-ui-eb3b71995a644ccf9a824cee5cd69739/ui-seed.py",
+      "sha256": "8452d3250cd14b1ac47189bb790d5738473cffe2e6e93e9a6b6803a8ed1e8bf1"
+    },
+    "ui-chat-server.py": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-ui-eb3b71995a644ccf9a824cee5cd69739/ui-chat-server.py",
+      "sha256": "926ed56e0cca7c1d64141d9ecff0635459786a1076d23d1202fbe95900f49b25"
+    },
+    "frontend/center-behavior.test.mjs": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-ui-eb3b71995a644ccf9a824cee5cd69739/frontend/center-behavior.test.mjs",
+      "sha256": "3fb3cbea2db1b5db21b704ea8e1016ccc23a31c72397bd6d242c7a6db54e5f67"
+    },
+    "ui-final-center-behavior-1.log": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-ui-eb3b71995a644ccf9a824cee5cd69739/ui-final-center-behavior-1.log",
+      "sha256": "2d0a1d6d9860be03304449b89c0c1f56b98d26772aedeac6b7d7dd8d93d589ba"
+    },
+    "ui-final-center-behavior-2.log": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-ui-eb3b71995a644ccf9a824cee5cd69739/ui-final-center-behavior-2.log",
+      "sha256": "185c5b2379beb34abcaaa9d11e27e6770af06bb9349ad68a94e56db36dd77c29"
+    },
+    "ui-final-center-behavior-3.log": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-ui-eb3b71995a644ccf9a824cee5cd69739/ui-final-center-behavior-3.log",
+      "sha256": "09fecd5c173b5e35239d316e17d706e17f773e1356310c007f4a7dad7d55fdd6"
+    },
+    "frontend/unified-history.test.mjs": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-ui-eb3b71995a644ccf9a824cee5cd69739/frontend/unified-history.test.mjs",
+      "sha256": "5fa7f4dc3a8ec9191c5ceb8636e0334d9b35ae83fa24a2c112405bbe8b3141ae"
+    },
+    "ui-final-unified-history-1.log": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-ui-eb3b71995a644ccf9a824cee5cd69739/ui-final-unified-history-1.log",
+      "sha256": "3fcb885806262885fa535f310153c3854ca52be2b07a188788b967425e361987"
+    },
+    "ui-final-unified-history-2.log": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-ui-eb3b71995a644ccf9a824cee5cd69739/ui-final-unified-history-2.log",
+      "sha256": "ccc94d94249a6f995f03e3a8e770b77ad364c7a2b26c0d9d76162e9567d25c27"
+    },
+    "ui-final-unified-history-3.log": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-ui-eb3b71995a644ccf9a824cee5cd69739/ui-final-unified-history-3.log",
+      "sha256": "060c3e32a2c798249a5b45a0179a2d3f0f53fb024747101e54c9c49e23049761"
+    },
+    "frontend/workflow-ui.test.mjs": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-ui-eb3b71995a644ccf9a824cee5cd69739/frontend/workflow-ui.test.mjs",
+      "sha256": "f0d442a7a4f7f8c7331efe55ac6fd767932f784a28b93b6395684958132d4afe"
+    },
+    "ui-final-workflow-ui-1.log": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-ui-eb3b71995a644ccf9a824cee5cd69739/ui-final-workflow-ui-1.log",
+      "sha256": "49a771dca3c4d9a3ca23d4b496dce1135700824e43bc5f8433c9dde69808d921"
+    },
+    "ui-final-workflow-ui-2.log": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-ui-eb3b71995a644ccf9a824cee5cd69739/ui-final-workflow-ui-2.log",
+      "sha256": "431cd2418d2a55932625847d1f3acb3f48da529b47566a199c51d77ad3de8de1"
+    },
+    "ui-final-workflow-ui-3.log": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-ui-eb3b71995a644ccf9a824cee5cd69739/ui-final-workflow-ui-3.log",
+      "sha256": "ddefc0ea5ce889867e7f9408e34cea8650353e56560a2e8c583e12a2efd2a664"
+    },
+    "frontend/management-ui.test.mjs": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-ui-eb3b71995a644ccf9a824cee5cd69739/frontend/management-ui.test.mjs",
+      "sha256": "ac61046bbb626ff89dc8e45d7541fe90b59e12f34d126f309349c3bcbe36d067"
+    },
+    "ui-final-management-ui-1.log": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-ui-eb3b71995a644ccf9a824cee5cd69739/ui-final-management-ui-1.log",
+      "sha256": "2256f82fa64e8334b7e0863a0533f10ce869e903dde7d49146afe3f018526acb"
+    },
+    "ui-final-management-ui-2.log": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-ui-eb3b71995a644ccf9a824cee5cd69739/ui-final-management-ui-2.log",
+      "sha256": "9a5a0dd4fec6afc80d3da0974c4c91ef5d8ab22e609214c99bf10f37603b26fd"
+    },
+    "ui-final-management-ui-3.log": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-ui-eb3b71995a644ccf9a824cee5cd69739/ui-final-management-ui-3.log",
+      "sha256": "5f3f573f214d2fb13226e706ad913da1fbfa24863a5b8e5a3fa24ff79a6fa3b4"
+    },
+    "frontend/feishu-settings.test.mjs": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-ui-eb3b71995a644ccf9a824cee5cd69739/frontend/feishu-settings.test.mjs",
+      "sha256": "4c6c87b662426a9e5a8f632f91240edb83db35e000c7fcfe894603aa189bf516"
+    },
+    "ui-final-feishu-settings-1.log": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-ui-eb3b71995a644ccf9a824cee5cd69739/ui-final-feishu-settings-1.log",
+      "sha256": "7946a90540f04af43d13cf48a7a5fc3773bd68078e9fed09e041e8e90a15f0f2"
+    },
+    "ui-final-feishu-settings-2.log": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-ui-eb3b71995a644ccf9a824cee5cd69739/ui-final-feishu-settings-2.log",
+      "sha256": "ceb0203ad8500277cdb0082754a18a96e04c7dfb4735eaf075de2b02cc3fb6c0"
+    },
+    "ui-final-feishu-settings-3.log": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-ui-eb3b71995a644ccf9a824cee5cd69739/ui-final-feishu-settings-3.log",
+      "sha256": "36ab5a09ed6c3ac3c41b3a00cd44b1697321249b161bdef7c56a04d4204a8f9d"
+    },
+    "frontend/ai-models.test.mjs": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-ui-eb3b71995a644ccf9a824cee5cd69739/frontend/ai-models.test.mjs",
+      "sha256": "652f088e2024859de08a2c49866964025ae54a9d70d9e542ebf8447a3cedc00c"
+    },
+    "ui-final-ai-models-1.log": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-ui-eb3b71995a644ccf9a824cee5cd69739/ui-final-ai-models-1.log",
+      "sha256": "f1cdcf8271dad09990f43ea9e4f46254f0896a1e4c3d880ca7d7a0d9f4c921dd"
+    },
+    "ui-final-ai-models-2.log": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-ui-eb3b71995a644ccf9a824cee5cd69739/ui-final-ai-models-2.log",
+      "sha256": "534f86684f6dedf07ae77c0c386faeedaa26abb5f50bd3a7829dd7baabcd3189"
+    },
+    "ui-final-ai-models-3.log": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-ui-eb3b71995a644ccf9a824cee5cd69739/ui-final-ai-models-3.log",
+      "sha256": "19f302834811781ab20460886d9c1d892ff6a57d49e0ad363324acffe5441140"
+    },
+    "frontend/chat-ui.test.mjs": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-ui-eb3b71995a644ccf9a824cee5cd69739/frontend/chat-ui.test.mjs",
+      "sha256": "f1de91a19e52abb2a904994c27f32c2617cfd06cce54f4c3fcfabe97f356d7f9"
+    },
+    "ui-final-chat-ui-1.log": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-ui-eb3b71995a644ccf9a824cee5cd69739/ui-final-chat-ui-1.log",
+      "sha256": "615a075334101df2fb37a3132a5a7f760a5b588f6e820b27b88a0e9d660f0da0"
+    },
+    "ui-final-chat-ui-2.log": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-ui-eb3b71995a644ccf9a824cee5cd69739/ui-final-chat-ui-2.log",
+      "sha256": "84561632511ab1f082d40d008aec032bbff394180d216ab33eb43d2d60c43226"
+    },
+    "ui-final-chat-ui-3.log": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-ui-eb3b71995a644ccf9a824cee5cd69739/ui-final-chat-ui-3.log",
+      "sha256": "b0e3f1d0b1a8a2e486d432485c7390ca12ab15bf1342f9b305a11aa33298a5ee"
+    },
+    "production-release.json": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-ui-eb3b71995a644ccf9a824cee5cd69739/production-release.json",
+      "sha256": "f03b2bab7dd45f51bb5153305265637fe42ad73e22302fec61fdee6e36202f8a"
+    },
+    "production-restart-after-interruption.json": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-ui-eb3b71995a644ccf9a824cee5cd69739/production-restart-after-interruption.json",
+      "sha256": "95752d2317886bada7ee0d87a5ab38077081d1cb19766b0810c43369c6135880"
+    },
+    "production-processes.json": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-ui-eb3b71995a644ccf9a824cee5cd69739/production-processes.json",
+      "sha256": "a61c25a27d4a907f5ec1fb8cb17ea79d3c6fa7295cb7d7fef6809d19a1da9c85"
+    },
+    "production-idle-before.json": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-ui-eb3b71995a644ccf9a824cee5cd69739/production-idle-before.json",
+      "sha256": "25eae71142e1c1dae220d9f13a00c27429de5c686e74adfa05d2c4fbd4d51136"
+    },
+    "production-idle-after.json": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-ui-eb3b71995a644ccf9a824cee5cd69739/production-idle-after.json",
+      "sha256": "25eae71142e1c1dae220d9f13a00c27429de5c686e74adfa05d2c4fbd4d51136"
+    },
+    "production-live-result.json": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-ui-eb3b71995a644ccf9a824cee5cd69739/production-live-result.json",
+      "sha256": "4a47d75c1db4814845bde751cfbae150846946c623a29612cae3771df57d1bf3"
+    },
+    "ui-cleanup.json": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-ui-eb3b71995a644ccf9a824cee5cd69739/ui-cleanup.json",
+      "sha256": "662a186f524ded568e18a55c689f12906761d096cef92c4c971c7c62705084f9"
+    },
+    "spiderfly-ui-release.ps1": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-ui-release.ps1",
+      "sha256": "dee7ca8a2e36cf2968b01dc2e441608308e42cc804b9d8469248078762d7f606"
+    },
+    "spiderfly-ui-backup.ps1": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-ui-backup.ps1",
+      "sha256": "267d026d4dfc83749d4b2bc3992392246e0e1a93cf16126d18d603d4083fe49d"
+    },
+    "spiderfly-ui-live-verify.py": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-ui-live-verify.py",
+      "sha256": "0b01e885c1fc2b9827482aa4889909de96c8078dd00847dee6f0762048f85e8d"
+    }
+  },
+  "screenshots": {
+    "ui-overview-before.png": {
+      "path": "C:/Users/20898/.codex/visualizations/2026/10/13/01a13341-7627-77c3-b9f1-d4c15df4f0c8/ui-overview-before.png",
+      "sha256": "3ed8198e1528036a04143c4500e3cf52472068702b1244ed08b64cf95ca7f013"
+    },
+    "ui-settings-before.png": {
+      "path": "C:/Users/20898/.codex/visualizations/2026/10/13/01a13341-7627-77c3-b9f1-d4c15df4f0c8/ui-settings-before.png",
+      "sha256": "4ccdb64350526bd97a839bcc57e26aab9543a37b862a601f71dd356a4dea0ab5"
+    },
+    "ui-tasks-before.png": {
+      "path": "C:/Users/20898/.codex/visualizations/2026/10/13/01a13341-7627-77c3-b9f1-d4c15df4f0c8/ui-tasks-before.png",
+      "sha256": "20e104602d9052eed78f5bee2a8a9c560577b26a53359c77afc31eedafc444b0"
+    },
+    "ui-members-before.png": {
+      "path": "C:/Users/20898/.codex/visualizations/2026/10/13/01a13341-7627-77c3-b9f1-d4c15df4f0c8/ui-members-before.png",
+      "sha256": "cd6de714cdb2f79ace3789674427e740461b76a1f9dfc4d738862a5a9f02ce76"
+    },
+    "ui-hosts-before.png": {
+      "path": "C:/Users/20898/.codex/visualizations/2026/10/13/01a13341-7627-77c3-b9f1-d4c15df4f0c8/ui-hosts-before.png",
+      "sha256": "1b123e68f363e6fd0793206729cb62bced953d6817f3cb7b55c5c47ecb96365d"
+    },
+    "ui-overview-after.png": {
+      "path": "C:/Users/20898/.codex/visualizations/2026/10/13/01a13341-7627-77c3-b9f1-d4c15df4f0c8/ui-overview-after.png",
+      "sha256": "245fda1203b9b0a2ebbbc56963405369876b9a522917a6187972a9411b08ebed"
+    },
+    "ui-services-group-after.png": {
+      "path": "C:/Users/20898/.codex/visualizations/2026/10/13/01a13341-7627-77c3-b9f1-d4c15df4f0c8/ui-services-group-after.png",
+      "sha256": "acc1eb55961fa6c0545d89ba56674ce03e61d557aa2c62d3a9f6ae6e7c3c2655"
+    },
+    "ui-services-person-after.png": {
+      "path": "C:/Users/20898/.codex/visualizations/2026/10/13/01a13341-7627-77c3-b9f1-d4c15df4f0c8/ui-services-person-after.png",
+      "sha256": "8c8cd8ff67959478e04e14b9a591a43992b604df3b8cf8456de64c96dc2c139f"
+    },
+    "ui-tasks-after.png": {
+      "path": "C:/Users/20898/.codex/visualizations/2026/10/13/01a13341-7627-77c3-b9f1-d4c15df4f0c8/ui-tasks-after.png",
+      "sha256": "1f4b51bc76eb3c2b32de77829be95b4e3eaaea2013068773049de996650d3ed6"
+    },
+    "ui-members-after.png": {
+      "path": "C:/Users/20898/.codex/visualizations/2026/10/13/01a13341-7627-77c3-b9f1-d4c15df4f0c8/ui-members-after.png",
+      "sha256": "7d85c1ec2db868e825e7de689420539a1b69cb9b6aecbbd5698252c7d6b29f7d"
+    },
+    "ui-hosts-after.png": {
+      "path": "C:/Users/20898/.codex/visualizations/2026/10/13/01a13341-7627-77c3-b9f1-d4c15df4f0c8/ui-hosts-after.png",
+      "sha256": "df3ff097c7b89acbcb5c93e3bf8b2ce4b8a212a54991e5cbeec2083bbcd5d230"
+    },
+    "ui-records-after.png": {
+      "path": "C:/Users/20898/.codex/visualizations/2026/10/13/01a13341-7627-77c3-b9f1-d4c15df4f0c8/ui-records-after.png",
+      "sha256": "a9d731eb988e0d48b07cea7ce7eaf6dc2203debf9b311682de9b2739c77f579b"
+    },
+    "ui-plan-after.png": {
+      "path": "C:/Users/20898/.codex/visualizations/2026/10/13/01a13341-7627-77c3-b9f1-d4c15df4f0c8/ui-plan-after.png",
+      "sha256": "fc3308e5424ed3055430daea41ae00364845b4ccd3b5e95c52053c754cb4b0d9"
+    },
+    "ui-services-390.png": {
+      "path": "C:/Users/20898/.codex/visualizations/2026/10/13/01a13341-7627-77c3-b9f1-d4c15df4f0c8/ui-services-390.png",
+      "sha256": "5cf14427c6310cec0d14d64bc84b42a4df5b4a7809b4fdd7055fa21a46b4b83a"
+    },
+    "ui-tasks-320.png": {
+      "path": "C:/Users/20898/.codex/visualizations/2026/10/13/01a13341-7627-77c3-b9f1-d4c15df4f0c8/ui-tasks-320.png",
+      "sha256": "01fcc82edb09234d7e4bab3a2a44c59dbb75986d668a9de4b90c2737b793d451"
+    },
+    "ui-tasks-320-viewport.png": {
+      "path": "C:/Users/20898/.codex/visualizations/2026/10/13/01a13341-7627-77c3-b9f1-d4c15df4f0c8/ui-tasks-320-viewport.png",
+      "sha256": "86b6b9ff3dc93e9efb710cc94a491323a21913980759ac4f417ceae4a269b153"
+    },
+    "ui-tasks-390.png": {
+      "path": "C:/Users/20898/.codex/visualizations/2026/10/13/01a13341-7627-77c3-b9f1-d4c15df4f0c8/ui-tasks-390.png",
+      "sha256": "a57c64e8bb9e1df7134ec972ee1145f391be5bfa40c868199c94eb59a52d6e32"
+    },
+    "ui-account-320.png": {
+      "path": "C:/Users/20898/.codex/visualizations/2026/10/13/01a13341-7627-77c3-b9f1-d4c15df4f0c8/ui-account-320.png",
+      "sha256": "754f5f2ecb71c1340bfc961a92da55d947c31c3101bb6db3068c456ac62e51d1"
+    }
+  },
+  "visual_review": {
+    "mode": "existing UI polish",
+    "rounds": 1,
+    "score": null,
+    "findings_applied": [
+      "record short values and time wrapping",
+      "mobile filters collapsed",
+      "host empty object consistency",
+      "danger action consistency",
+      "redundant copy removed"
+    ]
+  },
+  "configuration_code_review": "no blocking findings",
+  "scope": "Global UI and Feishu configuration; no real provider calls, message delivery or business execution",
+  "active_dist_sha256": {
+    "favicon.svg": "9be3e30e0ad2dcd26cf9ce0546ad444286981ff9b8a7b8019de1e95750b4c634",
+    "index.html": "1bf0becbd131b60c48e3a1a99e2876c71d55893214a3e27d5036629bbd4c187b",
+    "assets/index-jdFVLHtV.js": "762235b2452a1a13fb19c7efd8d23bc23b97ff7bc31784e95413415d0c4b80c9",
+    "assets/index-JynFjKuq.css": "7242c538ce4bf8dc0fe58b5d5bce141a2b97bc7ebd53b3798cd30c2ea7a182c8"
+  },
+  "production": {
+    "release": {
+      "launched_at": "2026-10-15T05:50:24.0398792+00:00",
+      "dist_files": 4,
+      "launcher_pid": 77688,
+      "backup": "C:\\Users\\20898\\AppData\\Local\\SpiderFly\\Backups\\before-ui-services-20261015-abd667ca"
+    },
+    "final_process_ids": [
+      50760,
+      68896,
+      99072
+    ],
+    "health": {
+      "status": "ok",
+      "mode": "shared-central-python",
+      "scheduler": "running",
+      "queue_worker": "running",
+      "environment_worker": "running",
+      "ai_worker": "running"
+    },
+    "http": {
+      "favicon.svg": {
+        "status": 200,
+        "sha256": "9be3e30e0ad2dcd26cf9ce0546ad444286981ff9b8a7b8019de1e95750b4c634",
+        "bytes": 280
+      },
+      "index.html": {
+        "status": 200,
+        "sha256": "1bf0becbd131b60c48e3a1a99e2876c71d55893214a3e27d5036629bbd4c187b",
+        "bytes": 541
+      },
+      "assets/index-jdFVLHtV.js": {
+        "status": 200,
+        "sha256": "762235b2452a1a13fb19c7efd8d23bc23b97ff7bc31784e95413415d0c4b80c9",
+        "bytes": 398277
+      },
+      "assets/index-JynFjKuq.css": {
+        "status": 200,
+        "sha256": "7242c538ce4bf8dc0fe58b5d5bce141a2b97bc7ebd53b3798cd30c2ea7a182c8",
+        "bytes": 130749
+      }
+    },
+    "anonymous": {
+      "GET /api/settings/feishu": 401,
+      "PUT /api/settings/feishu": 401,
+      "DELETE /api/settings/feishu": 401,
+      "GET /api/ai/settings/key": 401,
+      "POST /api/ai/settings/models": 401,
+      "GET /api/workflows": 401
+    },
+    "idle_before": {
+      "busy_counts": {
+        "executions": 0,
+        "remote_runs": 0,
+        "maintenance_jobs": 0,
+        "remote_maintenance_jobs": 0,
+        "rpa_apps": 0,
+        "task_version_updates": 0,
+        "ai_turns": 0,
+        "ai_collection_trials": 0,
+        "ai_dp_probes": 0,
+        "ai_browser_state": 0,
+        "workflow_runs": 0,
+        "cron_rounds": 0,
+        "workflow_triggers": 0,
+        "maintenance_delivery": 0,
+        "unconfirmed_settlements": 0,
+        "unfinished_repair_rerun": 0
+      },
+      "unknown_checks": [],
+      "idle": true,
+      "next_task_slot": null
+    },
+    "idle_after": {
+      "busy_counts": {
+        "executions": 0,
+        "remote_runs": 0,
+        "maintenance_jobs": 0,
+        "remote_maintenance_jobs": 0,
+        "rpa_apps": 0,
+        "task_version_updates": 0,
+        "ai_turns": 0,
+        "ai_collection_trials": 0,
+        "ai_dp_probes": 0,
+        "ai_browser_state": 0,
+        "workflow_runs": 0,
+        "cron_rounds": 0,
+        "workflow_triggers": 0,
+        "maintenance_delivery": 0,
+        "unconfirmed_settlements": 0,
+        "unfinished_repair_rerun": 0
+      },
+      "unknown_checks": [],
+      "idle": true,
+      "next_task_slot": null
+    },
+    "backup_files": 17,
+    "backup_manifest_sha256": "07aafcf62635c1d5d0ed3d511bb393ef1238e1b9803acfb4a999b9b114d8f972",
+    "code_before_files": 178,
+    "complete_rollback_drill": false
+  },
+  "cleanup": {
+    "formal_data_fixtures_added": false,
+    "isolated_listener_count": 0,
+    "browser": "Old IAB test tab is an inaccessible error page; binding rejected by protocol policy. No workaround attempted; no new browser acceptance claimed.",
+    "isolated_launcher_exists": false,
+    "checked_at": "2026-10-15T06:18:47.0410878+00:00",
+    "isolation_ended_after_turn_interruption": true
+  },
+  "docs_sha256": {
+    "AGENTS.md": "bc7e19b4a70b58b2aaea21fc82e19e1a018dd3aa992001c813ea3dca41764bf4",
+    "CONTEXT.md": "e687026b7b8a005bb9cc89eb3c6a80f832a35f6a901674bffb76c6033b425ada",
+    "docs/README.md": "bbfb3d1401594d88845f2fb7183a800f2bf3bcd0509dda27013b4ec8f493c7fb",
+    "docs/服务配置.md": "1b04989f38a07e736583e7494382a3587b393fb12cd0926210610ef54a4a8efb",
+    "docs/全站界面与服务配置_2026-10-15.md": "b391ece16475530977c354a4d5c2078b3b22bc841b628a4584620c685626ac91",
+    "docs/SpiderFly总体需求.md": "9fdf6838204bb7e33b46759b0c773ad2142724bc05aaeae870949bfa1e217dcf",
+    "docs/AI任务助手.md": "eab07d88835557d78e485fa0bea1d4dda05f13ae98f49877554e6e85a817ac18",
+    "docs/功能地图/AI助手.md": "6ef19724ee1adf5ae36d0df8cb859b997ee7f9988d675a1cb8bdcd6d1d6a2194",
+    "docs/功能地图/系统与环境.md": "d71ecfabcc030fa90e2ab17639410b42db5ddc67292afbf5979816d5be3c2479",
+    "docs/功能地图/知识框架与代码对照.md": "fa9912e938932b54e696559a8e465da13355a64d17d3e0ec89839cd5bb9fc3c2",
+    "docs/开发/代码对照与拆分方案.md": "398fbc70da965c6df93c30b1dc607215d4a7f1dae94ec97f2ae74b3465a8e217"
+  },
+  "finalized_at": "2026-10-15T06:18:47.180319+00:00"
+}

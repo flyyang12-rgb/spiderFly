@@ -29,7 +29,7 @@ const { confirmDeleteUser, deletingUser, deletingUserBusy } = useWorkspaceContex
         <button type="button" class="button ghost" :disabled="deletingUserBusy" @click="deletingUser = null">
           取消</button
         ><button type="button" class="button danger" :disabled="deletingUserBusy" @click="confirmDeleteUser">
-          {{ deletingUserBusy ? '正在删除…' : '确认删除成员' }}
+          {{ deletingUserBusy ? '正在删除…' : '确认删除' }}
         </button>
       </footer>
     </section>

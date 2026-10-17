@@ -2,11 +2,21 @@ from __future__ import annotations
 
 import asyncio
 import unittest
-from app.services import execution_queue, host_dispatch, runtime
+from app import native_process
+from app.services import cron_runs, execution_queue, host_dispatch, runtime, workflows
 from unittest.mock import AsyncMock, patch
 
 
 class WorkerIsolationTests(unittest.TestCase):
+    def setUp(self) -> None:
+        # These tests isolate worker ordering/error handling, rather than host
+        # receipts or Cron persistence (covered by their integration tests).
+        self.enterContext(patch.object(native_process, "recover_settlements", return_value=[]))
+        self.enterContext(patch.object(cron_runs, "reconcile"))
+        self.enterContext(patch.object(cron_runs, "decide_maintenance"))
+        self.enterContext(patch.object(workflows, "reconcile", return_value=[]))
+        self.enterContext(patch.object(native_process, "is_workflow_execution", return_value=False))
+
     def test_collection_trial_is_checked_before_claiming_execution(self) -> None:
         from app import collection
 

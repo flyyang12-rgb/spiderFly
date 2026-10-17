@@ -40,18 +40,8 @@ class FeishuSettings:
 
     @classmethod
     def from_env(cls) -> "FeishuSettings":
-        receiver_type = os.getenv("FEISHU_RECEIVER_ID_TYPE", "open_id").strip()
-        if receiver_type not in {"open_id", "mobile"}:
-            receiver_type = "open_id"
-        return cls(
-            app_id=os.getenv("FEISHU_APP_ID", "").strip(),
-            app_secret=os.getenv("FEISHU_APP_SECRET", "").strip(),
-            receiver_id=os.getenv("FEISHU_RECEIVER_ID", "").strip(),
-            receiver_id_type=receiver_type,
-            base_url=os.getenv("FEISHU_BASE_URL", "https://open.feishu.cn").rstrip("/"),
-            webhook_url=os.getenv("FEISHU_WEBHOOK_URL", "").strip(),
-            webhook_secret=os.getenv("FEISHU_WEBHOOK_SECRET", "").strip(),
-        )
+        from .feishu_settings import effective_settings
+        return cls(**effective_settings())
 
     @property
     def configured(self) -> bool:
@@ -64,7 +54,14 @@ class FeishuError(RuntimeError):
 
 class FeishuNotifier:
     def __init__(self, settings: FeishuSettings | None = None):
-        self.settings = settings or FeishuSettings.from_env()
+        self._configuration_error = ""
+        try:
+            self.settings = settings or FeishuSettings.from_env()
+        except ValueError:
+            # The runner builds its notifier before entering the send-error
+            # handler. Defer this safe error to sending so task results survive.
+            self.settings = FeishuSettings("", "", "")
+            self._configuration_error = "飞书配置无法读取，请在配置页重新设置"
         self._session = requests.Session()
         self._token = ""
         self._token_expires_at = 0.0
@@ -72,7 +69,7 @@ class FeishuNotifier:
 
     @property
     def configured(self) -> bool:
-        return self.settings.configured
+        return bool(self._configuration_error) or self.settings.configured
 
     def _parse(self, response: requests.Response) -> dict[str, Any]:
         try:
@@ -262,6 +259,8 @@ class FeishuNotifier:
         self._send_message(open_id, "post", content)
 
     def send_maintenance_result(self, task_name: str, note: str) -> None:
+        if self._configuration_error:
+            raise FeishuError(self._configuration_error)
         if not self.settings.webhook_url:
             raise FeishuError("未配置群通知")
         self._send_text("", f"「{task_name}」维护结果：{note[:1800]}")
@@ -279,6 +278,8 @@ class FeishuNotifier:
         image_bytes: bytes | None = None,
         screenshot_note: str = "",
     ) -> None:
+        if self._configuration_error:
+            raise FeishuError(self._configuration_error)
         if not self.configured:
             raise FeishuError("未配置飞书群 Webhook 或应用收件人")
         open_id = "" if self.settings.webhook_url else self._resolve_open_id()

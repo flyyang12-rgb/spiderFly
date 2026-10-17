@@ -36,9 +36,9 @@ function eventTime(value) {
       <div v-if="finished"><small>缺失条数</small><strong>{{ latest.missing ?? '未确认' }}</strong></div>
     </div>
     <p class="collection-stage">{{ latest.stage || (finished ? '最后上报' : '正在采集') }}<span v-if="latest.message"> · {{ latest.message }}</span></p>
-    <small class="collection-updated">最后上报：{{ eventTime(latest.at) }}（北京时间）。数量由脚本上报，请按结果文件验收。</small>
+    <small class="collection-updated">脚本上报 · {{ eventTime(latest.at) }} 北京时间 · 请按结果文件验收</small>
     <details class="collection-events">
-      <summary>查看采集过程（{{ events.length }} 条{{ progress.event_count > events.length ? '，仅显示最近记录' : '' }}）</summary>
+      <summary>采集过程 · {{ events.length }} 条{{ progress.event_count > events.length ? '（仅最近记录）' : '' }}</summary>
       <ol>
         <li v-for="(event, index) in events" :key="index" :class="{ 'collection-error': event.event === 'error' }">
           <time>{{ eventTime(event.at) }}</time>
@@ -47,11 +47,11 @@ function eventTime(value) {
       </ol>
     </details>
   </section>
-  <p v-else class="artifact-empty">{{ status === 'pending' ? '任务尚未开始' : '脚本尚未上报采集进度，可查看下方原始日志。' }}</p>
+  <p v-else class="artifact-empty">{{ status === 'pending' ? '任务尚未开始' : '脚本未上报采集进度，请查看运行日志。' }}</p>
 </template>
 
 <style scoped>
-.collection-progress { border: 1px solid var(--border); border-radius: 12px; padding: 16px; background: var(--surface); }
+.collection-progress { border: 0; border-bottom: 1px solid var(--border-soft); border-radius: 0; padding: 0 0 16px; background: transparent; }
 .collection-heading { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .collection-heading > span, .collection-updated { color: var(--muted); font-size: 12px; }
 .collection-counts { display: flex; flex-wrap: wrap; gap: 20px; margin: 16px 0; }

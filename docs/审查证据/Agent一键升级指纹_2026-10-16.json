@@ -1,0 +1,648 @@
+{
+  "date": "2026-10-16",
+  "agent_version": "0.4.1",
+  "protocol_version": 1,
+  "minimum_agent_version": "0.3.0",
+  "git_head": "300e27ab8d9c4abc422ea11f05a76319e2293d00",
+  "baseline_files": 459,
+  "changed_files": {
+    "CONTEXT.md": {
+      "before": "e0144933089aa9afaabf98c23eb35b735c88e1f12cced23bdb25c861fe54f4be",
+      "after": "ea79dfe2b20858469e26e2911e3ea1735e49bbb94478a30e755cd97859264ac3"
+    },
+    "README.md": {
+      "before": "48f0727d56e41d8a7dfb19fb3c8dbf63890e6e6c5b3262b6ffb418596096a029",
+      "after": "bc113fd6d0076a84c922de498dc7fbb0c71cfa9ab5f9e9ddcf45376d88542baa"
+    },
+    "agent/README.md": {
+      "before": "0d2385972b5306c019d9fb6a0f2a3247c7a04b7d8df223755269b8285ed221e9",
+      "after": "7d2fbaa365c6322eb70df136694a8743eb352ff11cfb044e3520c4e9aabc7f8b"
+    },
+    "agent/manage.ps1": {
+      "before": "b9b9b371474ae020f52d00c969a781cf28e4684cb1f6fe17e7a90fd96b1b0866",
+      "after": "b54bb3c6d7bfa2e758e1c936b0fbd4e8f56d27e3b3e16bcda8b21c9865becf56"
+    },
+    "agent/spiderfly_agent/__init__.py": {
+      "before": "a15834ebd660a6764cd060c43181ecf0d7888b955fc11289fd01cec934a8ea97",
+      "after": "1f96582b6b7bf619aec17ec645f51d0f7aae91ee022812717bc370580bf21ca3"
+    },
+    "agent/spiderfly_agent/client.py": {
+      "before": "18a4697273a7c9c1d3f781970db4a762c595458f6d7070c583c29e175137741e",
+      "after": "e5a724eb70cb8c6d433662fdd33da4a592e315f9c594788098d17d17e556205a"
+    },
+    "agent/spiderfly_agent/desktop.py": {
+      "before": "5ab52a33e6389ffd07e0fb3c5bab5731041c9ab508a07a1aa7b7a851b28d9141",
+      "after": "2cec2a65a006bc4a4aff607f0bdb5413bd1c3e3a13cedb00c8f09ff0ea3aca26"
+    },
+    "backend/app/api/hosts.py": {
+      "before": "e850240d83b312a2af6cb40712be9fa610c2aec4926743b301bfef4240971875",
+      "after": "6cd67606225c4c39824ff0c1ba37ae6247df43e8e5a3440f5bca4159bf58d9a1"
+    },
+    "backend/app/services/host_dispatch.py": {
+      "before": "0961e3141be8f4ec896ede90101847e8dbb9c627093df61aa910ef5303857bdf",
+      "after": "5a2fb02b762ecb62d147d2320fe7258bd06d47ba4473a549bb82cf02ff72c501"
+    },
+    "backend/tests/test_hosts.py": {
+      "before": "61555922297f7d878796fb1b8d7805cf1f40917e8fb7d163c759c91cfbe69d8e",
+      "after": "2db1f5c16ad4bccab5508a14f6d630f53d076e2cddeb5f81608e08c88a619f3b"
+    },
+    "docs/Agent协议_v1.md": {
+      "before": "40a306e10a8df2823b7cb9b8ee5bb4a2de57084a96448da864454bef169fd73e",
+      "after": "de174533031d64333c69c50d5f60f2a6d6e5ee47996031954eb45de8705eddf2"
+    },
+    "docs/README.md": {
+      "before": "c19306d278aad0cdf7ba4bb2648c5291b3b928c30ddfdfe7b486b5f7557c6c60",
+      "after": "7ec0f07bb64619aedead77d80fa3bd01d34b1010ba2998650679ae28390887ab"
+    },
+    "docs/功能地图/宿主机与远程运行.md": {
+      "before": "9760f79cc75476206d5b2d83dc61f57d53fcba00e589754b3d6ce8c5d404e681",
+      "after": "262dc5109148e93bb3f299bfa9863df51cfb820a45ab0985dce16322d5432ccd"
+    },
+    "docs/多宿主机调度任务拆分.md": {
+      "before": "e69532142adc93ff5033a02aed20479dd30d3e91db6a4fb20a2bbd8de77e9892",
+      "after": "8f10e06703ad327740f625d609e44c232fd042ea053e0b5b42f1cee781d0651f"
+    },
+    "docs/多宿主机调度需求.md": {
+      "before": "3982b7ecf1aa0ed2ff71df7918d88debd3f2c6002776f0c507cae7714da293d1",
+      "after": "6d75319e811a2fa54dd778fde5ac0132d946fc185d49a43a35c1c319f655ca91"
+    },
+    "docs/多宿主机阶段7发布与双机验收.md": {
+      "before": "70f314a3418ec018491d16f98ed4540a594876742fca1c1f2f9f04ee48bd66ec",
+      "after": "d2f29315c6021ee23cf45d1efe03db3549c8d49f642a88b79f14b7eac114acf1"
+    },
+    "docs/开发/代码对照与拆分方案.md": {
+      "before": "a5762374590a03229f41bf94bd03a04584f2cf3686b0a0225986e2cf7d5cdded",
+      "after": "a996d0ab53c5d8cf954239b53674ae15480f2ffe35f45593beafb45fa0eeb175"
+    },
+    "frontend/dist/index.html": {
+      "before": "9ee63e00d13afb303e9bcea57f61051cd01055d2355e7b087893704326e56d08",
+      "after": "f7500530b27a0670131294147b7570a7bc4472602f5f41c83fc4eb988adbf731"
+    },
+    "frontend/src/features/hosts/HostsPage.vue": {
+      "before": "b18dfb8807b8b108673d483a200c20704bb2c61004f9626bcf2bb21ef0d57bf4",
+      "after": "e15e984dc99053d28498e3ed1d3969d7e536f974305da1997d9c16cddd0e5632"
+    },
+    "frontend/src/features/hosts/useHosts.js": {
+      "before": "b317eb3be67899dd1206a05d09ca603d49a215f5f6cc8153388ee688da266df3",
+      "after": "15e7aa12874f88bf7658154c47f0bb57c0181dea44e93dff255f2d30fd616b59"
+    },
+    "使用说明.md": {
+      "before": "bb75c475532d666b9150281f0b5146cc24a6ede2e706bd2d8f9926dde89abace",
+      "after": "7237afe7104c1fc0ffc9b4d93435b61d79889cdf8f968f0ca4f270abf6a0b32c"
+    }
+  },
+  "new_files": {
+    "agent/tests/test_upgrade.py": "b47f9b84b1eb35d9388f6c2a7d327de806b996b6a94b7057b089d56e082aa149",
+    "agent/upgrade-core.ps1": "7ee0dfb346995bae288d02ca8ee944924c15f87878973a9fa9cbedd53b6fc752",
+    "agent/upgrade-transport.py": "a30cb57096f0a11c7dc56a0f5c117b00ac6f8ab9e346380475cc4266e5cf0efe",
+    "agent/upgrade-ui.ps1": "f2be6c32c4a9457c589a8f1fcb386f786775d05d9e5a70aa7ab9bf135a2a70a5",
+    "agent/upgrade.ps1": "d7a77305cbd03fd987d14c5bce54791875d1231ee2a6cdb3651aed97f4dd25e7",
+    "agent/升级Agent.bat": "98f12690d90cbb18a928d24150bfb2497b69eb7c6b20cce62783f907739cd7ad",
+    "backend/tests/test_agent_upgrade.py": "eb7de777ea11a9451d437426ad01808c0ad335aa86ad091a0229b0b2392b8b8d",
+    "docs/Agent一键升级需求与验收_2026-10-16.md": "e2d63ca51bbd06fa3996fa3eef15c4bddec946931e0a45cb1e83c048974ced5e",
+    "docs/审查证据/Agent一键升级窗口_2026-10-16.png": "6a1a56b0aa1e19005a7aa7bd0c412863bb1e1c725b996e0cc07954f1fcb3ad55",
+    "docs/审查证据/Agent一键升级签名实测_2026-10-16.json": "a4c90c3f70c42f866563b23c409f2bb7759f79f2f3239d6c727deb15e1136b3f",
+    "docs/审查证据/Agent一键升级签名实测_2026-10-16.py": "15bc842e1155d7989f1c22b8ba36647e5a9e60da92c2376329dcfe8f0861435e",
+    "docs/审查证据/Agent升级状态页面检查_2026-10-16.mjs": "c1a2a315879d901fd002dbfb7bc0d01dc6ba9cbfba79105336adc0f275095f0b",
+    "frontend/dist/assets/index-D4ESy7zB.js": "a9a55c959becd845411e024a820ccb20539d32a9a0eeb6cb72285c73a085e6d0",
+    "frontend/dist/assets/index-Gj6upmCS.css": "c28580d5a2a0fe8ca7b552441cf0232600afd0e28baf2f8c156d137bf41933ad"
+  },
+  "removed_files": {
+    "frontend/dist/assets/index-K7Tg1YxX.css": "7394eb744a4b0f75dd6fc4147d25c14f8109880d04919f84e853948d7e01ca9a",
+    "frontend/dist/assets/index-YWVc_yuA.js": "48aeb8529d4c0eeee2782afdd8d01e09aef36d2d5528c1144e32204e83f3095c"
+  },
+  "current_source_sha256": {
+    "agent/spiderfly_agent/environment.py": "b3ca4358d27035f4056623c9b4fb7c55bc9e689f2166664593a3f9de1d240b6e",
+    "agent/tests/test_environment.py": "aa1de7f59c8747a6b19ab5211c2b920d35221084b0448f09fe7cf3d2b85b6fe5",
+    "agent/tests/test_upgrade.py": "b47f9b84b1eb35d9388f6c2a7d327de806b996b6a94b7057b089d56e082aa149",
+    "agent/upgrade-core.ps1": "7ee0dfb346995bae288d02ca8ee944924c15f87878973a9fa9cbedd53b6fc752",
+    "agent/upgrade-transport.py": "a30cb57096f0a11c7dc56a0f5c117b00ac6f8ab9e346380475cc4266e5cf0efe",
+    "agent/upgrade-ui.ps1": "f2be6c32c4a9457c589a8f1fcb386f786775d05d9e5a70aa7ab9bf135a2a70a5",
+    "agent/upgrade.ps1": "d7a77305cbd03fd987d14c5bce54791875d1231ee2a6cdb3651aed97f4dd25e7",
+    "agent/升级Agent.bat": "98f12690d90cbb18a928d24150bfb2497b69eb7c6b20cce62783f907739cd7ad",
+    "backend/app/agent_environment.py": "4819a72b96c11edab377eaf4b15e76ab9f4c662b23ae461a47d8fb0888a0dd72",
+    "backend/app/api/schedules.py": "9bbf755391b323a53ef416f551fe9480f47a2ca81b40ed9b44f1b23cff7da7b8",
+    "backend/app/api/workflows.py": "6a812ade668cb22d70b19fbaae3e1376a01f959e3bd69af47ed46a79c3cdba94",
+    "backend/app/cron_schedule.py": "d7630ed19ee89087d2fafc72b1548622b759134c656569748bd765210e1544ff",
+    "backend/app/dependency_analysis.py": "7c701321810dfcd6b7d2699225dc591519d5d09aced43e234c9dfe9a2904d4d5",
+    "backend/app/dependency_catalog.py": "68c970f81cab505c5f046d245842f8ca2577e54ea822f303745fa7099b2e5a0d",
+    "backend/app/feishu_settings.py": "04b68a13f40a79148bc6cabc2812904d37ed6a09188c217c2a8a30d51690fbea",
+    "backend/app/native_process.py": "0d4d60279268697e55b63b48246ff5f6a23b68669235101cde8125324c71c561",
+    "backend/app/services/creation_requests.py": "be9b5b6f21a77952090bdbbdf351396b34db70a014d8b2ef36cee3f56efdd147",
+    "backend/app/services/cron_runs.py": "a64de531f215ad90e2a617b06559839cb34ad66a0f842282a5ec535c48638ac5",
+    "backend/app/services/workflow_schedules.py": "9e06b3962135e4c4f061dc7246a01758fd0565a6df26aa27516677673e82aef4",
+    "backend/app/services/workflows.py": "8de506259916c472c3ef310eba0523b82c2d40eab721bb9d8113df2d3b1dda2e",
+    "backend/app/stdlib_312.json": "55b847de0d9969a9fbb4114f18a5437f75d9bfed0a6dfb7b1e9cd9c7a0dce9fc",
+    "backend/tests/test_agent_environment.py": "fd94c39776f23452641e7c81c213b7c9f9250393cc8ea1ba13a74cdde149fbac",
+    "backend/tests/test_agent_upgrade.py": "eb7de777ea11a9451d437426ad01808c0ad335aa86ad091a0229b0b2392b8b8d",
+    "backend/tests/test_ai_balance.py": "9557b84442956c91f5f4058a664d37af3cc4ec46cc8516f4b30dd609832a70b9",
+    "backend/tests/test_ai_key_display.py": "3e301751dc81cce0434e7f74b234122ade501531a7f16c7bc0a40788a6639515",
+    "backend/tests/test_ai_settings.py": "069ca5aa9ea38acfdef865b3798efd2a886496d647a0133f8000ba3fd5e0ac14",
+    "backend/tests/test_cron_integration.py": "4af78804c6b82f9afd416bcb0648e45bfccfd3634e587dcb77428de64b7e512b",
+    "backend/tests/test_cron_maintenance.py": "72b2f9018b657759bb6cc53cddd7e8fb07f0b405903aee59a4f3212d0219b9e7",
+    "backend/tests/test_cron_runs.py": "641ccc438ecaa524948d9bdbf91a3d9f756ccf1206f21c1db6268bda312ea457",
+    "backend/tests/test_cron_schedule.py": "6d64297406241ab8bd79b655ee38d18c281d266f06577fdf38b213bce6ec9715",
+    "backend/tests/test_dependency_analysis.py": "04880680bc29ef187b0793395d0a4865fa1aa76744a100174fc14623145e7281",
+    "backend/tests/test_feishu_settings.py": "2725ffc8a5174cee7bbff523e3f34a72138acb0b285f04ab66123fa8cbcd0cee",
+    "backend/tests/test_inline_plans.py": "1dea8dc89656397cfd1818d9401727b60c74285e5c51faa14295424b1a9de86d",
+    "backend/tests/test_native_process.py": "c8df25d8abb7cdb0d28918f1703fd6db2ee5d985279a17ba54bd0395be2fad7e",
+    "backend/tests/test_workflow_api.py": "1a4c0b6fa05113dc7f9fa08199c7d27c34be623ddb87269a0da84f01dcbcf0ca",
+    "backend/tests/test_workflow_runtime.py": "55e2e21cf642dd2f7095ab9afdfcef1e26e00ea79416b470b17a7ff94790441d",
+    "backend/tests/test_workflow_schedule_runtime.py": "b9917abebb8cdc375f223a76976faf9d9ee08ced66260bf31050674e5f13806b",
+    "backend/tests/test_workflow_schedules.py": "ba41beed97f1ea285925c0a73fbd70622031e13434c335501e527b64283734d9",
+    "backend/tests/test_workflows.py": "9b55ae602d2eb7f8adc46ca2b078e78d8331faba74c2b5a5970865cd081252cf",
+    "frontend/dist/assets/index-D4ESy7zB.js": "a9a55c959becd845411e024a820ccb20539d32a9a0eeb6cb72285c73a085e6d0",
+    "frontend/dist/assets/index-Gj6upmCS.css": "c28580d5a2a0fe8ca7b552441cf0232600afd0e28baf2f8c156d137bf41933ad",
+    "frontend/src/AiMessageContent.vue": "367da1276fcb440a2dcc4edf388c074d9ff290abcc7ccd0f181409d3b236951c",
+    "frontend/src/components/FilterSection.vue": "eca27b12338807ffac05a7bb79810c125c3e125ccd43a06b6fce255b8308940a",
+    "frontend/src/features/apps/DependencyDetails.vue": "b4c87a85a84542200625a01ca1a2d707971da4ab9372c1d91e3d38e32af38c17",
+    "frontend/src/features/apps/DependencyFields.vue": "3a60b83843da064a1aa956f3db71c499b0b2f8816f908cfb6569dec7bb640d66",
+    "frontend/src/features/executions/RunHistoryPage.vue": "43f6cc5d14cb543ba375b71476a8f138a16d780b7c3a7163ce7fa98b925eafba",
+    "frontend/src/features/hosts/EnvironmentDetails.vue": "e7db1f0e7f83be4297e7d2badb06aee0d5803e6f9fc7822015efd410dc009a55",
+    "frontend/src/features/members/useAuditHistory.js": "a9608f69cc34a486120d59470084a7115ac0a8bffc082c7c0004fe777245f415",
+    "frontend/src/features/schedule/CronEditor.vue": "ed1ee9ae0b2d222d48d6cf2cce175cd3d9f7afd46f7d7a090d3a6bee8a584a82",
+    "frontend/src/features/schedule/CronEntryDetails.vue": "ae936927f149ea0f3cfde32f16002b39ab6abe27ddbd9d09591d18fa88f8f080",
+    "frontend/src/features/schedule/PlanEditor.vue": "1616e45a1c3ba3eeeaf1752e7f35284e1185f516a1603582ef9fb4f69021249f",
+    "frontend/src/features/schedule/PlanFields.vue": "b98e9ccdc3726b7e955f954e0ac6ad18d9a3fbf0eca0e98bb8c00bb4174c3667",
+    "frontend/src/features/schedule/WorkflowPlanDetails.vue": "5a6d229340fc25be7f0acbc7d79e98d9b178f805a49c79f6715a38161131c2fc",
+    "frontend/src/features/schedule/WorkflowRunViewer.vue": "34861d1b53e4b0c4a8bb1ec1ee4d4405b69d092496ed1fdcf96dfa0642195988",
+    "frontend/src/features/schedule/WorkflowTriggerHistory.vue": "394dafeea99f37376f39a6d9d9bafb451406d024fe9a5699090ec59075fd8187",
+    "frontend/src/features/settings/AccountBalance.vue": "78dd779f1ae87f8c5f1e9aa082fe729a67dd1ee4a332855b7d841e25a0744ed5",
+    "frontend/src/features/settings/FeishuSettings.vue": "6b43a49dd6d20efdeaa346e621ee3cbd02710df4286082098bdb72e7d9b82cbc",
+    "frontend/src/features/settings/ServiceSettingsPage.vue": "0c4dc650115de294eca39b1b0277491e3dcf3c862c0ed26d2b1d5c6d75308474",
+    "frontend/src/features/taskCenter/CreationDialog.vue": "7bb89db408d5178593c1d270a718230b4fd6f2addc4c1f6d792086d9882dc846",
+    "frontend/src/features/taskCenter/TaskCenterPage.vue": "8e100647f6b3e49913bc28bcf79328f0020d78c4b35793a3cfd6f6c8a0e9ae90",
+    "frontend/src/features/workflows/WorkflowDialog.vue": "9bcf74957595bcdae48916f0c0affd8caffd2a0f4c681f894c0eca16bc15dd05",
+    "frontend/src/features/workflows/WorkflowEditor.vue": "b6eb721bcad2727052ae5593fb52cf255e066acde9815e53e74c6bf8d4905c8c",
+    "frontend/src/features/workflows/WorkflowHistory.vue": "b0aea87c0a5f8e8a88c260147534a17e72c6ac1b6c4dfccdcfe8053a2525a099",
+    "frontend/src/features/workflows/WorkflowRunDetail.vue": "d87ec7822cce4dd55d9813a25c83fa58c659704cea3583084f1612952cff8278",
+    "frontend/src/features/workflows/WorkflowsPage.vue": "b020d48dd3e1b915262f9a026daf9f5ee4321581758e3bffb05e9c7595645072",
+    "frontend/src/features/workflows/useWorkflows.js": "0f2c11ddfa9220902a401319e3fcb183a58d00693391def350c471bb7a05bffa",
+    "frontend/src/lib/aiMarkdown.js": "996b7619d1e10fc33bbfd096fcdc4ea7ff9a6290079c99d006f2c03d0b93e139",
+    "frontend/src/lib/plans.js": "f5897796ab4068d00366c3693c1e3080ee20e5b0dbe1b98c801beea89791c0e0",
+    "agent/.gitignore": "b3f0cb0d007d001f38c449a46002718c6041a6e1868d83ee0733c452c68a6244",
+    "agent/README.md": "7d2fbaa365c6322eb70df136694a8743eb352ff11cfb044e3520c4e9aabc7f8b",
+    "agent/install-python.ps1": "bc096e816d3e405a553a9877cce2cfe58757edff051ac45b8a18352aa972fa69",
+    "agent/manage.ps1": "b54bb3c6d7bfa2e758e1c936b0fbd4e8f56d27e3b3e16bcda8b21c9865becf56",
+    "agent/requirements.txt": "c097f205e00b522b30b9ed5a37c2408d06145e0a8974be9870bdf9041224a351",
+    "agent/setup.ps1": "84695ab44e1c4edcc4fde1e71336996c034a2684154434e71e1e21ca8d4916b3",
+    "agent/spiderfly_agent/__init__.py": "1f96582b6b7bf619aec17ec645f51d0f7aae91ee022812717bc370580bf21ca3",
+    "agent/spiderfly_agent/__main__.py": "bbe0d039aaa270bc6136d848d3d8a707e8b2aee1b99f9a7804a211ae6c146dd8",
+    "agent/spiderfly_agent/api.py": "fac05437297da1694375db50c5f4570810b58d73cec86ad60cab4eadd92b68f1",
+    "agent/spiderfly_agent/client.py": "e5a724eb70cb8c6d433662fdd33da4a592e315f9c594788098d17d17e556205a",
+    "agent/spiderfly_agent/desktop.py": "2cec2a65a006bc4a4aff607f0bdb5413bd1c3e3a13cedb00c8f09ff0ea3aca26",
+    "agent/spiderfly_agent/identity.py": "c8087c3ea2aa233b48547e6482e4adaf3ed4148a8c325e134eca35c0cda638ea",
+    "agent/spiderfly_agent/journal.py": "b290deea41302bfa8393942b4bf4f5a9d24bfdd4e0c9aa6b126e6123df86bb4c",
+    "agent/spiderfly_agent/windows.py": "4a37a7137c19fa54e9b8420ec1bc43e30216470a7098c9c399273c84b416e5ec",
+    "agent/spiderfly_agent/worker.py": "772bb3a4b6e6df976a224b4ce6ab222e093af72ee3d20b8ed6f971f58cd8ab78",
+    "agent/start.ps1": "6b38d66c15974c4af6ccdcefe51e9b437c89b2c3818e37ac83ceb6afbb3ccc9a",
+    "agent/tests/test_agent.py": "abb0ace69a0f6388050cc17efe2b871eff159d28572b57228dc390393c4e6f60",
+    "agent/tests/test_launcher.py": "02c9f1e339226e8f332d73f1630f30f6c9c9935ff726416cce936383d9d1d270",
+    "agent/tests/test_manage_powershell.py": "d585ab4a673f3e0b253a94257d09c767d9e3893e34572029c5468c38bb8861c5",
+    "agent/安装并接入Agent.bat": "ddf8ce63ac36b1f4e598f6ac99614106fcccc0094034ccfcb829a1e8ed596c64",
+    "backend/ai_knowledge/boss_public_observations.md": "88573fc74e870483cd5aeda5c92ff7af43bed0bc971dc2ce095771c4c95b68bd",
+    "backend/ai_knowledge/collection_index.md": "13dc826559ee6adb4e122e537890ef560516584d420feab5aec5cd9716fef2fc",
+    "backend/ai_knowledge/drissionpage/browser.md": "8a56247b583fd5f8a6099b7723079598d5a0e0c94043b78db221e1fbac58535a",
+    "backend/ai_knowledge/drissionpage/catalog.md": "c024bce56dd4f48135b142e081e7d48354a7bc885f386d45dc5700d4850ee835",
+    "backend/ai_knowledge/drissionpage/manifest.json": "aa4b5bf744c373377e08b6115dcb5d6ea322597b0efbd6e52b05655a912be124",
+    "backend/ai_knowledge/drissionpage/network.md": "4181ecc6542070175b3ecc80d7582364637ff203fad3c6a10c0234189f009170",
+    "backend/ai_knowledge/drissionpage/overview.md": "de8eba336c2dad133c7c678ff92aac610d0b9f9139e634d003ab7547548fa272",
+    "backend/ai_knowledge/drissionpage/ports.md": "04c28125389c8d8ca24af0be73b0ac1e3473dd1f230adcf9a4a4fe2ef66df6f3",
+    "backend/ai_knowledge/drissionpage/reference/SessionPage/create_obj.md": "1ac2a045fabaccd236fcb189ee670205404ffdf036d80ebb01d5ec39ebd80c78",
+    "backend/ai_knowledge/drissionpage/reference/SessionPage/get_ele.md": "084c12b327206956a95b232bd2cde485dd7f1b52cb12c05db2e327252c82ff69",
+    "backend/ai_knowledge/drissionpage/reference/SessionPage/get_ele_info.md": "92a274dd341df5201316feff51208dd194567654ba02c80eebed5239f38e7aab",
+    "backend/ai_knowledge/drissionpage/reference/SessionPage/get_page_info.md": "45a0cc07fe9091b3a3a8a833e98d5be3e312f1894ce659a2a1bfc244fb32a25f",
+    "backend/ai_knowledge/drissionpage/reference/SessionPage/intro.md": "21ca277066a091bb982cdd306a75895887c435431d5c8c17fb1e20475b088db1",
+    "backend/ai_knowledge/drissionpage/reference/SessionPage/session_opt.md": "0bbb4a873f1fd89e946699bfaab5f86f13595762376f2e779385ab1353285402",
+    "backend/ai_knowledge/drissionpage/reference/SessionPage/settings.md": "edc585414150929b6948fef6c5bcad2665f12d292906a9ef1852d38496e02760",
+    "backend/ai_knowledge/drissionpage/reference/SessionPage/visit.md": "7df2251c91dccd75383463eb63d390d14c5c7b333d866411476a8c68b1b55ff0",
+    "backend/ai_knowledge/drissionpage/reference/advance/accelerate.md": "633ef660780f24f1b057ef964099851d4fe2010fadd22851a3adb58be1f91464",
+    "backend/ai_knowledge/drissionpage/reference/advance/commands.md": "d20dd126dedd3e46618d141a91c1283d16db5424bff93a3edcc198d470d4b0b1",
+    "backend/ai_knowledge/drissionpage/reference/advance/docking.md": "8d2ee34e514f3f15fcb077d435f2decfb529442867d04cbfe2ef6d394a2cddea",
+    "backend/ai_knowledge/drissionpage/reference/advance/errors.md": "9c50410bdeb330cc6082de6e64b43d2660caf11df997d33d031a792b2d65b866",
+    "backend/ai_knowledge/drissionpage/reference/advance/ini.md": "0c6d03ffeafa7eecf941addd4799937123c5b2160c328136b82eaca86da06fc8",
+    "backend/ai_knowledge/drissionpage/reference/advance/packaging.md": "a0eeb169ec98795226ce6eb331a72d04534bbd9e8f2eb1f2a61d4738d8c4ed55",
+    "backend/ai_knowledge/drissionpage/reference/advance/settings.md": "a6f9f201b1b5669bee58f4439ba992992daac9d1fc7c87f9f91653425c8bd4d5",
+    "backend/ai_knowledge/drissionpage/reference/advance/tools.md": "e13a67ff62c1ef03911abd6fcd77bce38a8214d85efe98260639f673203d5c5b",
+    "backend/ai_knowledge/drissionpage/reference/browser_control/actions.md": "31ec26b2a667bbb4c135b1b65341f14fc2cd9e3dd7ed8abb21639064fd2565cc",
+    "backend/ai_knowledge/drissionpage/reference/browser_control/browser_object.md": "5d97e031771aa25078520839f8c501c1be3560447b47a059badafbc99d8b6180",
+    "backend/ai_knowledge/drissionpage/reference/browser_control/browser_options.md": "5dbd0facee629204422458190f548056a88a9f8a7e42ebe56d01c432b3ef17f0",
+    "backend/ai_knowledge/drissionpage/reference/browser_control/connect_browser.md": "47345d31448edecbf4fee144ee7f456eb20e2d88b69a2b02c9d3e2237d4ba57e",
+    "backend/ai_knowledge/drissionpage/reference/browser_control/console.md": "b689998e4aa6c1f11251205fe238d2b732edf98ab84afb1a095c11ed02c51179",
+    "backend/ai_knowledge/drissionpage/reference/browser_control/ele_operation.md": "bbb9bfb6c764df6f27061273e7a5a4627cff94e4189374d54b7ef727fe825ce9",
+    "backend/ai_knowledge/drissionpage/reference/browser_control/get_ele_info.md": "2e32c382f1ba2681d51003321051d40d0044db9f5c61f7b830b4dfc835153382",
+    "backend/ai_knowledge/drissionpage/reference/browser_control/get_elements/behavior.md": "54d2e4833960bf603445c5c40a18caf09ed11d04b4dbedef9aae5af9817b52ec",
+    "backend/ai_knowledge/drissionpage/reference/browser_control/get_elements/filter.md": "0fc67aa726cae0c1aac27fd48597d9173706c685e47c3a00a12ecb3905486a2b",
+    "backend/ai_knowledge/drissionpage/reference/browser_control/get_elements/find_in_object.md": "2d56d7760bbbe2f8dbba519dc2d2f822e25882338a8786269100d40e804019ca",
+    "backend/ai_knowledge/drissionpage/reference/browser_control/get_elements/intro.md": "00d635ec454d2e30043c7c77c750ee67da9e2a073fad4df66f4e8a239c40b8ef",
+    "backend/ai_knowledge/drissionpage/reference/browser_control/get_elements/relative.md": "a8629169aaf8412d2ce69fb853f0dbcbe1a5730a2678233ee13084e722fa4300",
+    "backend/ai_knowledge/drissionpage/reference/browser_control/get_elements/sheet.md": "c354646b7a2cc0f89bd57abafb337529ea0747e678771c289f61331a12a7ecd0",
+    "backend/ai_knowledge/drissionpage/reference/browser_control/get_elements/simplify.md": "7fe3b5db5ac68c0ae6d15459470b814ae9750ee59e751e6df98cec79c39bf06f",
+    "backend/ai_knowledge/drissionpage/reference/browser_control/get_elements/syntax.md": "018f460298717fe699fcfb2c70f7ec74c516ece051bb217b9d0d0e4d68b28f11",
+    "backend/ai_knowledge/drissionpage/reference/browser_control/get_page_info.md": "e54ce7c408a2044b20afd120a779020b8b57804e5f3edfecb3a979075a36dd95",
+    "backend/ai_knowledge/drissionpage/reference/browser_control/iframe.md": "1296cc9ba273f631a71d038050c5e4e69d02b8e6bf6c12ae854c051809865487",
+    "backend/ai_knowledge/drissionpage/reference/browser_control/intro.md": "fc8afd7fea1ad65b659e89cf355238962f686e917819bb5bc3a912eebbf1cd89",
+    "backend/ai_knowledge/drissionpage/reference/browser_control/listener.md": "d2a53d9d9458b7cba7af354aa167bfb3cd91d3320f8a5444df4a8da12921d025",
+    "backend/ai_knowledge/drissionpage/reference/browser_control/mode_change.md": "aadce619a9d3de0441b3b7f1b1a80e183c405e5c7b56ab000a50cfc5f9b3750b",
+    "backend/ai_knowledge/drissionpage/reference/browser_control/page_operation.md": "cb40313073dbe784cad0407cb732f4591cc28a30b2e02eaf4d00c473091f7d47",
+    "backend/ai_knowledge/drissionpage/reference/browser_control/pages.md": "447e806553d72a0bf22e510cce10ed020111f1c1ed2949d3324ea4460c8c353d",
+    "backend/ai_knowledge/drissionpage/reference/browser_control/screen.md": "39abe74af64ba6174326587c6f8c544a2f5da8584deee01186448c3d2ae55ae6",
+    "backend/ai_knowledge/drissionpage/reference/browser_control/tabs.md": "202c9ab1a28c47c09fee801ee4c0836fedcdd39e422983cc32e5a6a8286cac7d",
+    "backend/ai_knowledge/drissionpage/reference/browser_control/upload.md": "29756572a454b23c0df3d6e82c64e80d59d842e9cbae4223f1c81720f9916fb4",
+    "backend/ai_knowledge/drissionpage/reference/browser_control/visit.md": "a416fb8830efd1b6fbf0e405b2eb5af99b3d912852fb14ac40a8eedc12551c6b",
+    "backend/ai_knowledge/drissionpage/reference/browser_control/waiting.md": "d49a9d89403eebe7bbb2e6de8ea1692a703ec6ee2f0437a941b7a232265c3443",
+    "backend/ai_knowledge/drissionpage/reference/download/DownloadKit.md": "45d607c89492922602e5c8f92fbc59bd7e294f34babbc985167588fb87ceb5e0",
+    "backend/ai_knowledge/drissionpage/reference/download/browser.md": "3ee381f1184c27baf828dc0ea8a548490e0f255bd32698a85c9af43e565c3f48",
+    "backend/ai_knowledge/drissionpage/reference/download/intro.md": "091565da546a1cd43b306be1c91997fb4be35be17747358602ae78c97807d998",
+    "backend/ai_knowledge/drissionpage/reference/get_start/before_start.md": "4a1d46d9e195455b9b47ccc0d9d81bf0fd4c70704f845e31bebf4b30566e4a51",
+    "backend/ai_knowledge/drissionpage/reference/get_start/concept.md": "cc49111442d0cbe6b9c7d0c32c659f344ffb55bbebc6810ac318786e6befeab7",
+    "backend/ai_knowledge/drissionpage/reference/get_start/examples/control_browser.md": "f27e85cc0e7c17b135fb01b27669e99b08bbe0bd7e3f757693a5e072e3302d9a",
+    "backend/ai_knowledge/drissionpage/reference/get_start/examples/data_packets.md": "d5c981d43cc9d4d08b448c1b2803c68709919bec90319afd92919f12132f5338",
+    "backend/ai_knowledge/drissionpage/reference/get_start/examples/switch_mode.md": "337c334cba9ba73e105d576b59613d69f289b5ebb81ee3282656ef764c1bbf72",
+    "backend/ai_knowledge/drissionpage/reference/get_start/import.md": "e1d0a155685bb9d3a4cc4d528734a1b2bc36704e50360f9373b46a139b2fcf73",
+    "backend/ai_knowledge/drissionpage/reference/get_start/installation.md": "d15de0d5eddb59695c6ceba7bb0f0fb800e5bbc98a37cd13476198fd3f681161",
+    "backend/ai_knowledge/drissionpage/reference/get_start/set_lang.md": "23dc3bb0bff324fd5e5a9e9f47a3b80fdfa644b92040172b53bd34c8645f7b0d",
+    "backend/ai_knowledge/drissionpage/reference/tutorials/Q&A.md": "976c6d681a359e102759d434ce6a294d5956cff8a5171e59e4044bc84a1d3d60",
+    "backend/ai_knowledge/drissionpage/reference/tutorials/functions/create_browsers.md": "964a8a2c7faea16124a0992dd535cac25470f34f4ff53e1ca31a0f74b0a4711e",
+    "backend/ai_knowledge/drissionpage/reference/tutorials/functions/headless.md": "b04aa7f9e8aba302fbf771eeb361715fdfdbf642038c2c7d0460018d10a3c944",
+    "backend/ai_knowledge/drissionpage/reference/tutorials/functions/new_browser.md": "4c6f57e6311d2e253b16de5c819f1b61564fc795d1c145575bfb84e476c98237",
+    "backend/ai_knowledge/drissionpage/reference/tutorials/functions/set_cookies.md": "e3ef5c89a5cabdfc4a56874d54e7ddf7aea7eab5aac94411260766aed568724d",
+    "backend/ai_knowledge/drissionpage/runtime.md": "e05ae8e0f88bdf2d50f495ee07b733c35dec1c1d41dc91146e62c8bf1be35c83",
+    "backend/ai_knowledge/drissionpage/sessions.md": "e2149f91c8a40cd4fa96d7f6bd328d0a1b05c41852013a4e44dd2eb9575fbda8",
+    "backend/ai_knowledge/maintenance.md": "8868296cbacfe3c2b07deb12abe70459c03370989a2e945fab14f9936cdec7cc",
+    "backend/ai_knowledge/platform.md": "b47b7071f942f1dc087e17c15ec009ae0d6e0a4b8b89184ab8e2635fa1c89b6a",
+    "backend/ai_knowledge/scraping.md": "ac0aba19a1a355297911cbece6b50521d5264113c4585db72ec0e28a818e3c32",
+    "backend/ai_knowledge/scrapling/adaptive.md": "5588f80e567d4acdb4cae63ee488e929184c2c8142d7710c0872562ab8cb26a8",
+    "backend/ai_knowledge/scrapling/concurrency.md": "55108a57955fed001f0a921287dae969f5ca5ba4b3064ab711d869015adf372f",
+    "backend/ai_knowledge/scrapling/dynamic.md": "0f5b5273d66c4a23c31961db9ea89da2e490224132fb2838f3dc5189681a3bf3",
+    "backend/ai_knowledge/scrapling/http.md": "f2e3b84f175af7710752fcdc11b4919cfc27344e1d154f7b9d010f3aa544bdb5",
+    "backend/ai_knowledge/scrapling/overview.md": "169ad693fffdf405ecc4335ec330baf3215914fa8287460daf2335e211e2c81a",
+    "backend/ai_knowledge/scrapling/pagination.md": "4ab4474f6c573420279b6d2967c9524747a4c7141e4bab57dd0f21ad6d2b52d7",
+    "backend/ai_knowledge/scrapling/proxies.md": "388436d5aa76f5d1544f97ab08527b8f3b5170df508eefe8d0e8360d4fed6e20",
+    "backend/ai_knowledge/scrapling/rag.md": "2a29149ca133021589e3cd2019ac62df25da3df5f59934dbc2ee597594262065",
+    "backend/ai_knowledge/scrapling/recipes.md": "c24d1152ca5e23a763dc69ece275729a734dad45f7f26c238cefc800aeb686f6",
+    "backend/ai_knowledge/scrapling/selectors.md": "91844ea75c1a45f6a4f67b6700634b14a15552e8a6c1d4b0e11c8aa481f2ecb4",
+    "backend/ai_knowledge/scrapling/sessions.md": "395d716f56e3c396680d1156478ae0f2338fb42a42f11f8ada886d7175b905e8",
+    "backend/ai_knowledge/scrapling/spiders.md": "bfe81887646c66fffd07d5ecdae12e8346c83108ed2f4ac25a5c9ffb675dda7b",
+    "backend/ai_knowledge/scrapling/troubleshooting.md": "3e190984dc56c748ad65d0c8285d122058d90bfd0be5ecd633f34299cf4d3b6e",
+    "backend/ai_knowledge/tables.md": "e2028b1351848a935dbb01dafa0b841273a6c704315438980693aaef77484361",
+    "backend/app/__init__.py": "65a3f0f2c6e2a7dfe49c4f7324e5a79de56620c0911c0f32889ad1e9dc1dc45a",
+    "backend/app/ai_agent.py": "e8da8a09997a3bf99ec24d6bf249e4b083058a8e0b418c0b10e09bb444f9866e",
+    "backend/app/ai_browser.py": "9705bd08fb303b01b761717bb49e62a38d6329d49bc63b20d7893330f212a111",
+    "backend/app/ai_knowledge.py": "0b110db1c32435a2932559fd629368fbbb50d780faa1ffc11f9f0648137de48a",
+    "backend/app/ai_scraping.py": "d4c93dc741f8666003f7ba6b8131eb78f50bb5d39b9a4601ffb286d53fcb0883",
+    "backend/app/ai_settings.py": "f56aa7c810b31619dab6922a680e8fa70e08905b4de1e80491d82c13f4ad2cc3",
+    "backend/app/ai_titles.py": "cac197e05c846b0cb67362c91c5805b4ac639a2123dff97130349e5a382d5580",
+    "backend/app/ai_tools.py": "4dc6ae77d434bdb317959ffd9058c5e74b2e9120f5373cb1066c5f9d2fad0cc2",
+    "backend/app/api/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "backend/app/api/apps.py": "14cd4796f1583e0e44a45a005b34fc3721c0c9298f74c99a13628ac42829905d",
+    "backend/app/api/audit.py": "cb96222310e9939c6e112b9b3b474ad80623e6e670f9667498ec865c08b75e2d",
+    "backend/app/api/auth.py": "407c59c19942f95170b768bb013f4b851dfb41ac6afdd6c7915aace294bbb9d3",
+    "backend/app/api/executions.py": "13115e2b471af1f8a513a2839c4016cc566cc1234da4a6a14e00e518109e71b4",
+    "backend/app/api/hosts.py": "6cd67606225c4c39824ff0c1ba37ae6247df43e8e5a3440f5bca4159bf58d9a1",
+    "backend/app/api/overview.py": "853c4dd6941b914d67a10e758ecf1f4e85288fad24721c4d1fa473702808ba77",
+    "backend/app/api/settings.py": "6dc271b68a11d3435bf95a8baf2226642d5f484b0c010ecfb77fc7915f200003",
+    "backend/app/api/tasks.py": "12504f59fc66a42aee98271578696846cc02dd10a59177e7e56c42f67702ea2c",
+    "backend/app/api/users.py": "ffc94d7cff087a158ad6947a90253d6a97666c5ed805590882d874dca4b5f940",
+    "backend/app/collection.py": "e2853dda3285e1b10c6f497df4ab0696555d96d33f9503cfba2913e411cd5ce5",
+    "backend/app/collection_progress.py": "6aa6220ae48f0cc44737d612a1e0de06084def8346103f7c7f1e8086785eb442",
+    "backend/app/config.py": "63d33bab83337645ceb2e107c4e8de6de6f19a33d5ba2d46c8364e1d13bdfa55",
+    "backend/app/database.py": "ff86546e393f2cc1b20157d78b0234f5fa379781a87f82405b48fd2dec7a9bbd",
+    "backend/app/dp_probe.py": "2db68717432ae5bd8662e8cae577a4fcd4910a02c2a84f91b550752181d26171",
+    "backend/app/dp_runtime.py": "522394160f8ca6f7968b7f7b4e535138155d2c2ae88e4a08d7fbb4fce04e9f03",
+    "backend/app/environments.py": "3c8b7d5c2a3a8dac3f15b4316531393649b7b9d4a62bedbdc305006d252600cd",
+    "backend/app/execution_artifacts.py": "52aa9a925f32bc239881bbae53088db1bfea1af6184a172c1eb837c456805981",
+    "backend/app/execution_results.py": "cf6ee3417e828fc19fff7f5ec5c26a58983683f3975f4a94f6a0eb4b96d2729c",
+    "backend/app/feishu.py": "e3748a195feda8e41287a5178e14bfc9e8552fd7a6697d214869c815e1effc75",
+    "backend/app/host_runtime.py": "6d4b8fff1fb6e63a68b8a80cc17262564eaad340d390843a13a23fa61b5ff319",
+    "backend/app/instance_lock.py": "34341a62be3878625f09dc14af48e77ab152e450f60bb0320a63228acc72cf7f",
+    "backend/app/main.py": "f4a820786ee56922033b4aa63c2fd0c066350837e14d33d48c470705b8487dee",
+    "backend/app/maintenance.py": "804227cfd15071109383815742f687c2679d16f8b4dfe908a0e567108d144a74",
+    "backend/app/maintenance_runtime.py": "7c8b190e8c6dfa417319729c8b4c70bae32e7ad3dd9414753050a9e3cede5749",
+    "backend/app/remote_maintenance.py": "15ac74bb1ec1880932c960d4be0a80c407027b50db98ee1a35c47d3f062fd178",
+    "backend/app/runner.py": "7f5f2b8764c5092304843113554c6cb5e66ffbf39060d5630c364b3be6532c34",
+    "backend/app/scheduling.py": "44132300c73fed0b87ab35eec4cc63656cd8258514a08d0a4a41e720c821b0cc",
+    "backend/app/schemas.py": "c9550d102048f4879e80078cbb4ae378ca6577c373e28ceb120e2c963a3eddfd",
+    "backend/app/security.py": "e8709fb160b296d3a5ea55c2cd8915dea726eb4facac262f6e88ffadab4e1c4e",
+    "backend/app/services/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "backend/app/services/execution_queue.py": "62b4bba4ef8e4ae6d3686d85477b9370b9f89ebddbca98a31c1f4b8f62d80d82",
+    "backend/app/services/host_dispatch.py": "5a2fb02b762ecb62d147d2320fe7258bd06d47ba4473a549bb82cf02ff72c501",
+    "backend/app/services/runtime.py": "6da071caf03a0412d735ce2997f739775a7335749aa66a0c6eab138a077f0a3e",
+    "backend/app/services/task_queries.py": "6891bd8bed665cfc33e23d1c14eea0b18165861e7d0c4b82443f1a90d0e8b3bf",
+    "backend/app/task_versions.py": "c197d1ec35cc94f71bcb6a7a4e0a9534a54ea7971ea52c05b258143405e54224",
+    "backend/native/dp_driver.py": "afdfde97cbe8ac9799c796fd3413e3ffde82d015a592e5d0f20ae2054eec98e4",
+    "backend/requirements-browser.txt": "e73c411f70aca8469b2732dec92b35756fcd4df4af8bbe180df5d03503f120d5",
+    "backend/requirements-dev.txt": "d7782d151a26685f096123e87d1979316a32e9ff7b8d4614d7469722bd4df61d",
+    "backend/requirements-dp.txt": "d74ffe9a533d270e9ec878dd6e642be3bf9970d7df810255cc80286f2fea38ab",
+    "backend/requirements.txt": "9c2b02bedd36ed357d00d1e5d99e4f6e28b13100af8e5834d91e80bbc9195d6d",
+    "backend/sandbox/collection_api.py": "6f21c4fbee3904018986fe2cb9f789895b31912db4bb1fa2846eaf12066353c0",
+    "backend/sandbox/collection_net.py": "bbc4c6f97dbef413b91bd48859431a6901c92641c13ce35cad68ccf9097308fb",
+    "backend/sandbox/driver.py": "360e588c23dc1e0859ca721ec9fb70fea2ea4aa50f9849439105c60a22c45cb1",
+    "backend/sandbox/entry.py": "7d924a0153fe40806576b61a29cb9eb2222bc3c14e066aac0004737158a49087",
+    "backend/sandbox/setup_collection.py": "d61e5cd7f9d261ef920daafa854babf1b5b601ac38a45f234d6f376ac99e25a5",
+    "backend/sandbox/setup_runtime.py": "faf5e43bdba070fc84347b5bc830ce7eb2f0a6ed85cc62b06d2b51d601f04298",
+    "backend/tests/__init__.py": "6f47cc823fe97f49698896d82d285cf5fd037c2462d34ee80c94d182c617640a",
+    "backend/tests/collection_native_probe.py": "cd3a5c56ca53747ec8833eb611b1ca65d630daeba6659818448c621addd9fb67",
+    "backend/tests/fixtures/slow_task.py": "d9e9c31f64476fb601fa1e54214c2b4c2e5d923c6c71bcc7d0d6b1bee6edc381",
+    "backend/tests/test_ai_agent.py": "e9ddce607c90a989c06fb7c0615dc37721099460c252c15c0db1cb3518c0531d",
+    "backend/tests/test_ai_browser.py": "3e52d1897900bdbff8a6a0ab1b9882f9b95c7c9a32405bdf60bb0e804b39010d",
+    "backend/tests/test_ai_knowledge.py": "e3d087d84e640b5747cfdbe4d238d1634b6eebb5adfbb0eb9e5d2ae448454fde",
+    "backend/tests/test_ai_scraping.py": "0369e070ed97232cf38f7f4ee4e1f11d83b1cff8f0d35328b3c08fccc309fcef",
+    "backend/tests/test_ai_titles.py": "ad0ea299fa1861ecc24536a31b7d4b8ccd48030c68badca3dade5352cdf5e5c8",
+    "backend/tests/test_app_api.py": "65e91fe63b04e70c284dd854f600106635e36400d91a38893fcc17f66cb04519",
+    "backend/tests/test_collection.py": "04d3c5c0c9afdb942e627c259171e1752cfa1e178f9f8d7938213c6c289f834d",
+    "backend/tests/test_collection_core.py": "fdac6f4d51e39c7b5b68325b037524ca9f6e50ca97193df7ec4b504fead9c4db",
+    "backend/tests/test_collection_progress.py": "95b82d0721746052e92a43263c28c9040e0b3d26347c0d99f7059bd6235f9eb1",
+    "backend/tests/test_database_migrations.py": "e9897609c174257faf08ff0c2ac8654c2636d21492261d0bc7cbb2ca81ab7131",
+    "backend/tests/test_dp_runtime.py": "04ff9ac3b044ca48c133ec2b918bb48fdc96e3288d89b00ef2e50f90ebe4e50a",
+    "backend/tests/test_environments.py": "c658ac68a9e217f112b6209a04aa78e63b3f61b3927f71652f31546b2e5409ec",
+    "backend/tests/test_execution_artifact_api.py": "8124c09900aacd880ef90cee24ede9af9b88fa8c4cd856ac3d3abfb9a6c7a1c9",
+    "backend/tests/test_execution_artifact_files.py": "54ef74252cc58496284968ddc38957be6f15898fb8d8da259cbfdd8de238d8d1",
+    "backend/tests/test_execution_history.py": "f3a922d088980dfc61382c0601d08af2f1877b247ec3a0e96d227ccdfd30e902",
+    "backend/tests/test_execution_results.py": "bee60ac4ba513a05ce7cf51a65b65f5b6aac7b563844ef2bb70b415ccf221b33",
+    "backend/tests/test_failure_screenshot.py": "889a61a320ba0c148c8d95392647025e859776ed92918f593b9aa7d7950de6c9",
+    "backend/tests/test_feishu.py": "b667941f13bdd9f65cb35c8e9ad91b8382a1b5419bf2ee94ced17d5068b20a8b",
+    "backend/tests/test_force_stop.py": "9fb6f42e7f1341f7484a9605ef9737e76ecc65f1e6bf1587bcd99f5f72f319e9",
+    "backend/tests/test_host_runtime.py": "fe5f6022e04686790916b73b09728b89725846d9f3cc981894c934bf9575695e",
+    "backend/tests/test_hosts.py": "2db1f5c16ad4bccab5508a14f6d630f53d076e2cddeb5f81608e08c88a619f3b",
+    "backend/tests/test_instance_lock.py": "625cfa5d1aa415ee9ae0ba740d5569bc93b90cd7e201088fb12ed5fdcf527171",
+    "backend/tests/test_legacy_cleanup.py": "0d151b299d5454a88af172b3e5f6653396b5d860d662e7434361a455943d735c",
+    "backend/tests/test_maintenance.py": "fd58faf60fc8d2deec2d5d2034fe3c634b7c73925e1b50a8224f5890b6cf300a",
+    "backend/tests/test_member_management.py": "a7fa6211fa0c78a5a8f895c384a0cff1b5971ce10fff04c74411b0128e90f7bc",
+    "backend/tests/test_overview_timezone.py": "838ecc0790866bc0ae4dbbcf5381e6ed2268a97a9606b4875b26c918cc7e82e6",
+    "backend/tests/test_project_audit.py": "be14bde0186996488e570499f99c9b4b38f20abf46b62c4d300cd27b0cc4de9c",
+    "backend/tests/test_runner.py": "836525bfec420f137e034570169c910a3d2a4a15e4123f551fe873128f5c16bb",
+    "backend/tests/test_scheduled_queue.py": "2b3f5e6ba3caeb4aeeb01feaf85484c6b3fa494a42835878d3c55fcc244ee213",
+    "backend/tests/test_scheduling.py": "d17d0424c7ab698b6f8e5aca70ce1cdadc21da179e0b465118d2dbc472102d04",
+    "backend/tests/test_schemas.py": "1016901289eba4ec019c7500076e61724a54f99b1f098d12a75aee3e7426ff18",
+    "backend/tests/test_security.py": "eaf8b0cf267b761e74b775c975a22d386bc2e2ff4d7af21deba0b6a7efc9e0ba",
+    "backend/tests/test_task_versions.py": "ff1e9a6e24e133f212f066b863206c4717a13818fceaeb830135109b799499f1",
+    "backend/tests/test_templates_and_timeouts.py": "7f30fdfc7a9e2c713138a415c4ca24e1b2c0b264ccfacbf464a1392d6a3654e4",
+    "backend/tests/test_workers.py": "aa2754f8447f9a718fb30fbc7af0aa13178214bdf09a6bf4b5e1eef679b72007",
+    "frontend/dist/favicon.svg": "9be3e30e0ad2dcd26cf9ce0546ad444286981ff9b8a7b8019de1e95750b4c634",
+    "frontend/dist/index.html": "f7500530b27a0670131294147b7570a7bc4472602f5f41c83fc4eb988adbf731",
+    "frontend/src/AiAssistant.vue": "98d01a72a4e0cd72942b9f5522d2f69bad78babedde34b46e6ce6eb9b1a33d10",
+    "frontend/src/AiMaintenance.vue": "9bce39b16d9f180cc9f19d36a4fe600cd77dab7390d86a5d0bcfe7a224cfabc2",
+    "frontend/src/AiSettings.vue": "3fb286a0b833030505db600cfa63923fea19f0cb394d70268c45644a58a3a262",
+    "frontend/src/AiThreadPicker.vue": "42da25a70b44294f721014390925335ff2f601d314c3b741ff5179a33ef3a826",
+    "frontend/src/App.vue": "96e117ff590816458f6574abe4d4caf7122b912efa13f170d0d66003072e3b11",
+    "frontend/src/MaintenanceLog.vue": "7e15294773f0e17cf7b788f7b2c6a6e41d80f960231eff6260376209a2c08962",
+    "frontend/src/MaintenanceNotices.vue": "156ba9b9c038313a33ff93f94bca1f50e3709d0c3e5a3fc2f31c2af3e5d6274c",
+    "frontend/src/TaskVersions.vue": "a9cc75b8193ac7416f5d4ff917e2f399592b45812fee9698892efdb38857b99c",
+    "frontend/src/components/ToastNotice.vue": "89fcd80fecfcd67f0cab99049983c4aac7a20822753d42041b4a2674f7df40a1",
+    "frontend/src/features/apps/CreateTaskPage.vue": "3fea8f484618447813f705322285b1aa2810d7622ee39a8b8c79bab73287158c",
+    "frontend/src/features/apps/useApps.js": "4f8669c72d14973d1cdd8c54708fd17661a20337cf7602a21b864fdd6920d97e",
+    "frontend/src/features/auth/LoginPage.vue": "88ef32eddf5235d4b90c0c59f248aaf4709df25482ccc6e3d7a3dfa35c5a6f8c",
+    "frontend/src/features/auth/PasswordDialog.vue": "ee79f00a4adae34adf6eccfb6a5aecc8cfe14be36d59c2a58fdc15553326c809",
+    "frontend/src/features/auth/useAuth.js": "acc3f849da5dc09fa73dc7c7862a02817d751a561a78a62ef0fb27e217ef84a9",
+    "frontend/src/features/executions/ActiveQueue.vue": "2fdceb6928b421095b4882ec5212f2b77a64fdd7f74935659eef4a9e38f3432d",
+    "frontend/src/features/executions/CollectionProgress.vue": "ff9c5d76061658e238de1e3f028cf223b84f4152c8f253738feb7289b8051c79",
+    "frontend/src/features/executions/ExecutionDetail.vue": "a66199a5f1166072e078a461d704073a2fb0b91adb4e44ed0f289970e450be68",
+    "frontend/src/features/executions/ExecutionHistory.vue": "808d281bfeb93be0739e2f21e1c26f8690ecd44a8ff6c987aa117176277be6df",
+    "frontend/src/features/executions/StopExecutionDialog.vue": "67867b6d66e2f4968773d74cf1f51e45ee8cc3762663750cfb28df9d593ef327",
+    "frontend/src/features/executions/useExecutions.js": "634e3483cd962b049a92ef3dbd3315ff23a748b2f67e96c4d9972e160b21be16",
+    "frontend/src/features/hosts/HostsPage.vue": "e15e984dc99053d28498e3ed1d3969d7e536f974305da1997d9c16cddd0e5632",
+    "frontend/src/features/hosts/useHosts.js": "15e7aa12874f88bf7658154c47f0bb57c0181dea44e93dff255f2d30fd616b59",
+    "frontend/src/features/members/AuditPage.vue": "eda7a67f357d0e57e91d2d3fc17bf90155dc4a9a10af2d74e29094fbb3e697e8",
+    "frontend/src/features/members/DeleteMemberDialog.vue": "f81612cad43f8edc7f4181e0e5b38f2963ac868d3d94c7203aec57d07fb6c3b8",
+    "frontend/src/features/members/MemberEditor.vue": "740b596a4724283d478d5c610ba461bded8004cfd2229786e360de1317e3b895",
+    "frontend/src/features/members/MembersPage.vue": "4b51d7b650bca5fe55c586ce95e3413f80ed8d3b9233070c6e60e32e885e41ec",
+    "frontend/src/features/members/useMembers.js": "ce2449298b085aa348b3e9eae7507ac5132fb5aa160675fa6fbedde2d2d6b862",
+    "frontend/src/features/schedule/SchedulePage.vue": "6b4b6d9fe36ec00b64cbb867ed7af38346cab57df0b34fe44d457dd08b9d942d",
+    "frontend/src/features/schedule/useSchedule.js": "430995691f3c29b49b04dcc7d7f70831bcb8d7595f2a15a1f0f11b82795de660",
+    "frontend/src/features/settings/ModelSettingsPage.vue": "a643ae5671ad898e66d5a86c776371f8ff515ad4f28e91fadf59eb44d2e28631",
+    "frontend/src/features/settings/SystemSettingsPage.vue": "feee4cd94c20d35991984e8d247cce37a6255aa9f18d0d123a1d9e6042fe1428",
+    "frontend/src/features/tasks/DeleteTaskDialog.vue": "c23d2e29f98cc2c2b74d127a19831e9857db99212412b5ac7ca2e7470caf3a32",
+    "frontend/src/features/tasks/TaskEditor.vue": "daed1e83ce4cb23c9e887ba6fdec747c32452293b14ff61692d34d90926c9121",
+    "frontend/src/features/tasks/TasksPage.vue": "7290e5cc9e3711100caf0bd6fe7381a8215a6ac9681bc07d264fb67d0745fe34",
+    "frontend/src/features/tasks/useTasks.js": "6fea837ec9492c41591a2b76400a73062ef06e825d353e9b5cdadc9461beb65a",
+    "frontend/src/lib/api.js": "d4ea9a7ebc2b8bfb32bef3b3c3bf3af2107b704c2c92081744f2cde6506e01eb",
+    "frontend/src/lib/constants.js": "b6ad9a7424d8a8b46eda11bb467c54dbf49b53e6ae4f884c954f1e82116416e1",
+    "frontend/src/lib/format.js": "ed00a0677c9c62ed6c6570f0cb1c7c4f4742f83568ecbc442605e79a69645f01",
+    "frontend/src/lib/versionUpdates.js": "9491cfd8243acd32faca72ebe2a04f872a9d5ad4d2ca4d24697b7176629530ad",
+    "frontend/src/main.js": "750ece2ac39ad59f1470bd5a1d758bd324841d06d14dae1720fce58b6dde292c",
+    "frontend/src/maintenanceSummary.js": "e97b2d7642ce841690a35fecda57045cad185b9e7b839965b3fe8251bb8db699",
+    "frontend/src/pages/OverviewPage.vue": "be6baf96fb7b6ca23eb9e9a5b7df32549fcf08053602d7762a4ab93eb4d9a195",
+    "frontend/src/style.css": "f740f328ef013dae28a99defb8e587381531de00171f5311e2aa8b03d3f1d6e2",
+    "frontend/src/workspace/context.js": "a6238c01ffec9faaa44b8e676121561ed13fdbbc5ff8d27c634cc2507eff7224",
+    "frontend/src/workspace/useWorkspace.js": "fab3714d2ded840bb82a841cf54c317f118a2d865ef042a7c6a643ed32337803",
+    "frontend/src/workspace/useWorkspaceData.js": "b8590624ec8803d133c2d86ef57eedcf816e0e608f700868541c235840a1b96a"
+  },
+  "backend": {
+    "total": 776,
+    "passed": 757,
+    "skipped": 19,
+    "failures": 0,
+    "errors": 0,
+    "skips": [
+      {
+        "test": "test_real_browser_observe_click_login_resume_scrapling_and_expiry (test_ai_browser.BrowserTests.test_real_browser_observe_click_login_resume_scrapling_and_expiry)",
+        "reason": "需要独立环境 Chromium"
+      },
+      {
+        "test": "test_native_live_session_keeps_context_filters_and_api_evidence (test_ai_scraping.NativeScrapingTests.test_native_live_session_keeps_context_filters_and_api_evidence)",
+        "reason": "需要独立环境 Chromium"
+      },
+      {
+        "test": "test_real_browser_executes_js_and_cannot_read_host_or_direct_network (test_collection.CollectionNetworkTests.test_real_browser_executes_js_and_cannot_read_host_or_direct_network)",
+        "reason": "requires prepared collection-v1 runtime"
+      },
+      {
+        "test": "test_real_browser_loads_assets_and_clicks_next_page_without_crashing (test_collection.CollectionNetworkTests.test_real_browser_loads_assets_and_clicks_next_page_without_crashing)",
+        "reason": "requires prepared collection-v1 runtime"
+      },
+      {
+        "test": "test_real_scrapling_request_and_independent_csv_validation (test_collection.CollectionNetworkTests.test_real_scrapling_request_and_independent_csv_validation)",
+        "reason": "requires prepared collection-v1 runtime"
+      },
+      {
+        "test": "test_uploaded_python_uses_same_collection_profile_on_scheduled_run (test_collection.CollectionScheduledTests.test_uploaded_python_uses_same_collection_profile_on_scheduled_run)",
+        "reason": "requires prepared collection-v1 runtime"
+      },
+      {
+        "test": "test_native_dynamic_session_and_action_failure (test_collection_core.NativeTests.test_native_dynamic_session_and_action_failure)",
+        "reason": "requires WSL collection"
+      },
+      {
+        "test": "test_native_transport_fixture (test_collection_core.NativeTests.test_native_transport_fixture)",
+        "reason": "requires WSL collection"
+      },
+      {
+        "test": "test_real_crawl_resume_then_fresh_scheduled_collection (test_collection_core.NativeTests.test_real_crawl_resume_then_fresh_scheduled_collection)",
+        "reason": "requires WSL collection"
+      },
+      {
+        "test": "test_prepared_wsl_worker_executes_cron_owned_repair_once (test_cron_maintenance.CronMaintenanceTests.test_prepared_wsl_worker_executes_cron_owned_repair_once)",
+        "reason": "requires prepared WSL runtime for Cron-owned repair rerun"
+      },
+      {
+        "test": "test_real_dp_probe_observes_question_links (test_dp_runtime.DPTests.test_real_dp_probe_observes_question_links)",
+        "reason": "requires native DP runtime"
+      },
+      {
+        "test": "test_real_queue_trial_and_execution_same_port (test_dp_runtime.DPTests.test_real_queue_trial_and_execution_same_port)",
+        "reason": "requires Windows DP and a free configured task port"
+      },
+      {
+        "test": "test_real_stop_releases_configured_port (test_dp_runtime.DPTests.test_real_stop_releases_configured_port)",
+        "reason": "requires native DP runtime"
+      },
+      {
+        "test": "test_file_and_directory_symlinks_are_excluded (test_execution_artifact_files.ArtifactFileTests.test_file_and_directory_symlinks_are_excluded)",
+        "reason": "系统未授予创建符号链接权限：1314"
+      },
+      {
+        "test": "test_removes_a_child_symlink_without_deleting_its_external_target (test_host_runtime.WorkDirectoryCleanupTests.test_removes_a_child_symlink_without_deleting_its_external_target)",
+        "reason": "当前 Windows 策略不允许创建符号链接：[WinError 1314] 客户端没有所需的特权。: 'C:\\\\Users\\\\20898\\\\AppData\\\\Local\\\\Temp\\\\tmp90u4s22x\\\\external' -> 'C:\\\\Users\\\\20898\\\\AppData\\\\Local\\\\Temp\\\\tmp90u4s22x\\\\work\\\\linked-folder'"
+      },
+      {
+        "test": "test_rejects_a_work_directory_that_is_a_symbolic_link (test_host_runtime.WorkDirectoryValidationTests.test_rejects_a_work_directory_that_is_a_symbolic_link)",
+        "reason": "当前 Windows 策略不允许创建符号链接：[WinError 1314] 客户端没有所需的特权。: 'C:\\\\Users\\\\20898\\\\AppData\\\\Local\\\\Temp\\\\tmp4dh3ceto\\\\real-work' -> 'C:\\\\Users\\\\20898\\\\AppData\\\\Local\\\\Temp\\\\tmp4dh3ceto\\\\work-link'"
+      },
+      {
+        "test": "test_serial_worker_really_reruns_repair_and_keeps_business_artifact (test_maintenance.MaintenanceTests.test_serial_worker_really_reruns_repair_and_keeps_business_artifact)",
+        "reason": "requires prepared WSL runtime"
+      },
+      {
+        "test": "test_real_kernel_sandbox_denies_host_network_and_processes (test_maintenance.RuntimeTests.test_real_kernel_sandbox_denies_host_network_and_processes)",
+        "reason": "WSL sandbox integration is explicitly enabled on a prepared host"
+      },
+      {
+        "test": "test_real_sandbox_reproduces_type_error_and_runs_repaired_script (test_maintenance.RuntimeTests.test_real_sandbox_reproduces_type_error_and_runs_repaired_script)",
+        "reason": "requires prepared WSL runtime"
+      }
+    ],
+    "failed_tests": [],
+    "error_tests": []
+  },
+  "agent": {
+    "total": 72,
+    "passed": 71,
+    "skipped": 1,
+    "failures": 0,
+    "errors": 0,
+    "skips": [
+      {
+        "test": "test_symlinked_artifact_directory_is_rejected (test_agent.LocalStateTests.test_symlinked_artifact_directory_is_rejected)",
+        "reason": "当前 Windows 账号不能创建符号链接"
+      }
+    ]
+  },
+  "frontend": {
+    "passed": 214,
+    "existing": 213,
+    "new": 1,
+    "vite_modules": 122,
+    "logs": {
+      "agent-environment.test.log": "439d6ed1d21f237020555e7c8c26c3370ec58f5162e43dd6c9d4261bdf74ad71",
+      "agent-upgrade.test.log": "2f9bcc27fea28dba631ba6c166415f8c79e16338e4693de78ff589a93bc70305",
+      "ai-models.test.log": "82bf41e63469889cf5790c9a8e7fad289357eb536bf8d66f67c2de7aca09b376",
+      "audit-history.test.log": "959eb6f5ba248d1e23cfd73616703aef78e4e4b5704a180c6f95851979b7a469",
+      "center-behavior.test.log": "6d54c176f8258a66331c5040b8d42e9529af733e687fab74d5f4a68a63bd0d3f",
+      "chat-ui.test.log": "b319e7697c11568df4dc250ba36a4f0ccb4db7e71fe3dbf2a495275af843e78f",
+      "dependency-fields.test.log": "0e926d396ef5655111f584c88c34510853a28cb79f5d6225511fe9674614b88e",
+      "feishu-settings.test.log": "f1a2d71a62c700d7fcde244e8cad3fff8fa7ff8cdcb29de9738fb2bf57e7605b",
+      "inline-plan.test.log": "38147cd9e198bab011846cf49cc8eacde5d771e337758fa549f28371a085d1d3",
+      "management-ui.test.log": "e9779811aaf83a8489c5e59980e97bf02300c1385b5b446ee72e9d3e97c269b1",
+      "unified-history.test.log": "24badb72a67491436633b57f0b68b8658e4843aa6412c808767a13d235f4e377",
+      "workflow-ui.test.log": "83c6b622e64f468168ad33c37e90f925f9b96e853e6563716035b82a9888632b"
+    }
+  },
+  "real_protocol": {
+    "real_http": true,
+    "real_dpapi_identity": true,
+    "real_short_lived_transport": true,
+    "helper_error_readable": true,
+    "pause_blocks_offer": true,
+    "resume_idempotent": true,
+    "identity_and_config_preserved": true,
+    "controller_zip_version": "0.4.1",
+    "controller_zip_files": 23,
+    "controller_zip_sha256": "fdc37db551f75cedd7788dfa6b42d03e7899a0cb0fb30b2860615ff42f451b9f",
+    "all_manifest_hashes_match": true,
+    "business_runs": 0,
+    "production_agent_processes": 0,
+    "two_physical_computers": false
+  },
+  "local_release": {
+    "http": {
+      "favicon.svg": {
+        "status": 200,
+        "sha256": "9be3e30e0ad2dcd26cf9ce0546ad444286981ff9b8a7b8019de1e95750b4c634"
+      },
+      "index.html": {
+        "status": 200,
+        "sha256": "f7500530b27a0670131294147b7570a7bc4472602f5f41c83fc4eb988adbf731"
+      },
+      "assets/index-D4ESy7zB.js": {
+        "status": 200,
+        "sha256": "a9a55c959becd845411e024a820ccb20539d32a9a0eeb6cb72285c73a085e6d0"
+      },
+      "assets/index-Gj6upmCS.css": {
+        "status": 200,
+        "sha256": "c28580d5a2a0fe8ca7b552441cf0232600afd0e28baf2f8c156d137bf41933ad"
+      }
+    },
+    "health": {
+      "status": "ok",
+      "mode": "shared-central-python",
+      "scheduler": "running",
+      "queue_worker": "running",
+      "environment_worker": "running",
+      "ai_worker": "running"
+    },
+    "auth": {
+      "/api/hosts/agent-download": 401,
+      "/api/remote-runs/1": 401,
+      "/api/apps/1/dependency-details": 401,
+      "/api/agent/upgrade-pause": 401,
+      "/api/agent/upgrade-resume": 401
+    },
+    "schema_verified": true,
+    "config_unchanged": true,
+    "idle_after": {
+      "busy_counts": {
+        "executions": 0,
+        "remote_runs": 0,
+        "maintenance_jobs": 0,
+        "remote_maintenance_jobs": 0,
+        "rpa_apps": 0,
+        "task_version_updates": 0,
+        "ai_turns": 0,
+        "ai_collection_trials": 0,
+        "ai_dp_probes": 0,
+        "ai_browser_state": 0,
+        "workflow_runs": 0,
+        "cron_rounds": 0,
+        "workflow_triggers": 0,
+        "maintenance_delivery": 0,
+        "unconfirmed_settlements": 0,
+        "unfinished_repair_rerun": 0
+      },
+      "unknown_checks": [],
+      "idle": true,
+      "next_task_slot": null
+    },
+    "runtime_files": 17,
+    "matching_prior_source_files": 308,
+    "formal_business_operations": 0,
+    "real_agent_upgrades": 0,
+    "new_platform_dependencies": [],
+    "backup": "C:\\Users\\20898\\AppData\\Local\\SpiderFly\\Backups\\before-agent-upgrade-20261016-d81d3dd9"
+  },
+  "formal_business_operations": 0,
+  "real_agent_upgrades": 0,
+  "two_physical_computers_verified": false,
+  "git_commit_or_push": false,
+  "limitations": [
+    "Two physical Windows computers and real business remain pending.",
+    "Package hashes validate integrity, not publisher authentication.",
+    "Sudden power loss or forced process termination may require manual recovery from preserved backup."
+  ],
+  "documentation_check": {
+    "files": 12,
+    "local_links": 305,
+    "anchors": 14,
+    "broken": 0
+  }
+}

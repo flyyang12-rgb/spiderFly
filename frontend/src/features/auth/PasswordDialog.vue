@@ -9,8 +9,7 @@ const { changePassword, changePasswordOpen, passwordForm, saving } = useWorkspac
     <section class="modal password-modal" role="dialog" aria-modal="true" aria-label="修改密码">
       <header>
         <div>
-          <span class="eyebrow">ACCOUNT SECURITY</span>
-          <h2>修改登录密码</h2>
+          <h2>修改密码</h2>
         </div>
         <button class="modal-close" type="button" aria-label="关闭" @click="changePasswordOpen = false">
           ×
@@ -28,10 +27,10 @@ const { changePassword, changePasswordOpen, passwordForm, saving } = useWorkspac
             type="password"
             minlength="6"
             autocomplete="new-password"
-          /><small>至少 6 个字符。</small></label
+          /><small>至少 6 个字符</small></label
         >
         <label class="field"
-          ><span>再次输入新密码</span
+          ><span>确认新密码</span
           ><input
             v-model="passwordForm.confirm_password"
             type="password"
@@ -42,7 +41,7 @@ const { changePassword, changePasswordOpen, passwordForm, saving } = useWorkspac
       <footer>
         <button class="button ghost" type="button" @click="changePasswordOpen = false">取消</button>
         <button class="button primary" type="button" :disabled="saving" @click="changePassword">
-          {{ saving ? '正在保存…' : '保存新密码' }}
+          {{ saving ? '正在保存…' : '保存' }}
         </button>
       </footer>
     </section>

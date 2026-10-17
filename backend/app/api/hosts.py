@@ -1,17 +1,16 @@
 """Administrator host management and signed machine-only HTTP protocol."""
 from __future__ import annotations
 
-import io
 from pathlib import Path
 from typing import Literal
 from urllib.parse import urlsplit
-import zipfile
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from ..security import admin_user
+from ..security import admin_user, super_admin_user
+from ..services import agent_updates
 from ..services import host_dispatch as service
 
 router = APIRouter()
@@ -38,6 +37,7 @@ class Heartbeat(Payload):
     interactive_session: bool
     active_run_id: int | None = Field(default=None, gt=0)
     recovery_required: bool = False
+    remote_upgrade_ready: bool = False
 
 
 class Mode(Payload):
@@ -49,16 +49,54 @@ class Dispatch(Payload):
     request_id: str = Field(min_length=16, max_length=100, pattern=r"^[a-zA-Z0-9_-]+$")
 
 
+class InstalledPackage(Payload):
+    name: str = Field(min_length=1, max_length=128, pattern=r'^[A-Za-z0-9][A-Za-z0-9._-]*$')
+    version: str = Field(min_length=1, max_length=128)
+
+
+class EnvironmentReport(Payload):
+    report_version: Literal[1]
+    package_hash: str = Field(pattern=r'^[a-f0-9]{64}$')
+    requirements_hash: str = Field(pattern=r'^[a-f0-9]{64}$')
+    cache_reused: bool
+    status: Literal['ready', 'failed']
+    stage: Literal['create', 'install', 'interpreter', 'pip_check', 'requirements', 'ready']
+    python: str | None = Field(default=None, max_length=40)
+    bits: Literal[32, 64] | None = None
+    packages: list[InstalledPackage] = Field(max_length=1000)
+    pip_check: bool
+    interpreter_verified: bool
+    requirements_verified: bool
+    verified_at: str = Field(min_length=1, max_length=64)
+    error: str = Field(default='', max_length=1000)
+
+
 class Event(Payload):
     seq: int = Field(gt=0)
-    kind: Literal["started", "stdout", "stderr", "finished", "uncertain"]
+    kind: Literal["started", "stdout", "stderr", "finished", "uncertain", "environment"]
     text: str = Field(default="", max_length=16000)
     status: Literal["succeeded", "failed", "cancelled", "timed_out"] | None = None
     exit_code: int | None = None
+    environment: EnvironmentReport | None = None
 
 
 class Events(Payload):
     events: list[Event] = Field(min_length=1, max_length=100)
+
+
+class UpgradeLease(Payload):
+    token: str = Field(pattern=r'^[a-f0-9]{32}$')
+
+
+class RemoteUpdateRequest(Payload):
+    request_id: str = Field(pattern=r'^[a-f0-9]{32}$')
+
+
+class RemoteUpdateReport(UpgradeLease):
+    phase: Literal['installing', 'result']
+    success: bool = False
+    agent_version: str = Field(max_length=40)
+    message: str = Field(default='', max_length=1000)
 
 
 def write_admin(request: Request, user: dict = Depends(admin_user)) -> dict:
@@ -105,24 +143,31 @@ def hosts(user: dict = Depends(admin_user)):
 @router.get("/api/hosts/agent-download")
 def agent_download(user: dict = Depends(admin_user)):
     # Explicit source allowlist: never include local identity, environments or journals.
-    sources = [AGENT_ROOT / name for name in (
-        "README.md", "requirements.txt", "start.ps1", "manage.ps1", "setup.ps1",
-        "install-python.ps1", "安装并接入Agent.bat",
-    )]
-    sources += [AGENT_ROOT / "spiderfly_agent" / (name + ".py") for name in (
-        "__init__", "__main__", "api", "client", "desktop", "identity", "journal", "windows", "worker",
-    )]
-    if any(not path.is_file() or path.is_symlink()
-                              or not path.resolve().is_relative_to(AGENT_ROOT.resolve()) for path in sources):
-        raise HTTPException(503, "Agent 安装文件不完整，请更新主控源码")
-    archive = io.BytesIO()
-    with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as bundle:
-        for path in sources:
-            bundle.write(path, "SpiderFlyAgent/" + path.relative_to(AGENT_ROOT).as_posix())
-    return Response(archive.getvalue(), media_type="application/zip", headers={
+    data = agent_updates.build_package(AGENT_ROOT, service.CURRENT_AGENT_VERSION)
+    return Response(data, media_type="application/zip", headers={
         "Content-Disposition": f'attachment; filename="SpiderFlyAgent-{service.CURRENT_AGENT_VERSION}.zip"',
         "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff",
     })
+
+
+@router.post('/api/hosts/{host_id}/upgrade')
+def remote_upgrade(host_id: int, payload: RemoteUpdateRequest, request: Request,
+                   user: dict = Depends(super_admin_user)):
+    write_admin(request, user)
+    return agent_updates.create(host_id, payload.request_id, user, AGENT_ROOT)
+
+
+@router.get('/api/agent/updates/{job_id}/package')
+async def update_package(job_id: str, request: Request):
+    host_id, _ = await signed(request, 0)
+    return Response(agent_updates.download(host_id, job_id), media_type='application/zip',
+                    headers={'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff'})
+
+
+@router.post('/api/agent/updates/{job_id}/report')
+async def update_report(job_id: str, request: Request):
+    host_id, body = await signed(request, 4096)
+    return agent_updates.report(host_id, job_id, parse(RemoteUpdateReport, body))
 
 
 @router.post("/api/hosts/enrollment-codes", status_code=201)
@@ -200,6 +245,18 @@ async def heartbeat(request: Request):
     return service.heartbeat(host_id, parse(Heartbeat, body))
 
 
+@router.post('/api/agent/upgrade-pause')
+async def upgrade_pause(request: Request):
+    host_id, body = await signed(request, 4096)
+    return service.upgrade_pause(host_id, parse(UpgradeLease, body)['token'])
+
+
+@router.post('/api/agent/upgrade-resume')
+async def upgrade_resume(request: Request):
+    host_id, body = await signed(request, 4096)
+    return service.upgrade_resume(host_id, parse(UpgradeLease, body)['token'])
+
+
 @router.get("/api/agent/runs/{run_id}/package")
 async def package(run_id: int, request: Request):
     host_id, _ = await signed(request, 0)
@@ -215,7 +272,12 @@ async def claim(run_id: int, request: Request):
 @router.post("/api/agent/runs/{run_id}/events")
 async def events(run_id: int, request: Request):
     host_id, body = await signed(request)
-    return service.accept_events(host_id, run_id, parse(Events, body)["events"])
+    items = parse(Events, body)['events']
+    for item in items:
+        # Preserve the exact normalized v1 shape for replay of pre-upgrade journals.
+        if item['environment'] is None:
+            item.pop('environment')
+    return service.accept_events(host_id, run_id, items)
 
 
 @router.post("/api/agent/runs/{run_id}/artifacts/{name}")

@@ -18,9 +18,8 @@ const {
   <section class="panel runtime-active-panel" aria-label="当前运行与排队">
     <header class="panel-heading">
       <div>
-        <h2>运行队列</h2>
         <p>
-          {{ runningExecution ? '1 项正在运行' : '当前没有运行任务' }} · {{ queuedExecutions.length }} 项排队
+          {{ runningExecution ? '1 项运行中' : '空闲' }} · {{ queuedExecutions.length }} 项排队
         </p>
       </div>
       <button
@@ -28,7 +27,7 @@ const {
         type="button"
         @click="loadAll({ quiet: true, includeAdmin: false })"
       >
-        刷新队列
+        刷新
       </button>
     </header>
     <div v-if="orderedActiveExecutions.length" class="queue-list">
@@ -48,7 +47,7 @@ const {
           ><strong>{{ item.task_name }}</strong
           ><small
             >{{ item.status === 'running' ? '运行中' : '排队第 ' + (item.queue_position || '—') + ' 位' }} ·
-            #{{ item.id }} · 查看日志{{ item.status === 'running' && isAdmin ? ' / 强制停止' : '' }}</small
+            #{{ item.id }}</small
           ></span
         >
         <span class="run-result"
@@ -58,7 +57,7 @@ const {
       </button>
     </div>
     <div v-else class="empty-state">
-      <strong>当前没有运行或排队的任务</strong
+      <strong>队列空闲</strong
       ><button class="button secondary" type="button" @click="navigateTo('tasks')">打开任务中心</button>
     </div>
   </section>

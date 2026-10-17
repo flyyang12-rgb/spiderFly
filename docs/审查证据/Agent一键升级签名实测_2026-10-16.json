@@ -1,0 +1,16 @@
+{
+  "real_http": true,
+  "real_dpapi_identity": true,
+  "real_short_lived_transport": true,
+  "helper_error_readable": true,
+  "pause_blocks_offer": true,
+  "resume_idempotent": true,
+  "identity_and_config_preserved": true,
+  "controller_zip_version": "0.4.1",
+  "controller_zip_files": 23,
+  "controller_zip_sha256": "fdc37db551f75cedd7788dfa6b42d03e7899a0cb0fb30b2860615ff42f451b9f",
+  "all_manifest_hashes_match": true,
+  "business_runs": 0,
+  "production_agent_processes": 0,
+  "two_physical_computers": false
+}

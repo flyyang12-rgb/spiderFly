@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import os
@@ -142,7 +143,7 @@ def _matching_environment_directories(app_id: int) -> list[Path]:
     return matches
 
 
-def remove_managed_app_storage(app_id: int) -> tuple[str, ...]:
+def remove_managed_app_storage(app_id: int, *, conn: sqlite3.Connection | None = None) -> tuple[str, ...]:
     """Delete only this application's exact managed source and venv directories.
 
     Missing directories are treated as already clean. A matching symlink, junction,
@@ -150,6 +151,12 @@ def remove_managed_app_storage(app_id: int) -> tuple[str, ...]:
     """
     if int(app_id) < 1:
         raise ValueError("应用编号无效")
+    if conn is None:
+        with transaction() as opened:
+            return remove_managed_app_storage(app_id, conn=opened)
+    from .services import workflows
+    if workflows.protected_python_paths(conn, app_id=app_id):
+        raise RuntimeError("未结束流程仍引用这个程序的环境，请先停止流程并等待收尾")
     removed: list[str] = []
     failures: list[str] = []
 
@@ -266,6 +273,9 @@ def _legacy_cleanup_plan(conn: sqlite3.Connection) -> dict[str, tuple]:
             "SELECT id FROM tasks WHERE archived = 1 ORDER BY id"
         ).fetchall()
     )
+    from .services import workflows
+    if any(workflows.active_task_reference(conn, task_id) for task_id in archived_task_ids):
+        raise RuntimeError("归档任务仍被未结束流程引用，已停止旧资料清理")
     archived_execution_ids = tuple(
         int(row["id"])
         for row in conn.execute(
@@ -457,9 +467,16 @@ def delete_task_bundle(task_id: int) -> dict:
     """Hard-delete a task, its history, its one-to-one app and all managed files."""
     if int(task_id) < 1:
         raise ValueError("任务编号无效")
+    from .services import workflows
+    workflows.prepare_task_deletion(task_id)
     with _APP_STORAGE_LOCK:
         with transaction() as conn:
             from . import maintenance
+            from .services import cron_runs
+            if workflows.active_task_reference(conn, task_id):
+                raise RuntimeError('相关流程正在停止或收尾，请确认流程结束后再删除')
+            if cron_runs.active_round(conn, task_id):
+                raise RuntimeError('Cron 轮次或收尾尚未结束，请取消排队或等待维护及收尾后再删除')
             maintenance_ids = ()
             if maintenance.available(conn):
                 jobs = conn.execute('SELECT id,status FROM maintenance_jobs WHERE task_id=?',(task_id,)).fetchall()
@@ -507,11 +524,13 @@ def delete_task_bundle(task_id: int) -> dict:
             conn.execute(
                 "DELETE FROM executions WHERE task_id = ? AND status = 'pending'", (task_id,)
             )
+            snapshot_directories = workflows.delete_task_history(conn, task_id)
         removed_execution_dirs: tuple[str, ...] = ()
         removed_app_dirs: tuple[str, ...] = ()
         try:
             removed_execution_dirs = remove_execution_workspaces(execution_ids)
             maintenance.remove_task_files(maintenance_ids,execution_ids)
+            workflows.remove_snapshot_directories(snapshot_directories)
             if app_id:
                 removed_app_dirs = remove_managed_app_storage(app_id)
         except (OSError, RuntimeError, ValueError) as exc:
@@ -579,32 +598,35 @@ def cleanup_old_environments(
                 if row['env_path']:
                     old=_validated_managed_directory(Path(row['env_path']),root=RPA_ENVS_DIR,app_id=app_id)
                     if old is not None:protected.add(old)
+        from .services import workflows
+        workflow_paths = workflows.protected_python_paths(conn, app_id=app_id)
+        for value in (*protected_python_paths, *workflow_paths):
+            referenced = _environment_from_python_snapshot(value, app_id)
+            if referenced is not None:
+                protected.add(referenced)
 
-    for value in protected_python_paths:
-        referenced = _environment_from_python_snapshot(value, app_id)
-        if referenced is not None:
-            protected.add(referenced)
-
-    removed: list[str] = []
-    failures: list[str] = []
-    for candidate in _matching_environment_directories(app_id):
-        env_dir = _validated_managed_directory(
-            candidate, root=RPA_ENVS_DIR, app_id=app_id
-        )
-        if env_dir is None:
-            failures.append(str(candidate))
-            continue
-        if env_dir in protected:
-            continue
-        try:
-            shutil.rmtree(env_dir)
-            removed.append(str(env_dir))
-        except OSError:
-            failures.append(str(env_dir))
-    if failures:
-        names = "、".join(Path(item).name or item for item in failures[:5])
-        raise RuntimeError(f"旧 Python 环境未完全清理：{names}")
-    return tuple(removed)
+        # Keep the same transaction while inspecting references and removing
+        # unused environments; a workflow cannot freeze a just-deleted venv.
+        removed: list[str] = []
+        failures: list[str] = []
+        for candidate in _matching_environment_directories(app_id):
+            env_dir = _validated_managed_directory(
+                candidate, root=RPA_ENVS_DIR, app_id=app_id
+            )
+            if env_dir is None:
+                failures.append(str(candidate))
+                continue
+            if env_dir in protected:
+                continue
+            try:
+                shutil.rmtree(env_dir)
+                removed.append(str(env_dir))
+            except OSError:
+                failures.append(str(env_dir))
+        if failures:
+            names = "、".join(Path(item).name or item for item in failures[:5])
+            raise RuntimeError(f"旧 Python 环境未完全清理：{names}")
+        return tuple(removed)
 
 
 def create_managed_app(
@@ -646,6 +668,9 @@ def create_managed_task_bundle(
     notify_on_success: bool = True,
     notify_on_failure: bool = True,
     failure_screenshot: bool = False,
+    request_id: str | None = None,
+    on_created=None,
+    dependency_decisions=None,
 ) -> dict:
     """Atomically create one managed program and its one-to-one configured task."""
     with _APP_STORAGE_LOCK:
@@ -667,6 +692,9 @@ def create_managed_task_bundle(
             task_notify_on_success=notify_on_success,
             task_notify_on_failure=notify_on_failure,
             task_failure_screenshot=failure_screenshot,
+            request_id=request_id,
+            on_created=on_created,
+            dependency_decisions=dependency_decisions,
         )
 
 
@@ -689,11 +717,16 @@ def _create_managed_app_locked(
     task_notify_on_success: bool = True,
     task_notify_on_failure: bool = True,
     task_failure_screenshot: bool = False,
+    request_id: str | None = None,
+    on_created=None,
+    dependency_decisions=None,
 ) -> dict:
     name = name.strip()
     if not name or len(name) > 100:
         raise ValueError("应用名称不能为空且不能超过 100 个字符")
     safe_name, source = validate_python_upload(filename, content)
+    if create_manual_task:
+        source = source.replace('\r\n','\n').replace('\r','\n')
     if template_filename or template_content is not None:
         safe_template_name = validate_template_upload(
             template_filename, template_content or b""
@@ -701,11 +734,44 @@ def _create_managed_app_locked(
     else:
         safe_template_name = ""
     requirements = _safe_requirements(requirements_text)
+    from .services import creation_requests
+    creation_requests.validate_key(request_id)
+    intent_hash = creation_requests.fingerprint({
+        'name': name, 'filename': safe_name, 'source': source,
+        'requirements': requirements, 'template_filename': safe_template_name,
+        'template_hash': hashlib.sha256(template_content or b'').hexdigest(),
+        'description': task_description, 'trigger_type': task_trigger_type,
+        'trigger_config': json.loads(task_trigger_config), 'enabled': task_enabled,
+        'target_host_id': task_target_host_id, 'notify_on_success': task_notify_on_success,
+        'notify_on_failure': task_notify_on_failure, 'failure_screenshot': task_failure_screenshot,
+        'dependency_decisions': dependency_decisions or [],
+    })
     now = utc_now()
     app_id: int | None = None
     source_write_started = False
     try:
         with transaction() as conn:
+            receipt = creation_requests.find(conn, user_id, 'task', request_id, intent_hash)
+            if receipt:
+                saved = conn.execute('''SELECT a.*,t.id AS task_id FROM tasks t JOIN rpa_apps a ON a.id=t.app_id
+                    WHERE t.id=? AND t.archived=0 AND a.archived=0''', (receipt['object_id'],)).fetchone()
+                if not saved:
+                    from fastapi import HTTPException
+                    raise HTTPException(409, '该请求对应的任务已删除，不能重复创建')
+                return {**dict(saved), 'active_task_count': 1, 'creation_replayed': True}
+            # Re-evaluate submitted content; client summaries/hashes are never trusted.
+            analysis = None
+            if create_manual_task:
+                from . import dependency_analysis as deps
+                analysis = deps.analyze(source, safe_name, requirements_text, dependency_decisions,
+                                        deps.target_context(task_target_host_id))
+                deps.require_resolved(analysis)
+                requirements = analysis['requirements']
+            if create_manual_task and task_trigger_type == 'cron':
+                from .services.task_queries import validate_cron_runtime
+                if task_target_host_id is not None:
+                    raise ValueError('Cron 首版仅支持主控本机，请选择主控本机')
+                validate_cron_runtime(conn, source=source)
             existing = conn.execute(
                 "SELECT * FROM rpa_apps WHERE name = ?", (name,)
             ).fetchone()
@@ -725,7 +791,7 @@ def _create_managed_app_locked(
                 ).fetchone()
                 if active_run:
                     raise RuntimeError("这个已移除程序仍有排队或运行记录，暂时不能重新上传")
-                remove_managed_app_storage(app_id)
+                    remove_managed_app_storage(app_id, conn=conn)
                 revision = int(existing["revision"] or 1) + 1
                 conn.execute(
                     """
@@ -834,6 +900,7 @@ def _create_managed_app_locked(
                     ),
                 )
                 task_id = int(task_cursor.lastrowid)
+                conn.execute('UPDATE tasks SET first_environment_ready=0,next_run_at=CASE WHEN target_host_id IS NULL THEN NULL ELSE next_run_at END WHERE id=?', (task_id,))
                 if conn.execute(
                     "SELECT 1 FROM sqlite_master WHERE type='table' AND name='task_code_versions'"
                 ).fetchone():
@@ -846,6 +913,8 @@ def _create_managed_app_locked(
                     first_version = maintenance.version(
                         conn, task, source, approved=True, kind="original"
                     )
+                    if analysis is not None:
+                        deps.freeze(conn, first_version['id'], analysis)
                     conn.execute(
                         """INSERT OR IGNORE INTO maintenance_policies
                            (task_id,owner_id,mode,runtime,contract,active_version_id,pause_on_failure,updated_at)
@@ -862,6 +931,9 @@ def _create_managed_app_locked(
                 result["active_task_count"] = 1
                 if "first_version" in locals():
                     result["version_sequence"] = int(first_version["sequence"])
+                if on_created is not None:
+                    on_created(conn, task_id)
+                creation_requests.remember(conn, user_id, 'task', request_id, intent_hash, task_id)
             return result
     except Exception:
         if app_id is not None and source_write_started:
@@ -998,6 +1070,8 @@ def pending_environment_ids() -> list[int]:
             """
             SELECT id FROM rpa_apps
             WHERE archived = 0 AND environment_status = 'pending'
+              AND NOT EXISTS (SELECT 1 FROM tasks t WHERE t.app_id=rpa_apps.id AND t.archived=0
+                              AND t.target_host_id IS NOT NULL AND t.first_environment_ready=0)
             ORDER BY id
             """
         )
@@ -1060,7 +1134,8 @@ def _build_environment_variables() -> dict[str, str]:
     environment = {
         key: value
         for key, value in os.environ.items()
-        if not key.upper().startswith(("SPIDERFLY_", "FEISHU_", "DEEPSEEK_"))
+        if not key.upper().startswith(("SPIDERFLY_", "FEISHU_", "DEEPSEEK_", "OPENAI_", "LARK_"))
+        and key.upper() not in {'PYTHONPATH','PYTHONHOME'}
     }
     environment["PYTHONIOENCODING"] = "utf-8"
     environment["PYTHONUTF8"] = "1"
@@ -1209,6 +1284,47 @@ def _remove_candidate_environment(
     return True
 
 
+def _publish_environment(app, version_id, env_dir, requirements, facts, logs):
+    """Publish facts and release a first plan together, under the same revision."""
+    from .dependency_analysis import digest
+    from .scheduling import compute_next_run, decode_trigger_config
+    now = utc_now()
+    with transaction() as conn:
+        fresh = conn.execute('SELECT * FROM rpa_apps WHERE id=?', (app['id'],)).fetchone()
+        if (not fresh or fresh['archived'] or fresh['revision'] != app['revision'] or
+            fresh['environment_status'] != 'building' or fresh['script_path'] != app['script_path'] or
+            fresh['requirements_text'] != app['requirements_text']):
+            return False
+        active = conn.execute('''SELECT t.*,p.active_version_id FROM tasks t LEFT JOIN maintenance_policies p
+            ON p.task_id=t.id WHERE t.app_id=? AND t.archived=0''', (app['id'],)).fetchone()
+        if version_id and not active:
+            return False
+        if active and active['active_version_id'] != version_id:
+            return False
+        if active and active['target_host_id'] != app.get('_build_target_host_id'):
+            conn.execute("UPDATE rpa_apps SET environment_status='pending' WHERE id=?", (app['id'],))
+            return False
+        conn.execute("UPDATE rpa_apps SET env_path=?,environment_status='ready',environment_error='',install_log=?,updated_at=? WHERE id=?",
+                     (str(env_dir),'\n\n'.join(logs)[-MAX_INSTALL_LOG_CHARS:],now,app['id']))
+        conn.execute('''INSERT INTO environment_records(app_id,revision,version_id,env_path,requirements_hash,target,status,evidence,completed_at)
+            VALUES(?,?,?,?,?,'controller','ready',?,?)''',
+            (app['id'],app['revision'],version_id,str(env_dir),digest(requirements),json.dumps(facts,ensure_ascii=False),now))
+        if active and active['target_host_id'] is None and not active['first_environment_ready']:
+            next_run = compute_next_run(active['trigger_type'],decode_trigger_config(active['trigger_config']),after=now) if active['enabled'] else None
+            conn.execute('UPDATE tasks SET first_environment_ready=1,next_run_at=? WHERE id=?', (next_run,active['id']))
+        if version_id:
+            conn.execute("UPDATE task_version_details SET env_path=? WHERE version_id=? AND runtime='native'", (str(env_dir),version_id))
+    return True
+
+
+def _record_failed_environment(app_id, revision, version_id, env_path, requirements, logs, error):
+    from .dependency_analysis import digest
+    with transaction() as conn:
+        conn.execute('''INSERT INTO environment_records(app_id,revision,version_id,env_path,requirements_hash,target,status,evidence,completed_at)
+            VALUES(?,?,?,?,?,'controller','failed',?,?)''', (app_id,revision,version_id,env_path,digest(requirements),
+            json.dumps({'error':error[:1000],'stages':[line.split('\n',1)[0] for line in logs]},ensure_ascii=False),utc_now()))
+
+
 async def build_environment(app_id: int) -> None:
     app = await asyncio.to_thread(
         fetch_one,
@@ -1218,6 +1334,7 @@ async def build_environment(app_id: int) -> None:
     if not app or app["environment_status"] != "pending":
         return
     revision = int(app["revision"])
+    version_id = None
     _, claimed = await asyncio.to_thread(
         execute_result,
         """
@@ -1238,14 +1355,23 @@ async def build_environment(app_id: int) -> None:
     logs: list[str] = []
     published = False
     try:
+        bound = await asyncio.to_thread(fetch_all,
+            '''SELECT t.target_host_id,p.active_version_id FROM tasks t LEFT JOIN maintenance_policies p ON p.task_id=t.id
+               WHERE t.app_id=? AND t.archived=0''', (app_id,))
+        version_id = bound[0]['active_version_id'] if bound else None
+        app['_build_target_host_id'] = bound[0]['target_host_id'] if bound else None
         expected_app_dir = (RPA_APPS_DIR / str(app_id)).resolve()
         if app_dir != expected_app_dir or app_dir.parent != RPA_APPS_DIR.resolve():
             raise RuntimeError("应用源码目录不在 SpiderFly 管理范围内")
         script_path = Path(app.get("script_path") or "").expanduser().resolve()
-        if script_path.parent != app_dir:
+        if not script_path.is_relative_to(app_dir):
             raise RuntimeError("应用入口文件不在当前应用目录内")
         validate_python_upload(script_path.name, script_path.read_bytes())
         requirements = _safe_requirements(app.get("requirements_text") or "")
+        if version_id:
+            frozen = await asyncio.to_thread(fetch_one, 'SELECT source,requirements FROM task_code_versions WHERE id=?', (version_id,))
+            if not frozen or frozen['source'].replace('\r\n','\n').replace('\r','\n') != script_path.read_text('utf-8-sig') or frozen['requirements'] != requirements:
+                raise RuntimeError('待安装源码或依赖与当前冻结版本不一致')
         requirements_file = app_dir / "requirements.txt"
         requirements_file.write_text(
             requirements + ("\n" if requirements else ""),
@@ -1324,24 +1450,31 @@ async def build_environment(app_id: int) -> None:
                 raise RuntimeError(f"检查依赖超过 {ENV_VERIFY_TIMEOUT_SECONDS} 秒")
             raise RuntimeError("Python 依赖检查未通过")
 
-        _, updated = await asyncio.to_thread(
-            execute_result,
-            """
-            UPDATE rpa_apps
-            SET env_path = ?, environment_status = 'ready', environment_error = '',
-                install_log = ?, updated_at = ?
-            WHERE id = ? AND revision = ? AND archived = 0
-              AND environment_status = 'building'
-            """,
-            (
-                str(env_dir),
-                "\n\n".join(logs)[-MAX_INSTALL_LOG_CHARS:],
-                utc_now(),
-                app_id,
-                revision,
-            ),
-        )
-        if updated != 1:
+        code, output = await _run_command(
+            str(python_path), '-I', '-c',
+            'import sys,struct,json,importlib.metadata as m;print(json.dumps({"python":sys.version.split()[0],"bits":struct.calcsize("P")*8,"executable":sys.executable,"prefix":sys.prefix,"packages":sorted([{"name":d.metadata["Name"],"version":d.version} for d in m.distributions()],key=lambda d:d["name"].lower())}))',
+            cwd=app_dir, timeout_seconds=ENV_VERIFY_TIMEOUT_SECONDS, phase='记录环境')
+        if code != 0: raise RuntimeError('读取实际 Python 环境失败')
+        try:
+            facts = json.loads(output)
+            if (Path(facts['executable']).resolve() != python_path.resolve() or
+                Path(facts['prefix']).resolve() != env_dir or facts['bits'] != 64 or
+                not facts['python'].startswith('3.12.')):
+                raise ValueError('解释器与独立环境不匹配，仅支持 64 位 Python 3.12')
+            from packaging.requirements import Requirement
+            from .dependency_analysis import canonical
+            installed = {canonical(p['name']):p['version'] for p in facts['packages']}
+            for line in requirements.splitlines():
+                if not line.strip() or line.strip().startswith('#'): continue
+                req = Requirement(line)
+                if req.marker and not req.marker.evaluate(): continue
+                actual = installed.get(canonical(req.name))
+                if actual is None or actual not in req.specifier: raise ValueError(f'{req.name} 未安装或版本不符合清单')
+        except (ValueError, KeyError, TypeError) as exc:
+            raise RuntimeError('实际环境核验失败：' + str(exc)) from exc
+        facts.update(target='controller', version_id=version_id)
+        updated = await asyncio.to_thread(_publish_environment, app, version_id, env_dir, requirements, facts, logs)
+        if not updated:
             return
         published = True
         try:
@@ -1397,6 +1530,11 @@ async def build_environment(app_id: int) -> None:
                 revision,
             ),
         )
+        try:
+            await asyncio.to_thread(_record_failed_environment, app_id, revision, version_id, str(env_dir),
+                                    app.get('requirements_text') or '', logs, str(exc))
+        except Exception:
+            logger.exception('记录应用 %s 的失败安装证据失败', app_id)
     finally:
         if not published:
             try:

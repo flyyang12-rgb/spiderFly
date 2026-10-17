@@ -212,7 +212,7 @@ class HostApiTests(unittest.TestCase):
         payload["agent_version"] = "0.3.0"
         result = self.success(self.request("POST", "/api/agent/register", payload, user=None))
         self.assertEqual(result["minimum_agent_version"], "0.3.0")
-        self.assertEqual(result["current_agent_version"], "0.3.0")
+        self.assertEqual(result["current_agent_version"], "0.5.0")
 
     def test_incompatible_heartbeat_never_receives_queued_run(self):
         host_id = self.register()
@@ -344,12 +344,14 @@ class HostApiTests(unittest.TestCase):
 
     def make_agent_sources(self, missing=None):
         root = self.root / ("agent-source-" + uuid.uuid4().hex)
-        modules = ("__init__", "__main__", "api", "client", "desktop", "identity", "journal", "windows", "worker")
+        modules = ("__init__", "__main__", "api", "client", "desktop", "identity", "journal", "windows", "worker", "environment", "updater")
         sources = {"README.md": "Synthetic Agent instructions\n", "requirements.txt": "cryptography\n",
                    "start.ps1": "# synthetic launcher\n", "manage.ps1": "# synthetic operations\n",
                    "setup.ps1": "# synthetic setup wizard\n", "install-python.ps1": "# synthetic Python installer\n",
                    "安装并接入Agent.bat": "@echo off\n"}
         sources.update({f"spiderfly_agent/{name}.py": f"# synthetic {name}\n" for name in modules})
+        sources['spiderfly_agent/__init__.py']='__version__ = "0.5.0"\n'
+        sources.update({name:'# synthetic updater\n' for name in ('upgrade.ps1','upgrade-core.ps1','upgrade-ui.ps1','upgrade-transport.py','升级Agent.bat','remote-upgrade.ps1')})
         for relative, content in sources.items():
             if relative == missing:
                 continue
@@ -374,10 +376,13 @@ class HostApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.headers["content-type"], "application/zip")
         self.assertIn("attachment", response.headers["content-disposition"])
-        self.assertIn("SpiderFlyAgent-0.3.0.zip", response.headers["content-disposition"])
+        self.assertIn("SpiderFlyAgent-0.5.0.zip", response.headers["content-disposition"])
         self.assertEqual(response.headers["cache-control"], "no-store")
         with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
-            self.assertEqual(set(archive.namelist()), {"SpiderFlyAgent/" + name for name in sources})
+            self.assertEqual(set(archive.namelist()), {"SpiderFlyAgent/" + name for name in sources} | {'SpiderFlyAgent/update-manifest.json','SpiderFlyAgent/controller-trust.json'})
+            manifest=json.loads(archive.read('SpiderFlyAgent/update-manifest.json'))
+            self.assertEqual(manifest['version'],'0.5.0')
+            self.assertEqual(manifest['files'],{name:hashlib.sha256(archive.read('SpiderFlyAgent/'+name)).hexdigest() for name in list(sources)+['controller-trust.json']})
             for name, source in sources.items():
                 self.assertEqual(archive.read("SpiderFlyAgent/" + name), source.encode("utf-8"))
             self.assertTrue(all(b"SYNTHETIC_LOCAL_SECRET" not in archive.read(name) for name in archive.namelist()))
@@ -878,6 +883,79 @@ class HostApiTests(unittest.TestCase):
                              ("POST", f"/api/remote-runs/{run['id']}/stop")):
             self.assertEqual(self.request(method, path, user="member").status_code, 403)
         self.assertEqual(self.detail(run["id"])["status"], "preparing")
+
+    def failed_remote_job(self):
+        host_id, run = self.leased()
+        self.success(self.events(host_id, run["id"],
+            {"seq": 1, "kind": "finished", "status": "failed", "exit_code": 1, "text": "synthetic failure"}))
+        return database.fetch_one("SELECT * FROM remote_maintenance_jobs WHERE remote_run_id=?", (run["id"],))
+
+    def test_unknown_remote_usage_keeps_reservation_for_timeout_exception_and_bad_usage(self):
+        for response in (TimeoutError("unknown response"), RuntimeError("connection lost"),
+                         {"usage": {}}, {"usage": None}, {"usage": {"prompt_tokens": True, "completion_tokens": 0}}):
+            with self.subTest(response=response):
+                job = self.failed_remote_job()
+                kwargs = {"side_effect": response} if isinstance(response, Exception) else {"return_value": response}
+                with patch.object(maintenance, "settings", return_value={"unlimited": True}), \
+                     patch.object(remote_maintenance.ai_settings, "model_request", **kwargs):
+                    asyncio.run(remote_maintenance.generate_next())
+                final = database.fetch_one("SELECT * FROM remote_maintenance_jobs WHERE id=?", (job["id"],))
+                self.assertEqual(final["status"], "failed")
+                self.assertEqual(final["calls"], 1)
+                self.assertEqual(final["reserved_tokens"], json.loads(job["model_config"])["max_tokens"])
+                self.assertEqual(final["input_tokens"] + final["output_tokens"], 0)
+
+    def test_remote_service_cancellation_and_restart_keep_unknown_reservation(self):
+        job = self.failed_remote_job()
+        with patch.object(remote_maintenance.ai_settings, "model_request", side_effect=asyncio.CancelledError):
+            with self.assertRaises(asyncio.CancelledError):
+                asyncio.run(remote_maintenance.generate_next())
+        final = database.fetch_one("SELECT * FROM remote_maintenance_jobs WHERE id=?", (job["id"],))
+        self.assertEqual(final["status"], "interrupted"); self.assertGreater(final["reserved_tokens"], 0)
+        database.execute("UPDATE remote_maintenance_jobs SET status='generating' WHERE id=?", (job["id"],))
+        with database.transaction() as conn:
+            remote_maintenance.init_tables(conn)
+        restarted = database.fetch_one("SELECT * FROM remote_maintenance_jobs WHERE id=?", (job["id"],))
+        self.assertEqual(restarted["reserved_tokens"], final["reserved_tokens"])
+        self.assertEqual(restarted["status"], "interrupted")
+
+    def test_before_model_failure_releases_reservation_without_calling_provider(self):
+        job = self.failed_remote_job()
+        with patch.object(remote_maintenance, "_failure_context", side_effect=InterruptedError("changed version")), \
+             patch.object(remote_maintenance.ai_settings, "model_request") as model:
+            asyncio.run(remote_maintenance.generate_next())
+        model.assert_not_called()
+        final = database.fetch_one("SELECT * FROM remote_maintenance_jobs WHERE id=?", (job["id"],))
+        self.assertEqual((final["calls"], final["reserved_tokens"], final["status"]), (0, 0, "cancelled"))
+
+    def test_confirmed_remote_usage_settles_even_if_tool_response_is_invalid(self):
+        for message in ({"content": "advice"}, {"tool_calls": [{"function": {"name": "bad", "arguments": "{}"}}]}):
+            job = self.failed_remote_job()
+            reply = {"usage": {"prompt_tokens": 11, "completion_tokens": 9}, "choices": [{"message": message}]}
+            with patch.object(remote_maintenance.ai_settings, "model_request", return_value=reply):
+                asyncio.run(remote_maintenance.generate_next())
+            final = database.fetch_one("SELECT * FROM remote_maintenance_jobs WHERE id=?", (job["id"],))
+            self.assertEqual((final["input_tokens"], final["output_tokens"], final["reserved_tokens"]), (11, 9, 0))
+
+    def test_unknown_usage_blocks_next_job_until_rolling_budget_expires(self):
+        first = self.failed_remote_job()
+        with patch.object(remote_maintenance.ai_settings, "model_request", side_effect=TimeoutError("unknown")):
+            asyncio.run(remote_maintenance.generate_next())
+        second = self.failed_remote_job()
+        limits = {"unlimited": False, "daily_seconds": 999999, "daily_tokens": json.loads(first["model_config"])["max_tokens"]}
+        with patch.object(maintenance, "settings", return_value=limits), \
+             patch.object(remote_maintenance.ai_settings, "model_request") as model:
+            asyncio.run(remote_maintenance.generate_next())
+        model.assert_not_called()
+        self.assertEqual(database.fetch_one("SELECT status FROM remote_maintenance_jobs WHERE id=?", (second["id"],))["status"], "budget")
+        database.execute("UPDATE remote_maintenance_jobs SET started_at=? WHERE id=?",
+                         ((datetime.now(timezone.utc)-timedelta(hours=25)).isoformat(), first["id"]))
+        third = self.failed_remote_job()
+        reply = {"usage": {"prompt_tokens": 0, "completion_tokens": 0}, "choices": [{"message": {"content": "advice"}}]}
+        with patch.object(maintenance, "settings", return_value=limits), patch.object(remote_maintenance.ai_settings, "model_request", return_value=reply) as model:
+            asyncio.run(remote_maintenance.generate_next())
+        model.assert_called_once()
+        self.assertEqual(database.fetch_one("SELECT status FROM remote_maintenance_jobs WHERE id=?", (third["id"],))["status"], "review")
 
     def test_remote_failure_candidate_requires_admin_confirmation_before_rerun(self):
         host_id, run = self.leased()

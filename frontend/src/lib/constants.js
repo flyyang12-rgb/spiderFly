@@ -8,16 +8,13 @@ export const adminNavItems = [{ id: 'management', label: '管理中心', mark: '
 
 export const runtimeTabs = [
   { id: 'active', label: '运行队列' },
-  { id: 'queue', label: '任务时间表' },
+  { id: 'queue', label: '定时计划' },
   { id: 'executions', label: '运行记录' },
 ]
 
 export const managementTabs = [
+  { id: 'services', label: '管理配置' },
   { id: 'hosts', label: '宿主机' },
-  { id: 'apps', label: '创建任务' },
-  { id: 'ai', label: 'AI 模型' },
-  { id: 'users', label: '成员管理' },
-  { id: 'settings', label: '系统设置' },
   { id: 'audit', label: '操作审计' },
 ]
 
@@ -25,6 +22,15 @@ export const triggerOptions = [
   { value: 'manual', label: '手动触发' },
   { value: 'daily', label: '每日执行' },
   { value: 'weekly', label: '每周执行' },
+  { value: 'cron', label: 'Cron 计划' },
+]
+
+export const cronPresets = [
+  { value: '0 9 * * *', label: '每天 9:00' },
+  { value: '0 9,14 * * *', label: '每天 9:00 和 14:00' },
+  { value: '*/30 9-18 * * MON-FRI', label: '周一至周五 9:00—18:30，每半小时' },
+  { value: '0 9 1 * *', label: '每月 1 日 9:00' },
+  { value: '0 18 * * FRI', label: '每周五 18:00' },
 ]
 
 export const weekdayOptions = [

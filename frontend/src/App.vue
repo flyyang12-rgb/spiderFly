@@ -5,13 +5,10 @@ import MaintenanceNotices from './MaintenanceNotices.vue'
 import LoginPage from './features/auth/LoginPage.vue'
 import ActiveQueue from './features/executions/ActiveQueue.vue'
 import OverviewPage from './pages/OverviewPage.vue'
-import TasksPage from './features/tasks/TasksPage.vue'
+import TaskCenterPage from './features/taskCenter/TaskCenterPage.vue'
 import SchedulePage from './features/schedule/SchedulePage.vue'
-import ExecutionHistory from './features/executions/ExecutionHistory.vue'
-import CreateTaskPage from './features/apps/CreateTaskPage.vue'
-import ModelSettingsPage from './features/settings/ModelSettingsPage.vue'
-import SystemSettingsPage from './features/settings/SystemSettingsPage.vue'
-import MembersPage from './features/members/MembersPage.vue'
+import RunHistoryPage from './features/executions/RunHistoryPage.vue'
+import ServiceSettingsPage from './features/settings/ServiceSettingsPage.vue'
 import AuditPage from './features/members/AuditPage.vue'
 import HostsPage from './features/hosts/HostsPage.vue'
 import TaskEditor from './features/tasks/TaskEditor.vue'
@@ -35,6 +32,7 @@ const {
   detail,
   editingUser,
   executions,
+  handleSessionExpired,
   isAdmin,
   isSuperAdmin,
   loading,
@@ -45,7 +43,6 @@ const {
   navItems,
   navigateTo,
   openAi,
-  openCreate,
   openExecution,
   overview,
   pageTitle,
@@ -67,6 +64,12 @@ const {
 } = useWorkspace()
 
 const initialRemoteRun = Number(new URLSearchParams(window.location.search).get('remote_run'))
+const navIcons = {
+  overview: 'M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z',
+  tasks: 'M8 5h13 M8 12h13 M8 19h13 M3 5h.01 M3 12h.01 M3 19h.01',
+  runtime: 'M9 5l10 7-10 7z M4 5v14',
+  management: 'M4 7h16 M4 17h16 M8 4v6 M16 14v6',
+}
 if (Number.isInteger(initialRemoteRun) && initialRemoteRun > 0) {
   remoteRunTarget.value = initialRemoteRun
   view.value = 'management'
@@ -85,6 +88,11 @@ function clearRemoteRunTarget() {
   url.searchParams.delete('remote_run')
   window.history.replaceState({}, '', url)
 }
+
+function closeAccountMenu(event) {
+  const menu = event.currentTarget.closest('details')
+  if (menu) { menu.open = false; menu.querySelector('summary')?.focus() }
+}
 </script>
 
 <template>
@@ -92,7 +100,7 @@ function clearRemoteRunTarget() {
     <div class="auth-loading" role="status">
       <div class="brand-mark large" aria-hidden="true"><span></span><span></span><span></span></div>
       <span class="spinner"></span>
-      <strong>正在连接共享任务中心…</strong>
+      <strong>正在连接…</strong>
     </div>
   </div>
 
@@ -102,7 +110,7 @@ function clearRemoteRunTarget() {
     <aside class="sidebar">
       <div class="brand-block">
         <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></div>
-        <div><strong>SpiderFly</strong><small>Python 自动化控制台</small></div>
+        <div><strong>SpiderFly</strong><small>自动化控制台</small></div>
       </div>
 
       <nav class="sidebar-nav" aria-label="主导航">
@@ -110,25 +118,17 @@ function clearRemoteRunTarget() {
           v-for="item in navItems"
           :key="item.id"
           type="button"
+          :aria-label="item.label"
+          :title="item.label"
           :class="{ active: view === item.id }"
           :aria-current="view === item.id ? 'page' : undefined"
           @click="navigateTo(item.id)"
         >
-          <span class="nav-mark">{{ item.mark }}</span>
+          <svg class="nav-mark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path :d="navIcons[item.id]" /></svg>
           <span>{{ item.label }}</span>
           <i v-if="item.id === 'runtime' && activeExecutions.length">{{ activeExecutions.length }}</i>
         </button>
       </nav>
-
-      <div class="local-mode-card">
-        <span class="status-dot" :class="runningExecution ? 'running' : 'success'"></span>
-        <div>
-          <strong>{{ runningExecution ? '运行主机忙碌' : '运行主机在线' }}</strong>
-          <small>{{
-            queuedExecutions.length ? queuedExecutions.length + ' 项正在排队' : '队列目前为空'
-          }}</small>
-        </div>
-      </div>
 
       <div class="account-card">
         <span class="avatar">{{ (me.display_name || me.username).slice(0, 1) }}</span>
@@ -149,10 +149,9 @@ function clearRemoteRunTarget() {
           <button type="button" aria-label="退出登录" title="退出登录" @click="logout">↪</button>
         </span>
       </div>
-      <div class="sidebar-footer">SPIDERFLY · PY CONTROL</div>
     </aside>
 
-    <main class="workspace">
+    <main class="workspace" :class="{ 'hosts-workspace': view === 'management' && managementTab === 'hosts' }">
       <header class="workspace-header">
         <div>
           <h1>{{ pageTitle }}</h1>
@@ -171,16 +170,18 @@ function clearRemoteRunTarget() {
             @open-remote-run="openRemoteRun"
             @notify="(title, message) => showToast('info', title, message)"
           />
-          <button v-if="view === 'tasks' && isAdmin" class="button ghost" type="button" @click="openAi()">
-            AI 创建
-          </button>
-          <span class="live-state"
+          <span v-if="view === 'overview' || view === 'runtime'" class="live-state"
             ><i class="status-dot" :class="runningExecution ? 'running' : 'success'"></i
-            >{{ runningExecution ? '正在运行 1 项' : '执行器空闲' }}</span
+            >{{ runningExecution ? '主控运行中' : '主控空闲' }}</span
           >
-          <button v-if="view === 'tasks'" class="button primary" type="button" @click="openCreate">
-            <span aria-hidden="true">＋</span> 新建任务
-          </button>
+          <details class="mobile-account" @keydown.esc.prevent.stop="closeAccountMenu">
+            <summary aria-label="我的账号"><span class="avatar">{{ (me.display_name || me.username).slice(0, 1) }}</span></summary>
+            <div class="account-popover">
+              <strong>{{ me.display_name || me.username }}</strong><small>{{ roleLabel(me.role) }}</small>
+              <button v-if="canChangePassword" type="button" @click="closeAccountMenu($event); changePasswordOpen = true">修改密码</button>
+              <button type="button" @click="closeAccountMenu($event); logout()">退出登录</button>
+            </div>
+          </details>
         </div>
       </header>
 
@@ -190,6 +191,7 @@ function clearRemoteRunTarget() {
           :key="tab.id"
           type="button"
           :class="{ active: runtimeTab === tab.id }"
+          :aria-current="runtimeTab === tab.id ? 'page' : undefined"
           @click="runtimeTab = tab.id"
         >
           {{ tab.label }}
@@ -202,6 +204,7 @@ function clearRemoteRunTarget() {
           :key="tab.id"
           type="button"
           :class="{ active: managementTab === tab.id }"
+          :aria-current="managementTab === tab.id ? 'page' : undefined"
           @click="managementTab = tab.id"
         >
           {{ tab.label }}
@@ -209,31 +212,25 @@ function clearRemoteRunTarget() {
       </nav>
 
       <div v-if="loading" class="loading-panel" role="status">
-        <span class="spinner"></span>正在载入共享任务…
+        <span class="spinner"></span>正在载入…
       </div>
 
-      <template v-else>
+      <div v-else class="workspace-body">
         <ActiveQueue v-if="view === 'runtime' && runtimeTab === 'active'" />
         <OverviewPage v-if="view === 'overview'" />
 
-        <TasksPage v-else-if="view === 'tasks'" />
+        <TaskCenterPage v-else-if="view === 'tasks'" />
 
         <SchedulePage v-else-if="view === 'runtime' && runtimeTab === 'queue'" />
 
-        <ExecutionHistory v-else-if="view === 'runtime' && runtimeTab === 'executions'" />
+        <RunHistoryPage v-else-if="view === 'runtime' && runtimeTab === 'executions'" />
 
-        <CreateTaskPage v-else-if="view === 'management' && managementTab === 'apps' && isAdmin" />
-
-        <ModelSettingsPage v-else-if="view === 'management' && managementTab === 'ai' && isAdmin" />
-
-        <SystemSettingsPage v-else-if="view === 'management' && managementTab === 'settings' && isAdmin" />
-
-        <MembersPage v-else-if="view === 'management' && managementTab === 'users' && isAdmin" />
+        <ServiceSettingsPage v-else-if="view === 'management' && managementTab === 'services' && isAdmin" :key="me.id" @session-expired="handleSessionExpired" />
 
         <AuditPage v-else-if="view === 'management' && managementTab === 'audit' && isAdmin" />
 
         <HostsPage v-else-if="view === 'management' && managementTab === 'hosts' && isAdmin" :open-run-id="remoteRunTarget" @run-opened="clearRemoteRunTarget" />
-      </template>
+      </div>
     </main>
 
     <AiAssistant

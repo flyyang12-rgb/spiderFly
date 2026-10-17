@@ -1,0 +1,679 @@
+{
+  "verified_at": "2026-10-15T07:07:07.335843+00:00",
+  "source_root": "D:/AI_Project/Workspace/Project_01_Py任务分发管理项目/SpiderFly",
+  "checked_root": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-layout-bbcfef8965d043a2be637a52be228757",
+  "baseline": "管理配置入口调整指纹_2026-10-15.json",
+  "changed_sources": [
+    "frontend/src/App.vue",
+    "frontend/src/components/FilterSection.vue",
+    "frontend/src/features/executions/ActiveQueue.vue",
+    "frontend/src/features/executions/ExecutionHistory.vue",
+    "frontend/src/features/executions/RunHistoryPage.vue",
+    "frontend/src/features/schedule/SchedulePage.vue",
+    "frontend/src/features/taskCenter/TaskCenterPage.vue",
+    "frontend/src/features/workflows/WorkflowHistory.vue",
+    "frontend/src/lib/constants.js",
+    "frontend/src/pages/OverviewPage.vue",
+    "frontend/src/style.css",
+    "frontend/src/workspace/useWorkspaceData.js"
+  ],
+  "source_sha256": {
+    "backend/app/__init__.py": "65a3f0f2c6e2a7dfe49c4f7324e5a79de56620c0911c0f32889ad1e9dc1dc45a",
+    "backend/app/ai_agent.py": "e8da8a09997a3bf99ec24d6bf249e4b083058a8e0b418c0b10e09bb444f9866e",
+    "backend/app/ai_browser.py": "9705bd08fb303b01b761717bb49e62a38d6329d49bc63b20d7893330f212a111",
+    "backend/app/ai_knowledge.py": "0b110db1c32435a2932559fd629368fbbb50d780faa1ffc11f9f0648137de48a",
+    "backend/app/ai_scraping.py": "d4c93dc741f8666003f7ba6b8131eb78f50bb5d39b9a4601ffb286d53fcb0883",
+    "backend/app/ai_settings.py": "f56aa7c810b31619dab6922a680e8fa70e08905b4de1e80491d82c13f4ad2cc3",
+    "backend/app/ai_titles.py": "cac197e05c846b0cb67362c91c5805b4ac639a2123dff97130349e5a382d5580",
+    "backend/app/ai_tools.py": "4dc6ae77d434bdb317959ffd9058c5e74b2e9120f5373cb1066c5f9d2fad0cc2",
+    "backend/app/api/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "backend/app/api/apps.py": "9180f5256670f11fedb919110a51cfb3ac67f52f257f1e89a7afe86d1455b162",
+    "backend/app/api/audit.py": "950bd4cd02c848ebc2df5ed81c55ec6f5a5454d86e76abd55370fa10509ef823",
+    "backend/app/api/auth.py": "407c59c19942f95170b768bb013f4b851dfb41ac6afdd6c7915aace294bbb9d3",
+    "backend/app/api/executions.py": "13115e2b471af1f8a513a2839c4016cc566cc1234da4a6a14e00e518109e71b4",
+    "backend/app/api/hosts.py": "ab251bf4a919eb52200b839509d81eb2e79d9c941031201f6d75499820d563a9",
+    "backend/app/api/overview.py": "853c4dd6941b914d67a10e758ecf1f4e85288fad24721c4d1fa473702808ba77",
+    "backend/app/api/schedules.py": "736df8c00e89f6300c25373b25f8c3867dc5c8ee05f4cf84550a30468f74a743",
+    "backend/app/api/settings.py": "6dc271b68a11d3435bf95a8baf2226642d5f484b0c010ecfb77fc7915f200003",
+    "backend/app/api/tasks.py": "812ab363eee2548394104735071f16031db0b13c4a6a4230865901d3d1fe7db0",
+    "backend/app/api/users.py": "ffc94d7cff087a158ad6947a90253d6a97666c5ed805590882d874dca4b5f940",
+    "backend/app/api/workflows.py": "1246d99e58ee7c82b648d4a5b4ba32cb22f901fbd3a70f91b3a1395f274ed5c8",
+    "backend/app/collection.py": "e2853dda3285e1b10c6f497df4ab0696555d96d33f9503cfba2913e411cd5ce5",
+    "backend/app/collection_progress.py": "6aa6220ae48f0cc44737d612a1e0de06084def8346103f7c7f1e8086785eb442",
+    "backend/app/config.py": "63d33bab83337645ceb2e107c4e8de6de6f19a33d5ba2d46c8364e1d13bdfa55",
+    "backend/app/cron_schedule.py": "d7630ed19ee89087d2fafc72b1548622b759134c656569748bd765210e1544ff",
+    "backend/app/database.py": "f685e4583fdeaa4289c86b6c886a19606e71aeb8a166ab74f6c90bc2070f49b6",
+    "backend/app/dp_probe.py": "2db68717432ae5bd8662e8cae577a4fcd4910a02c2a84f91b550752181d26171",
+    "backend/app/dp_runtime.py": "522394160f8ca6f7968b7f7b4e535138155d2c2ae88e4a08d7fbb4fce04e9f03",
+    "backend/app/environments.py": "7b36d1e62cdff684982153a000eb0459657b659cc81921a0b0dba16069cea9af",
+    "backend/app/execution_artifacts.py": "52aa9a925f32bc239881bbae53088db1bfea1af6184a172c1eb837c456805981",
+    "backend/app/execution_results.py": "cf6ee3417e828fc19fff7f5ec5c26a58983683f3975f4a94f6a0eb4b96d2729c",
+    "backend/app/feishu.py": "e3748a195feda8e41287a5178e14bfc9e8552fd7a6697d214869c815e1effc75",
+    "backend/app/feishu_settings.py": "04b68a13f40a79148bc6cabc2812904d37ed6a09188c217c2a8a30d51690fbea",
+    "backend/app/host_runtime.py": "6d4b8fff1fb6e63a68b8a80cc17262564eaad340d390843a13a23fa61b5ff319",
+    "backend/app/instance_lock.py": "34341a62be3878625f09dc14af48e77ab152e450f60bb0320a63228acc72cf7f",
+    "backend/app/main.py": "f4a820786ee56922033b4aa63c2fd0c066350837e14d33d48c470705b8487dee",
+    "backend/app/maintenance.py": "804227cfd15071109383815742f687c2679d16f8b4dfe908a0e567108d144a74",
+    "backend/app/maintenance_runtime.py": "7c8b190e8c6dfa417319729c8b4c70bae32e7ad3dd9414753050a9e3cede5749",
+    "backend/app/native_process.py": "0d4d60279268697e55b63b48246ff5f6a23b68669235101cde8125324c71c561",
+    "backend/app/remote_maintenance.py": "15ac74bb1ec1880932c960d4be0a80c407027b50db98ee1a35c47d3f062fd178",
+    "backend/app/runner.py": "7f5f2b8764c5092304843113554c6cb5e66ffbf39060d5630c364b3be6532c34",
+    "backend/app/scheduling.py": "8e3b131f72497612f2b3ed493bf4f8bf6cf5862d665e05e2e37ae3334c671682",
+    "backend/app/schemas.py": "46b74147be3dd9152348a1c3abef66207697978f76cc0086fd42f832ed2f4eae",
+    "backend/app/security.py": "b38c77a2e1dff420e66c73086e1cbab8e1ce0dd39d285a7a7c224596690666fa",
+    "backend/app/services/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "backend/app/services/cron_runs.py": "e9c0db78ac30ff3511b708e49232d1aa4cd40f3315dfd1e9adf8aecf3e8e7c57",
+    "backend/app/services/execution_queue.py": "d27cfe0c5d0ea482ab8506975d9d5fe7b4d7f4ac47dceb925279e5f2494362ab",
+    "backend/app/services/host_dispatch.py": "90c9c91c1450c00c6e70e08ecd4752968e90410c86693c878d709964e2fd9403",
+    "backend/app/services/runtime.py": "6da071caf03a0412d735ce2997f739775a7335749aa66a0c6eab138a077f0a3e",
+    "backend/app/services/task_queries.py": "4f62f4b3f15337c8163f6839663e5f06b394abd04154d1a32a9dcf1bbb6be3fb",
+    "backend/app/services/workflow_schedules.py": "2f3214ea4edf9161af9832dacb9e03725b2a4744a27a1a450d15fad1a91b1278",
+    "backend/app/services/workflows.py": "1527e072baae77af1cb80463ecc37fd24578eda56b800bb299e1443b1363084c",
+    "backend/app/task_versions.py": "198b97301d1a814235f95a4228f621471e4e567bf53ea94c66f4cc56a7276a2b",
+    "backend/native/dp_driver.py": "afdfde97cbe8ac9799c796fd3413e3ffde82d015a592e5d0f20ae2054eec98e4",
+    "backend/sandbox/collection_api.py": "6f21c4fbee3904018986fe2cb9f789895b31912db4bb1fa2846eaf12066353c0",
+    "backend/sandbox/collection_net.py": "bbc4c6f97dbef413b91bd48859431a6901c92641c13ce35cad68ccf9097308fb",
+    "backend/sandbox/driver.py": "360e588c23dc1e0859ca721ec9fb70fea2ea4aa50f9849439105c60a22c45cb1",
+    "backend/sandbox/entry.py": "7d924a0153fe40806576b61a29cb9eb2222bc3c14e066aac0004737158a49087",
+    "backend/sandbox/setup_collection.py": "d61e5cd7f9d261ef920daafa854babf1b5b601ac38a45f234d6f376ac99e25a5",
+    "backend/sandbox/setup_runtime.py": "faf5e43bdba070fc84347b5bc830ce7eb2f0a6ed85cc62b06d2b51d601f04298",
+    "backend/tests/__init__.py": "6f47cc823fe97f49698896d82d285cf5fd037c2462d34ee80c94d182c617640a",
+    "backend/tests/collection_native_probe.py": "cd3a5c56ca53747ec8833eb611b1ca65d630daeba6659818448c621addd9fb67",
+    "backend/tests/fixtures/slow_task.py": "d9e9c31f64476fb601fa1e54214c2b4c2e5d923c6c71bcc7d0d6b1bee6edc381",
+    "backend/tests/test_ai_agent.py": "e9ddce607c90a989c06fb7c0615dc37721099460c252c15c0db1cb3518c0531d",
+    "backend/tests/test_ai_balance.py": "9557b84442956c91f5f4058a664d37af3cc4ec46cc8516f4b30dd609832a70b9",
+    "backend/tests/test_ai_browser.py": "3e52d1897900bdbff8a6a0ab1b9882f9b95c7c9a32405bdf60bb0e804b39010d",
+    "backend/tests/test_ai_key_display.py": "3e301751dc81cce0434e7f74b234122ade501531a7f16c7bc0a40788a6639515",
+    "backend/tests/test_ai_knowledge.py": "e3d087d84e640b5747cfdbe4d238d1634b6eebb5adfbb0eb9e5d2ae448454fde",
+    "backend/tests/test_ai_scraping.py": "0369e070ed97232cf38f7f4ee4e1f11d83b1cff8f0d35328b3c08fccc309fcef",
+    "backend/tests/test_ai_settings.py": "069ca5aa9ea38acfdef865b3798efd2a886496d647a0133f8000ba3fd5e0ac14",
+    "backend/tests/test_ai_titles.py": "ad0ea299fa1861ecc24536a31b7d4b8ccd48030c68badca3dade5352cdf5e5c8",
+    "backend/tests/test_app_api.py": "3b952d92ba792d15e6fe5dc38e3b5abf9001c192506118436a01010853f6db63",
+    "backend/tests/test_collection.py": "04d3c5c0c9afdb942e627c259171e1752cfa1e178f9f8d7938213c6c289f834d",
+    "backend/tests/test_collection_core.py": "fdac6f4d51e39c7b5b68325b037524ca9f6e50ca97193df7ec4b504fead9c4db",
+    "backend/tests/test_collection_progress.py": "95b82d0721746052e92a43263c28c9040e0b3d26347c0d99f7059bd6235f9eb1",
+    "backend/tests/test_cron_integration.py": "4af78804c6b82f9afd416bcb0648e45bfccfd3634e587dcb77428de64b7e512b",
+    "backend/tests/test_cron_maintenance.py": "72b2f9018b657759bb6cc53cddd7e8fb07f0b405903aee59a4f3212d0219b9e7",
+    "backend/tests/test_cron_runs.py": "641ccc438ecaa524948d9bdbf91a3d9f756ccf1206f21c1db6268bda312ea457",
+    "backend/tests/test_cron_schedule.py": "6d64297406241ab8bd79b655ee38d18c281d266f06577fdf38b213bce6ec9715",
+    "backend/tests/test_database_migrations.py": "e9897609c174257faf08ff0c2ac8654c2636d21492261d0bc7cbb2ca81ab7131",
+    "backend/tests/test_dp_runtime.py": "04ff9ac3b044ca48c133ec2b918bb48fdc96e3288d89b00ef2e50f90ebe4e50a",
+    "backend/tests/test_environments.py": "c658ac68a9e217f112b6209a04aa78e63b3f61b3927f71652f31546b2e5409ec",
+    "backend/tests/test_execution_artifact_api.py": "8124c09900aacd880ef90cee24ede9af9b88fa8c4cd856ac3d3abfb9a6c7a1c9",
+    "backend/tests/test_execution_artifact_files.py": "54ef74252cc58496284968ddc38957be6f15898fb8d8da259cbfdd8de238d8d1",
+    "backend/tests/test_execution_history.py": "f3a922d088980dfc61382c0601d08af2f1877b247ec3a0e96d227ccdfd30e902",
+    "backend/tests/test_execution_results.py": "bee60ac4ba513a05ce7cf51a65b65f5b6aac7b563844ef2bb70b415ccf221b33",
+    "backend/tests/test_failure_screenshot.py": "889a61a320ba0c148c8d95392647025e859776ed92918f593b9aa7d7950de6c9",
+    "backend/tests/test_feishu.py": "b667941f13bdd9f65cb35c8e9ad91b8382a1b5419bf2ee94ced17d5068b20a8b",
+    "backend/tests/test_feishu_settings.py": "2725ffc8a5174cee7bbff523e3f34a72138acb0b285f04ab66123fa8cbcd0cee",
+    "backend/tests/test_force_stop.py": "9fb6f42e7f1341f7484a9605ef9737e76ecc65f1e6bf1587bcd99f5f72f319e9",
+    "backend/tests/test_host_runtime.py": "fe5f6022e04686790916b73b09728b89725846d9f3cc981894c934bf9575695e",
+    "backend/tests/test_hosts.py": "1ead238af9702663eac655edd501a6543374327d1d323d6564489877008148db",
+    "backend/tests/test_instance_lock.py": "625cfa5d1aa415ee9ae0ba740d5569bc93b90cd7e201088fb12ed5fdcf527171",
+    "backend/tests/test_legacy_cleanup.py": "0d151b299d5454a88af172b3e5f6653396b5d860d662e7434361a455943d735c",
+    "backend/tests/test_maintenance.py": "fd58faf60fc8d2deec2d5d2034fe3c634b7c73925e1b50a8224f5890b6cf300a",
+    "backend/tests/test_member_management.py": "d38a368feea53363296a1fbe9207c059fa3a43629e853bf165e5a959f57c66d5",
+    "backend/tests/test_native_process.py": "c8df25d8abb7cdb0d28918f1703fd6db2ee5d985279a17ba54bd0395be2fad7e",
+    "backend/tests/test_overview_timezone.py": "838ecc0790866bc0ae4dbbcf5381e6ed2268a97a9606b4875b26c918cc7e82e6",
+    "backend/tests/test_project_audit.py": "be14bde0186996488e570499f99c9b4b38f20abf46b62c4d300cd27b0cc4de9c",
+    "backend/tests/test_runner.py": "836525bfec420f137e034570169c910a3d2a4a15e4123f551fe873128f5c16bb",
+    "backend/tests/test_scheduled_queue.py": "2b3f5e6ba3caeb4aeeb01feaf85484c6b3fa494a42835878d3c55fcc244ee213",
+    "backend/tests/test_scheduling.py": "d17d0424c7ab698b6f8e5aca70ce1cdadc21da179e0b465118d2dbc472102d04",
+    "backend/tests/test_schemas.py": "1016901289eba4ec019c7500076e61724a54f99b1f098d12a75aee3e7426ff18",
+    "backend/tests/test_security.py": "eaf8b0cf267b761e74b775c975a22d386bc2e2ff4d7af21deba0b6a7efc9e0ba",
+    "backend/tests/test_task_versions.py": "7d720e7485226bb0ae7671687be7302b3f1a45f1febdfd771206a723f872204e",
+    "backend/tests/test_templates_and_timeouts.py": "7f30fdfc7a9e2c713138a415c4ca24e1b2c0b264ccfacbf464a1392d6a3654e4",
+    "backend/tests/test_workers.py": "aa2754f8447f9a718fb30fbc7af0aa13178214bdf09a6bf4b5e1eef679b72007",
+    "backend/tests/test_workflow_api.py": "1a4c0b6fa05113dc7f9fa08199c7d27c34be623ddb87269a0da84f01dcbcf0ca",
+    "backend/tests/test_workflow_runtime.py": "55e2e21cf642dd2f7095ab9afdfcef1e26e00ea79416b470b17a7ff94790441d",
+    "backend/tests/test_workflow_schedule_runtime.py": "b9917abebb8cdc375f223a76976faf9d9ee08ced66260bf31050674e5f13806b",
+    "backend/tests/test_workflow_schedules.py": "ba41beed97f1ea285925c0a73fbd70622031e13434c335501e527b64283734d9",
+    "backend/tests/test_workflows.py": "9b55ae602d2eb7f8adc46ca2b078e78d8331faba74c2b5a5970865cd081252cf",
+    "frontend/index.html": "27676af365d18737774d625ef7fa79e7ba4f65bda4b8de5c78ebdf8c8a42fc32",
+    "frontend/package-lock.json": "b623172f10f3e86dc5537e42b615d5dac52e2ac55c81bc4ee35ebd6d2172b77b",
+    "frontend/package.json": "802eafc2d15b4cab116786e22d22c52c9765d3618c8a97d092292d05b2263d77",
+    "frontend/public/favicon.svg": "9be3e30e0ad2dcd26cf9ce0546ad444286981ff9b8a7b8019de1e95750b4c634",
+    "frontend/src/AiAssistant.vue": "98d01a72a4e0cd72942b9f5522d2f69bad78babedde34b46e6ce6eb9b1a33d10",
+    "frontend/src/AiMaintenance.vue": "9bce39b16d9f180cc9f19d36a4fe600cd77dab7390d86a5d0bcfe7a224cfabc2",
+    "frontend/src/AiMessageContent.vue": "367da1276fcb440a2dcc4edf388c074d9ff290abcc7ccd0f181409d3b236951c",
+    "frontend/src/AiSettings.vue": "3fb286a0b833030505db600cfa63923fea19f0cb394d70268c45644a58a3a262",
+    "frontend/src/AiThreadPicker.vue": "42da25a70b44294f721014390925335ff2f601d314c3b741ff5179a33ef3a826",
+    "frontend/src/App.vue": "054c80827735ee10f86bbf036c28cb5851b2118eb0822baf05ecb7ca92b62e74",
+    "frontend/src/MaintenanceLog.vue": "7e15294773f0e17cf7b788f7b2c6a6e41d80f960231eff6260376209a2c08962",
+    "frontend/src/MaintenanceNotices.vue": "156ba9b9c038313a33ff93f94bca1f50e3709d0c3e5a3fc2f31c2af3e5d6274c",
+    "frontend/src/TaskVersions.vue": "628b6af934321e9db378a9a887ab4787a20d5b771c8111bcf1455fde924d39cc",
+    "frontend/src/components/FilterSection.vue": "eca27b12338807ffac05a7bb79810c125c3e125ccd43a06b6fce255b8308940a",
+    "frontend/src/components/ToastNotice.vue": "89fcd80fecfcd67f0cab99049983c4aac7a20822753d42041b4a2674f7df40a1",
+    "frontend/src/features/apps/CreateTaskPage.vue": "94d37022646b3d84989776c9623bccb2688589be8107370a1627fc8238e9d188",
+    "frontend/src/features/apps/useApps.js": "3075c4a2f07719e3504cc3f77c215b4b8d2d1496c543fbf9e9b995318959dc51",
+    "frontend/src/features/auth/LoginPage.vue": "88ef32eddf5235d4b90c0c59f248aaf4709df25482ccc6e3d7a3dfa35c5a6f8c",
+    "frontend/src/features/auth/PasswordDialog.vue": "ee79f00a4adae34adf6eccfb6a5aecc8cfe14be36d59c2a58fdc15553326c809",
+    "frontend/src/features/auth/useAuth.js": "acc3f849da5dc09fa73dc7c7862a02817d751a561a78a62ef0fb27e217ef84a9",
+    "frontend/src/features/executions/ActiveQueue.vue": "2fdceb6928b421095b4882ec5212f2b77a64fdd7f74935659eef4a9e38f3432d",
+    "frontend/src/features/executions/CollectionProgress.vue": "ff9c5d76061658e238de1e3f028cf223b84f4152c8f253738feb7289b8051c79",
+    "frontend/src/features/executions/ExecutionDetail.vue": "a66199a5f1166072e078a461d704073a2fb0b91adb4e44ed0f289970e450be68",
+    "frontend/src/features/executions/ExecutionHistory.vue": "808d281bfeb93be0739e2f21e1c26f8690ecd44a8ff6c987aa117176277be6df",
+    "frontend/src/features/executions/RunHistoryPage.vue": "43f6cc5d14cb543ba375b71476a8f138a16d780b7c3a7163ce7fa98b925eafba",
+    "frontend/src/features/executions/StopExecutionDialog.vue": "67867b6d66e2f4968773d74cf1f51e45ee8cc3762663750cfb28df9d593ef327",
+    "frontend/src/features/executions/useExecutions.js": "634e3483cd962b049a92ef3dbd3315ff23a748b2f67e96c4d9972e160b21be16",
+    "frontend/src/features/hosts/HostsPage.vue": "f38cc88028bd5eb3baf12989b5c981ed9f3db3f21bb08fabb936cd42b555a9f6",
+    "frontend/src/features/hosts/useHosts.js": "b317eb3be67899dd1206a05d09ca603d49a215f5f6cc8153388ee688da266df3",
+    "frontend/src/features/members/AuditPage.vue": "20721ab878a80ec3ffe3a28156bfec6e96dae6e0cfa6f88727a9ff0e1835aab0",
+    "frontend/src/features/members/DeleteMemberDialog.vue": "f81612cad43f8edc7f4181e0e5b38f2963ac868d3d94c7203aec57d07fb6c3b8",
+    "frontend/src/features/members/MemberEditor.vue": "740b596a4724283d478d5c610ba461bded8004cfd2229786e360de1317e3b895",
+    "frontend/src/features/members/MembersPage.vue": "4b51d7b650bca5fe55c586ce95e3413f80ed8d3b9233070c6e60e32e885e41ec",
+    "frontend/src/features/members/useMembers.js": "ce2449298b085aa348b3e9eae7507ac5132fb5aa160675fa6fbedde2d2d6b862",
+    "frontend/src/features/schedule/CronEditor.vue": "915b9fa462dcc6e52c657098e892bf6949a1dead929ef54c9f0954fc9909e2b0",
+    "frontend/src/features/schedule/CronEntryDetails.vue": "ae936927f149ea0f3cfde32f16002b39ab6abe27ddbd9d09591d18fa88f8f080",
+    "frontend/src/features/schedule/PlanEditor.vue": "943f3fa96cdf62dcaaae9228ebdf911d1c8f157747845bbb8d92c061ad29fc1b",
+    "frontend/src/features/schedule/SchedulePage.vue": "6b4b6d9fe36ec00b64cbb867ed7af38346cab57df0b34fe44d457dd08b9d942d",
+    "frontend/src/features/schedule/WorkflowPlanDetails.vue": "5a6d229340fc25be7f0acbc7d79e98d9b178f805a49c79f6715a38161131c2fc",
+    "frontend/src/features/schedule/WorkflowRunViewer.vue": "34861d1b53e4b0c4a8bb1ec1ee4d4405b69d092496ed1fdcf96dfa0642195988",
+    "frontend/src/features/schedule/WorkflowTriggerHistory.vue": "394dafeea99f37376f39a6d9d9bafb451406d024fe9a5699090ec59075fd8187",
+    "frontend/src/features/schedule/useSchedule.js": "246666a8dd3cdb6756d812c9c7f5f453d5cd6f6109c500e156a0a20af3e12dfa",
+    "frontend/src/features/settings/AccountBalance.vue": "78dd779f1ae87f8c5f1e9aa082fe729a67dd1ee4a332855b7d841e25a0744ed5",
+    "frontend/src/features/settings/FeishuSettings.vue": "6b43a49dd6d20efdeaa346e621ee3cbd02710df4286082098bdb72e7d9b82cbc",
+    "frontend/src/features/settings/ModelSettingsPage.vue": "a643ae5671ad898e66d5a86c776371f8ff515ad4f28e91fadf59eb44d2e28631",
+    "frontend/src/features/settings/ServiceSettingsPage.vue": "0c4dc650115de294eca39b1b0277491e3dcf3c862c0ed26d2b1d5c6d75308474",
+    "frontend/src/features/settings/SystemSettingsPage.vue": "feee4cd94c20d35991984e8d247cce37a6255aa9f18d0d123a1d9e6042fe1428",
+    "frontend/src/features/taskCenter/CreationDialog.vue": "f7c0b8735996347dd017376e8e3e0094bc0d3c2af1c0904c6d36800c5b1c99b1",
+    "frontend/src/features/taskCenter/TaskCenterPage.vue": "d063f84d10e5800bebb2387773a5c77542d4272954beec8dc766e407a3473c65",
+    "frontend/src/features/tasks/DeleteTaskDialog.vue": "c23d2e29f98cc2c2b74d127a19831e9857db99212412b5ac7ca2e7470caf3a32",
+    "frontend/src/features/tasks/TaskEditor.vue": "d16688f450ca379f39155084141d52b8bb9443e3aa63f3dda1503fb873eb05a8",
+    "frontend/src/features/tasks/TasksPage.vue": "7290e5cc9e3711100caf0bd6fe7381a8215a6ac9681bc07d264fb67d0745fe34",
+    "frontend/src/features/tasks/useTasks.js": "54c5a81b2f4f4910ad41d1870528a7aa0b2a1123d07a1a05aa4b811b6d45ae4e",
+    "frontend/src/features/workflows/WorkflowDialog.vue": "9bcf74957595bcdae48916f0c0affd8caffd2a0f4c681f894c0eca16bc15dd05",
+    "frontend/src/features/workflows/WorkflowEditor.vue": "07b0058b42e101f743bd47a8f35cedbdf2f393664e4e6bd9fa35b93cb5148845",
+    "frontend/src/features/workflows/WorkflowHistory.vue": "b0aea87c0a5f8e8a88c260147534a17e72c6ac1b6c4dfccdcfe8053a2525a099",
+    "frontend/src/features/workflows/WorkflowRunDetail.vue": "d87ec7822cce4dd55d9813a25c83fa58c659704cea3583084f1612952cff8278",
+    "frontend/src/features/workflows/WorkflowsPage.vue": "b020d48dd3e1b915262f9a026daf9f5ee4321581758e3bffb05e9c7595645072",
+    "frontend/src/features/workflows/useWorkflows.js": "b8573ae451a46da4ed6d313daff9b0b2330358a13c9ccafd1a7e4e176b26a03b",
+    "frontend/src/lib/aiMarkdown.js": "996b7619d1e10fc33bbfd096fcdc4ea7ff9a6290079c99d006f2c03d0b93e139",
+    "frontend/src/lib/api.js": "d4ea9a7ebc2b8bfb32bef3b3c3bf3af2107b704c2c92081744f2cde6506e01eb",
+    "frontend/src/lib/constants.js": "b6ad9a7424d8a8b46eda11bb467c54dbf49b53e6ae4f884c954f1e82116416e1",
+    "frontend/src/lib/format.js": "ed00a0677c9c62ed6c6570f0cb1c7c4f4742f83568ecbc442605e79a69645f01",
+    "frontend/src/lib/versionUpdates.js": "9491cfd8243acd32faca72ebe2a04f872a9d5ad4d2ca4d24697b7176629530ad",
+    "frontend/src/main.js": "750ece2ac39ad59f1470bd5a1d758bd324841d06d14dae1720fce58b6dde292c",
+    "frontend/src/maintenanceSummary.js": "e97b2d7642ce841690a35fecda57045cad185b9e7b839965b3fe8251bb8db699",
+    "frontend/src/pages/OverviewPage.vue": "efee1d1bccd209081daeca1a99d40d487b2e38eabe0cb33840893163b6b97b38",
+    "frontend/src/style.css": "d3db5d8ffe8c71f326113085324d5b2128cf6fe5833ccf6c930a07e5c0b24e05",
+    "frontend/src/workspace/context.js": "a6238c01ffec9faaa44b8e676121561ed13fdbbc5ff8d27c634cc2507eff7224",
+    "frontend/src/workspace/useWorkspace.js": "fab3714d2ded840bb82a841cf54c317f118a2d865ef042a7c6a643ed32337803",
+    "frontend/src/workspace/useWorkspaceData.js": "b8590624ec8803d133c2d86ef57eedcf816e0e608f700868541c235840a1b96a",
+    "frontend/vite.config.js": "68d1a74578811a1c27b21270a4148f43d59be8e90821a6c4c6b82831ca60905f"
+  },
+  "active_dist_sha256": {
+    "assets/index-CRjdwvYp.css": "4d1f170e309e0a47014c4714076d98bc182e247328dc8ba857a7c582f6fb7156",
+    "assets/index-DZ0R43nx.js": "5c6135c9c2116eb5df03e299439d317043b4104f307c156d3fcd51d1fed70526",
+    "favicon.svg": "9be3e30e0ad2dcd26cf9ce0546ad444286981ff9b8a7b8019de1e95750b4c634",
+    "index.html": "866f51ee5a77053797acb3d3de66a755895ab24e6f2d943336ad344ec5853fe1"
+  },
+  "backend": {
+    "total": 695,
+    "passed": 676,
+    "skipped": 19,
+    "failures": 0,
+    "errors": 0,
+    "skips": [
+      {
+        "test": "test_real_browser_observe_click_login_resume_scrapling_and_expiry (test_ai_browser.BrowserTests.test_real_browser_observe_click_login_resume_scrapling_and_expiry)",
+        "reason": "需要独立环境 Chromium"
+      },
+      {
+        "test": "test_native_live_session_keeps_context_filters_and_api_evidence (test_ai_scraping.NativeScrapingTests.test_native_live_session_keeps_context_filters_and_api_evidence)",
+        "reason": "需要独立环境 Chromium"
+      },
+      {
+        "test": "test_real_browser_executes_js_and_cannot_read_host_or_direct_network (test_collection.CollectionNetworkTests.test_real_browser_executes_js_and_cannot_read_host_or_direct_network)",
+        "reason": "requires prepared collection-v1 runtime"
+      },
+      {
+        "test": "test_real_browser_loads_assets_and_clicks_next_page_without_crashing (test_collection.CollectionNetworkTests.test_real_browser_loads_assets_and_clicks_next_page_without_crashing)",
+        "reason": "requires prepared collection-v1 runtime"
+      },
+      {
+        "test": "test_real_scrapling_request_and_independent_csv_validation (test_collection.CollectionNetworkTests.test_real_scrapling_request_and_independent_csv_validation)",
+        "reason": "requires prepared collection-v1 runtime"
+      },
+      {
+        "test": "test_uploaded_python_uses_same_collection_profile_on_scheduled_run (test_collection.CollectionScheduledTests.test_uploaded_python_uses_same_collection_profile_on_scheduled_run)",
+        "reason": "requires prepared collection-v1 runtime"
+      },
+      {
+        "test": "test_native_dynamic_session_and_action_failure (test_collection_core.NativeTests.test_native_dynamic_session_and_action_failure)",
+        "reason": "requires WSL collection"
+      },
+      {
+        "test": "test_native_transport_fixture (test_collection_core.NativeTests.test_native_transport_fixture)",
+        "reason": "requires WSL collection"
+      },
+      {
+        "test": "test_real_crawl_resume_then_fresh_scheduled_collection (test_collection_core.NativeTests.test_real_crawl_resume_then_fresh_scheduled_collection)",
+        "reason": "requires WSL collection"
+      },
+      {
+        "test": "test_prepared_wsl_worker_executes_cron_owned_repair_once (test_cron_maintenance.CronMaintenanceTests.test_prepared_wsl_worker_executes_cron_owned_repair_once)",
+        "reason": "requires prepared WSL runtime for Cron-owned repair rerun"
+      },
+      {
+        "test": "test_real_dp_probe_observes_question_links (test_dp_runtime.DPTests.test_real_dp_probe_observes_question_links)",
+        "reason": "requires native DP runtime"
+      },
+      {
+        "test": "test_real_queue_trial_and_execution_same_port (test_dp_runtime.DPTests.test_real_queue_trial_and_execution_same_port)",
+        "reason": "requires Windows DP and a free configured task port"
+      },
+      {
+        "test": "test_real_stop_releases_configured_port (test_dp_runtime.DPTests.test_real_stop_releases_configured_port)",
+        "reason": "requires native DP runtime"
+      },
+      {
+        "test": "test_file_and_directory_symlinks_are_excluded (test_execution_artifact_files.ArtifactFileTests.test_file_and_directory_symlinks_are_excluded)",
+        "reason": "系统未授予创建符号链接权限：1314"
+      },
+      {
+        "test": "test_removes_a_child_symlink_without_deleting_its_external_target (test_host_runtime.WorkDirectoryCleanupTests.test_removes_a_child_symlink_without_deleting_its_external_target)",
+        "reason": "当前 Windows 策略不允许创建符号链接：[WinError 1314] 客户端没有所需的特权。: 'C:\\\\Users\\\\20898\\\\AppData\\\\Local\\\\Temp\\\\tmpn_tt0342\\\\external' -> 'C:\\\\Users\\\\20898\\\\AppData\\\\Local\\\\Temp\\\\tmpn_tt0342\\\\work\\\\linked-folder'"
+      },
+      {
+        "test": "test_rejects_a_work_directory_that_is_a_symbolic_link (test_host_runtime.WorkDirectoryValidationTests.test_rejects_a_work_directory_that_is_a_symbolic_link)",
+        "reason": "当前 Windows 策略不允许创建符号链接：[WinError 1314] 客户端没有所需的特权。: 'C:\\\\Users\\\\20898\\\\AppData\\\\Local\\\\Temp\\\\tmppfkq0mo1\\\\real-work' -> 'C:\\\\Users\\\\20898\\\\AppData\\\\Local\\\\Temp\\\\tmppfkq0mo1\\\\work-link'"
+      },
+      {
+        "test": "test_serial_worker_really_reruns_repair_and_keeps_business_artifact (test_maintenance.MaintenanceTests.test_serial_worker_really_reruns_repair_and_keeps_business_artifact)",
+        "reason": "requires prepared WSL runtime"
+      },
+      {
+        "test": "test_real_kernel_sandbox_denies_host_network_and_processes (test_maintenance.RuntimeTests.test_real_kernel_sandbox_denies_host_network_and_processes)",
+        "reason": "WSL sandbox integration is explicitly enabled on a prepared host"
+      },
+      {
+        "test": "test_real_sandbox_reproduces_type_error_and_runs_repaired_script (test_maintenance.RuntimeTests.test_real_sandbox_reproduces_type_error_and_runs_repaired_script)",
+        "reason": "requires prepared WSL runtime"
+      }
+    ],
+    "failed_tests": [],
+    "error_tests": []
+  },
+  "frontend_checks": {
+    "center-behavior": 22,
+    "unified-history": 25,
+    "workflow-ui": 10,
+    "management-ui": 25,
+    "feishu-settings": 18,
+    "ai-models": 43,
+    "chat-ui": 19
+  },
+  "frontend_total": 162,
+  "repetitions": 3,
+  "vite_modules": 112,
+  "release": {
+    "new_sources": [
+      "frontend/src/components/FilterSection.vue"
+    ],
+    "changed_sources": [
+      "frontend/src/App.vue",
+      "frontend/src/features/executions/ActiveQueue.vue",
+      "frontend/src/features/executions/ExecutionHistory.vue",
+      "frontend/src/features/executions/RunHistoryPage.vue",
+      "frontend/src/features/schedule/SchedulePage.vue",
+      "frontend/src/features/taskCenter/TaskCenterPage.vue",
+      "frontend/src/features/workflows/WorkflowHistory.vue",
+      "frontend/src/lib/constants.js",
+      "frontend/src/pages/OverviewPage.vue",
+      "frontend/src/style.css",
+      "frontend/src/workspace/useWorkspaceData.js",
+      "frontend/src/components/FilterSection.vue"
+    ],
+    "original_controller_start_requested": false,
+    "updated_at": "2026-10-15T07:04:52.3389589+00:00",
+    "frontend_only": true,
+    "dist_before": "C:\\Users\\20898\\AppData\\Local\\Temp\\spiderfly-check-layout-bbcfef8965d043a2be637a52be228757\\dist-before",
+    "backend_restarted": false
+  },
+  "live": {
+    "http": {
+      "assets/index-CRjdwvYp.css": {
+        "status": 200,
+        "bytes": 131261,
+        "sha256": "4d1f170e309e0a47014c4714076d98bc182e247328dc8ba857a7c582f6fb7156"
+      },
+      "assets/index-DZ0R43nx.js": {
+        "status": 200,
+        "bytes": 399554,
+        "sha256": "5c6135c9c2116eb5df03e299439d317043b4104f307c156d3fcd51d1fed70526"
+      },
+      "favicon.svg": {
+        "status": 200,
+        "bytes": 280,
+        "sha256": "9be3e30e0ad2dcd26cf9ce0546ad444286981ff9b8a7b8019de1e95750b4c634"
+      },
+      "index.html": {
+        "status": 200,
+        "bytes": 541,
+        "sha256": "866f51ee5a77053797acb3d3de66a755895ab24e6f2d943336ad344ec5853fe1"
+      }
+    },
+    "health": {
+      "status": "ok",
+      "mode": "shared-central-python",
+      "scheduler": "running",
+      "queue_worker": "running",
+      "environment_worker": "running",
+      "ai_worker": "running"
+    },
+    "anonymous": {
+      "/api/settings": 401,
+      "/api/settings/feishu": 401,
+      "/api/ai/settings/key": 401,
+      "/api/users": 401,
+      "/api/audit-logs": 401
+    },
+    "process_ids": [
+      11404,
+      23108,
+      89616
+    ],
+    "idle_before": {
+      "busy_counts": {
+        "executions": 0,
+        "remote_runs": 0,
+        "maintenance_jobs": 0,
+        "remote_maintenance_jobs": 0,
+        "rpa_apps": 0,
+        "task_version_updates": 0,
+        "ai_turns": 0,
+        "ai_collection_trials": 0,
+        "ai_dp_probes": 0,
+        "ai_browser_state": 0,
+        "workflow_runs": 0,
+        "cron_rounds": 0,
+        "workflow_triggers": 0,
+        "maintenance_delivery": 0,
+        "unconfirmed_settlements": 0,
+        "unfinished_repair_rerun": 0
+      },
+      "unknown_checks": [],
+      "idle": true,
+      "next_task_slot": null
+    },
+    "idle_after": {
+      "busy_counts": {
+        "executions": 0,
+        "remote_runs": 0,
+        "maintenance_jobs": 0,
+        "remote_maintenance_jobs": 0,
+        "rpa_apps": 0,
+        "task_version_updates": 0,
+        "ai_turns": 0,
+        "ai_collection_trials": 0,
+        "ai_dp_probes": 0,
+        "ai_browser_state": 0,
+        "workflow_runs": 0,
+        "cron_rounds": 0,
+        "workflow_triggers": 0,
+        "maintenance_delivery": 0,
+        "unconfirmed_settlements": 0,
+        "unfinished_repair_rerun": 0
+      },
+      "unknown_checks": [],
+      "idle": true,
+      "next_task_slot": null
+    }
+  },
+  "page_proof": {
+    "desktop": {
+      "client": 1280,
+      "dateRows": [
+        299.59375,
+        299.59375
+      ],
+      "focusedType": true,
+      "height": 720,
+      "scroll": 1280,
+      "width": 1280
+    },
+    "mobileHistory": {
+      "client": 320,
+      "filtersHidden": true,
+      "scroll": 320,
+      "tableScroll": 562
+    },
+    "mobileRetention": "销售",
+    "mobileHistoryStable": {
+      "client": 305,
+      "focusedType": false,
+      "scroll": 305
+    },
+    "mobileTask": {
+      "client": 305,
+      "run": {
+        "bottom": 491.796875,
+        "height": 34,
+        "left": 99,
+        "right": 151,
+        "top": 457.796875,
+        "width": 52,
+        "x": 99,
+        "y": 457.796875
+      },
+      "scroll": 305
+    },
+    "queueAlignment": {
+      "bodyWidth": 987.21875,
+      "headerLeft": 254.390625,
+      "panelLeft": 254.390625
+    }
+  },
+  "cleanup": {
+    "viewport_reset": true,
+    "preview_listener_count": 0,
+    "real_settings_changed": false,
+    "real_messages_sent": 0,
+    "preview_tab_closed": true
+  },
+  "docs_sha256": {
+    "CONTEXT.md": "8918222accc4b60d98c78955829a96d72d2bd793e5c366ba5f599f220048b73f",
+    "docs/README.md": "0a52f2f2414ea18c7d46395ac10620f8984df32db722f0739d391fee26e5fc70",
+    "docs/SpiderFly总体需求.md": "79dca0efe39eb8b8412ccd312d338cc2003e524d24a725df2dd94e941d5e1109",
+    "docs/服务配置.md": "f706ddbdb4982084e97e86e13c800c2d1add0773b7037f91bda55c6dbeb9073d",
+    "docs/开发/代码对照与拆分方案.md": "08eecf187b3deecfa1ddae5c7ad130b13c226a09e7ad4539c49435bf122b9750",
+    "docs/界面布局与分组.md": "a05b14e83bd2d2bf0478ba1a6425c8b1729911c1a41006a44848096483cb18f3",
+    "docs/整体布局梳理_2026-10-15.md": "0cda05e30f37c4fcbe836173638188b5f7c2c64d522dac7fcfb661bffe471004"
+  },
+  "evidence": {
+    "center-behavior-1.log": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-layout-bbcfef8965d043a2be637a52be228757/center-behavior-1.log",
+      "sha256": "db1749dfd47f42e99b9387c168d62a9fc500617475996d38e5c0ba08aad3355d"
+    },
+    "center-behavior-2.log": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-layout-bbcfef8965d043a2be637a52be228757/center-behavior-2.log",
+      "sha256": "214415dd800d90d4223068e0a027e0181ad2c006d5ecf73b0a8ef000e945f97e"
+    },
+    "center-behavior-3.log": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-layout-bbcfef8965d043a2be637a52be228757/center-behavior-3.log",
+      "sha256": "c9df88069977b365dc43a93c0da1aceb10796e7791c1972eb8bc966f7e0d38db"
+    },
+    "unified-history-1.log": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-layout-bbcfef8965d043a2be637a52be228757/unified-history-1.log",
+      "sha256": "d447088e465a92eefc576fc2fdac17b06f83ee57d6ed3080a5360af9ae0b0533"
+    },
+    "unified-history-2.log": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-layout-bbcfef8965d043a2be637a52be228757/unified-history-2.log",
+      "sha256": "08bea8e5c611998a8691683860bcb4a5d476ef1893c2d14b15ad729a03dbafb1"
+    },
+    "unified-history-3.log": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-layout-bbcfef8965d043a2be637a52be228757/unified-history-3.log",
+      "sha256": "16b3473414cefba4885c4ba7a5246450b5e6e12f862fceef14258f300dc639e4"
+    },
+    "workflow-ui-1.log": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-layout-bbcfef8965d043a2be637a52be228757/workflow-ui-1.log",
+      "sha256": "3b89e63b34ae92baa08c5f8c015307744db59e6188082c8f38709a2b1bcf399a"
+    },
+    "workflow-ui-2.log": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-layout-bbcfef8965d043a2be637a52be228757/workflow-ui-2.log",
+      "sha256": "0821113603f2c019227dd157f80f4836e46f33d3ed6ac70c6c26e101f228c68a"
+    },
+    "workflow-ui-3.log": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-layout-bbcfef8965d043a2be637a52be228757/workflow-ui-3.log",
+      "sha256": "a06738001c9b32e87e307c1e35f2d72941d890009b9c4cdeb5527663c5792111"
+    },
+    "management-ui-1.log": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-layout-bbcfef8965d043a2be637a52be228757/management-ui-1.log",
+      "sha256": "1663c95faa12cbf06ac783fbada6803beb2367f76cb029613c4b95601932d849"
+    },
+    "management-ui-2.log": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-layout-bbcfef8965d043a2be637a52be228757/management-ui-2.log",
+      "sha256": "4876dd98370514d9ae5154c0b7924347f8ebf3c4310b8ed77557bf129df6f3d4"
+    },
+    "management-ui-3.log": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-layout-bbcfef8965d043a2be637a52be228757/management-ui-3.log",
+      "sha256": "5492325c3aa08f32ebbe85a98038df378cee222e2e73f15f70747ffed89b2ea4"
+    },
+    "feishu-settings-1.log": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-layout-bbcfef8965d043a2be637a52be228757/feishu-settings-1.log",
+      "sha256": "71cdb698861955b48687d9f9432bf8a3d40ef51f331b742fbc5371a35620c3e7"
+    },
+    "feishu-settings-2.log": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-layout-bbcfef8965d043a2be637a52be228757/feishu-settings-2.log",
+      "sha256": "cd6f9126a9a4107f76c6eed9f5606aaae68b8ca538904c158c94d3945a6594a6"
+    },
+    "feishu-settings-3.log": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-layout-bbcfef8965d043a2be637a52be228757/feishu-settings-3.log",
+      "sha256": "dffedced42b38adf492f535b425d2014ebc108431a4b50f143e2c4ba57aab549"
+    },
+    "ai-models-1.log": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-layout-bbcfef8965d043a2be637a52be228757/ai-models-1.log",
+      "sha256": "fd67775377201ec0873c68a4a1a25849d9e58f9abb88999ff364cfa9aebcf2a5"
+    },
+    "ai-models-2.log": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-layout-bbcfef8965d043a2be637a52be228757/ai-models-2.log",
+      "sha256": "309dc9bf881a48d1b997f8b5042583ac03effc4155941bbad983eb2c21865a9f"
+    },
+    "ai-models-3.log": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-layout-bbcfef8965d043a2be637a52be228757/ai-models-3.log",
+      "sha256": "85ae3cf493971eff7f03fd97fa2ddd4d3cafdf6261e6f5db91992cef81bb0fde"
+    },
+    "chat-ui-1.log": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-layout-bbcfef8965d043a2be637a52be228757/chat-ui-1.log",
+      "sha256": "e96d320cfb4191690bfccc95ec0a75391f01ba9b6ca8f1ad126627d18530366d"
+    },
+    "chat-ui-2.log": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-layout-bbcfef8965d043a2be637a52be228757/chat-ui-2.log",
+      "sha256": "be4a8ecfd7a0f86b9d5d32a15abaec4789e55cf6c7f10accf282c5f8d37e00aa"
+    },
+    "chat-ui-3.log": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-layout-bbcfef8965d043a2be637a52be228757/chat-ui-3.log",
+      "sha256": "35afb9d5572bab5672ad1310c825cc9be193e52ee372ea4e3d9c953b21edb7a6"
+    },
+    "backend-full.log": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-layout-bbcfef8965d043a2be637a52be228757/backend-full.log",
+      "sha256": "267525fff265fd195418b0b0ac4361780875e9ba20f6e7d3cba5966b6650e3c5"
+    },
+    "feature-regression-result.json": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-layout-bbcfef8965d043a2be637a52be228757/feature-regression-result.json",
+      "sha256": "43f29dd30db3e5ebe81c8b1e9ad24dac1d21e756f3c596db87174b8d9079bf59"
+    },
+    "build.log": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-layout-bbcfef8965d043a2be637a52be228757/build.log",
+      "sha256": "27ca05eac878415d38c0b6fe961a565aa78efa5d6e8a2e82de3bba747b8f0ca8"
+    },
+    "page-proof.json": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-layout-bbcfef8965d043a2be637a52be228757/page-proof.json",
+      "sha256": "2e0a0477532d18baeeaea6946913c40ed8e58db0ffc8688adab0d94b1ed6ea6f"
+    },
+    "visual-review.txt": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-layout-bbcfef8965d043a2be637a52be228757/visual-review.txt",
+      "sha256": "887fb99c4216254401bd09b2a2d1eec3b7fb2c89c68345c737b48de402c9f1c9"
+    },
+    "production-release.json": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-layout-bbcfef8965d043a2be637a52be228757/production-release.json",
+      "sha256": "69af32421945aaeb5662f2500fc6312c32ce30301ec8a5132ae290fa6c1106d3"
+    },
+    "production-processes.json": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-layout-bbcfef8965d043a2be637a52be228757/production-processes.json",
+      "sha256": "08f22e95fe692fa29344946b5a118c8b5765bcff489a65d2cb21f7527fd86d7c"
+    },
+    "production-idle-before.json": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-layout-bbcfef8965d043a2be637a52be228757/production-idle-before.json",
+      "sha256": "25eae71142e1c1dae220d9f13a00c27429de5c686e74adfa05d2c4fbd4d51136"
+    },
+    "production-idle-after.json": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-layout-bbcfef8965d043a2be637a52be228757/production-idle-after.json",
+      "sha256": "25eae71142e1c1dae220d9f13a00c27429de5c686e74adfa05d2c4fbd4d51136"
+    },
+    "production-live-result.json": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-layout-bbcfef8965d043a2be637a52be228757/production-live-result.json",
+      "sha256": "9320e7776b878fea4a08afabeca570cd27df8c20fe5c72f4a8c1743eaf35f427"
+    },
+    "cleanup.json": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-layout-bbcfef8965d043a2be637a52be228757/cleanup.json",
+      "sha256": "821ce854316b182cf036dac26b644ddaa931bbd44c6ba951e8ba452d66ed77d2"
+    },
+    "visual-preview.py": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-layout-bbcfef8965d043a2be637a52be228757/visual-preview.py",
+      "sha256": "4f11a765d0dfeea8af74c95cce48cdaa6ca6d68d6b6a0109d655d1cf36596bd4"
+    },
+    "run-regression.py": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-layout-bbcfef8965d043a2be637a52be228757/run-regression.py",
+      "sha256": "e9dd119d6ca4b122c933df34553c4158232e254a61ff33f5778cb17387d27d1a"
+    },
+    "frontend/ai-models-loader.mjs": {
+      "path": "C:/Users/20898/AppData/Local/Temp/spiderfly-check-layout-bbcfef8965d043a2be637a52be228757/frontend/ai-models-loader.mjs",
+      "sha256": "b8292245301058a5acdc290857b9b45cb7aa097050590fd5f17105dc91ea285e"
+    }
+  },
+  "screenshots": {
+    "layout-overview.png": {
+      "path": "C:/Users/20898/.codex/visualizations/2026/10/13/01a13341-7627-77c3-b9f1-d4c15df4f0c8/layout-overview.png",
+      "sha256": "9b47fdae1095c4219ca2029d7de5d1da35dca2d3a90e830b836b245ef0ed155d"
+    },
+    "layout-tasks.png": {
+      "path": "C:/Users/20898/.codex/visualizations/2026/10/13/01a13341-7627-77c3-b9f1-d4c15df4f0c8/layout-tasks.png",
+      "sha256": "188e30b9f0c9761f1108676b64d86c0b2d39cdd927e04f6ea6d558838bbbbf7c"
+    },
+    "layout-history-task.png": {
+      "path": "C:/Users/20898/.codex/visualizations/2026/10/13/01a13341-7627-77c3-b9f1-d4c15df4f0c8/layout-history-task.png",
+      "sha256": "613a77a3d41043be6d83573a9e6eabaf6381ab0267cd87cfc04785c7db250794"
+    },
+    "layout-history-workflow.png": {
+      "path": "C:/Users/20898/.codex/visualizations/2026/10/13/01a13341-7627-77c3-b9f1-d4c15df4f0c8/layout-history-workflow.png",
+      "sha256": "512880a77c32b3824b8e965ab135974ff21e468f7ad52e400447831defae0472"
+    },
+    "layout-config.png": {
+      "path": "C:/Users/20898/.codex/visualizations/2026/10/13/01a13341-7627-77c3-b9f1-d4c15df4f0c8/layout-config.png",
+      "sha256": "9e40e8775f495a8f104f686f23b3a62bc478fce2d3df212b7aee5d226bda579f"
+    },
+    "layout-audit.png": {
+      "path": "C:/Users/20898/.codex/visualizations/2026/10/13/01a13341-7627-77c3-b9f1-d4c15df4f0c8/layout-audit.png",
+      "sha256": "923d4ae87b08ed5d6bedff5167f1a07bb741ac19318f8d847951ca8d096349b7"
+    },
+    "layout-queue.png": {
+      "path": "C:/Users/20898/.codex/visualizations/2026/10/13/01a13341-7627-77c3-b9f1-d4c15df4f0c8/layout-queue.png",
+      "sha256": "6726ffa6dda3c5057369e0a359cfc798dfffe6df0f5d3f1415bb2143dc9f54e4"
+    },
+    "layout-schedule.png": {
+      "path": "C:/Users/20898/.codex/visualizations/2026/10/13/01a13341-7627-77c3-b9f1-d4c15df4f0c8/layout-schedule.png",
+      "sha256": "4358b81b42b70a8a751d0b26fc8ecf944a69de13e6109a5ee919dc7e2359d17a"
+    },
+    "layout-tasks-320.png": {
+      "path": "C:/Users/20898/.codex/visualizations/2026/10/13/01a13341-7627-77c3-b9f1-d4c15df4f0c8/layout-tasks-320.png",
+      "sha256": "cdad3ddabc1a4b23e120aa2add53b8ced5462d6d8fd09f419000257797d0c2b4"
+    },
+    "layout-history-320.png": {
+      "path": "C:/Users/20898/.codex/visualizations/2026/10/13/01a13341-7627-77c3-b9f1-d4c15df4f0c8/layout-history-320.png",
+      "sha256": "781ba295e61152cef23b2d9950abd5aef4a1e2dbec1ae61f695055d47aff7f7f"
+    },
+    "layout-history-320-expanded.png": {
+      "path": "C:/Users/20898/.codex/visualizations/2026/10/13/01a13341-7627-77c3-b9f1-d4c15df4f0c8/layout-history-320-expanded.png",
+      "sha256": "afc427c040482696bdd553d05e47e66421e45a6f9f6d7a1537961b18329f9c4d"
+    }
+  },
+  "visual_review": {
+    "mode": "existing-interface",
+    "rounds": 1,
+    "scored": false,
+    "result": "No required rework; two duplicate headings removed."
+  },
+  "scope": "Frontend layout and UI state only; no provider, message or business execution validation."
+}

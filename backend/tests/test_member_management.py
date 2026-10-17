@@ -59,6 +59,49 @@ class MemberManagementTests(unittest.TestCase):
         return self.request("PATCH", f"/api/users/{target['id']}",
                             {"version": target["version"], **changes}, self.admin_token)
 
+    def test_audit_history_pages_all_records_beyond_recent_limit(self):
+        with database.transaction() as conn:
+            conn.execute("DELETE FROM audit_logs")
+            for number in range(123):
+                conn.execute(
+                    "INSERT INTO audit_logs(action,summary,created_at) VALUES(?,?,?)",
+                    ("test_audit", str(number), "2026-10-15T00:00:00Z"),
+                )
+        seen = []
+        for page in range(1, 8):
+            code, result = self.request("GET", f"/api/audit-logs/history?page={page}", token=self.admin_token)
+            self.assertEqual(code, 200)
+            self.assertEqual((result["total"], result["page"], result["page_size"]), (123, page, 20))
+            self.assertEqual(len(result["items"]), 20 if page < 7 else 3)
+            seen.extend(item["summary"] for item in result["items"])
+        self.assertEqual(seen, [str(number) for number in reversed(range(123))])
+        code, recent = self.request("GET", "/api/audit-logs?limit=100", token=self.admin_token)
+        self.assertEqual(code, 200)
+        self.assertIsInstance(recent, list)
+        self.assertEqual(len(recent), 100)
+
+    def test_audit_history_empty_and_out_of_range_pages(self):
+        database.execute("DELETE FROM audit_logs")
+        code, result = self.request("GET", "/api/audit-logs/history?page=99999999999999999999", token=self.admin_token)
+        self.assertEqual(code, 200)
+        self.assertEqual(result, {"items": [], "total": 0, "page": 1, "page_size": 20})
+        database.execute("INSERT INTO audit_logs(action,created_at) VALUES('test','2026-10-15T00:00:00Z')")
+        code, result = self.request("GET", "/api/audit-logs/history?page=99&page_size=1", token=self.admin_token)
+        self.assertEqual(code, 200)
+        self.assertEqual((result["page"], result["total"], len(result["items"])), (1, 1, 1))
+
+    def test_audit_history_rejects_invalid_page_parameters(self):
+        for query in ("page=0", "page=-1", "page=abc", "page_size=0", "page_size=101"):
+            with self.subTest(query=query):
+                self.assertEqual(self.request("GET", "/api/audit-logs/history?" + query, token=self.admin_token)[0], 422)
+
+    def test_audit_history_requires_administrator(self):
+        self.assertEqual(self.request("GET", "/api/audit-logs/history")[0], 401)
+        self.assertEqual(self.request("GET", "/api/audit-logs/history", token=self.member_token)[0], 403)
+        manager = security.create_user("audit_admin", "审计管理员", "admin", "SyntheticPassword123")
+        token = security.create_session(manager["id"])[0]
+        self.assertEqual(self.request("GET", "/api/audit-logs/history", token=token)[0], 200)
+
     def test_member_cannot_list_create_edit_or_delete_accounts(self):
         paths = [("GET", "/api/users", None),
                  ("POST", "/api/users", {"username": "new", "display_name": "新增", "role": "admin", "password": "TestPassword123"}),

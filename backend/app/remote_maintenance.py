@@ -169,7 +169,9 @@ def _finish(job_id: int, status: str, note: str, started: float) -> None:
         conn.execute(
             """UPDATE remote_maintenance_jobs
                SET status=?,note=?,ended_at=?,elapsed_seconds=elapsed_seconds+?,
-                   reserved_seconds=0,reserved_tokens=0 WHERE id=?""",
+                   reserved_seconds=0,
+                   reserved_tokens=CASE WHEN calls=0 THEN 0 ELSE reserved_tokens END
+               WHERE id=?""",
             (status, ai_settings.redact(note)[:2000], utc_now(), time.monotonic() - started, job_id),
         )
 
@@ -249,6 +251,8 @@ async def generate_next() -> bool:
             remaining,
         )
         usage = reply.get("usage", {})
+        if not isinstance(usage, dict):
+            raise ValueError("模型未返回有效用量，维护停止")
         prompt_tokens, completion_tokens = usage.get("prompt_tokens"), usage.get("completion_tokens")
         if type(prompt_tokens) is not int or type(completion_tokens) is not int or min(prompt_tokens, completion_tokens) < 0:
             raise ValueError("模型未返回有效用量，维护停止")
@@ -256,8 +260,10 @@ async def generate_next() -> bool:
             conn.execute(
                 """UPDATE remote_maintenance_jobs
                    SET input_tokens=input_tokens+?,output_tokens=output_tokens+?,
-                       reserved_tokens=MAX(0,reserved_tokens-?) WHERE id=?""",
-                (prompt_tokens, completion_tokens, prompt_tokens + completion_tokens, job["id"]),
+                       reserved_tokens=0 WHERE id=?""",
+                # This job issues exactly one request. Settle its reservation only
+                # after confirmed usage; timeout/cancellation keeps the reservation.
+                (prompt_tokens, completion_tokens, job["id"]),
             )
         response = reply["choices"][0]["message"]
         calls = response.get("tool_calls") or []

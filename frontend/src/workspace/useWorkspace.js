@@ -1,4 +1,4 @@
-import { onBeforeUnmount, onMounted, provide, watch } from 'vue'
+import { onBeforeUnmount, onMounted, provide, reactive, watch } from 'vue'
 import { workspaceKey } from './context'
 import * as format from '../lib/format'
 import * as constants from '../lib/constants'
@@ -18,11 +18,13 @@ export function useWorkspace() {
   const membersState = createMembersState()
   const appsState = createAppsState()
   const workspaceState = createWorkspaceDataState()
+  const workflowPendingStarts = reactive(new Map())
 
   const auth = useAuth({
     authChecking: authState.authChecking,
     changePasswordOpen: authState.changePasswordOpen,
     clearSharedData: (...args) => workspace.clearSharedData(...args),
+    handleSessionExpired: (...args) => workspace.handleSessionExpired(...args),
     loadAll: (...args) => workspace.loadAll(...args),
     loginBusy: authState.loginBusy,
     loginForm: authState.loginForm,
@@ -41,6 +43,7 @@ export function useWorkspace() {
     executionFilters: executionsState.executionFilters,
     executionHistory: executionsState.executionHistory,
     executionHistoryLoading: executionsState.executionHistoryLoading,
+    executionHistoryError: executionsState.executionHistoryError,
     executionHistoryPage: executionsState.executionHistoryPage,
     executionHistoryTotal: executionsState.executionHistoryTotal,
     executions: executionsState.executions,
@@ -62,9 +65,11 @@ export function useWorkspace() {
     filters: tasksState.filters,
     isAdmin: auth.isAdmin,
     loadAll: (...args) => workspace.loadAll(...args),
+    handleSessionExpired: (...args) => workspace.handleSessionExpired(...args),
     me: authState.me,
     navigateTo: (...args) => workspace.navigateTo(...args),
     remoteRunTarget: workspaceState.remoteRunTarget,
+    openExecution: (...args) => executions.openExecution(...args),
     saving: workspaceState.saving,
     showToast: (...args) => workspace.showToast(...args),
     taskForm: tasksState.taskForm,
@@ -77,8 +82,11 @@ export function useWorkspace() {
 
   const schedule = useSchedule({
     executions: executionsState.executions,
+    me: authState.me,
+    runtimeTab: workspaceState.runtimeTab,
     scheduleScope: scheduleState.scheduleScope,
     tasks: tasksState.tasks,
+    view: workspaceState.view,
   })
 
   const members = useMembers({
@@ -105,10 +113,16 @@ export function useWorkspace() {
     appForm: appsState.appForm,
     isAdmin: auth.isAdmin,
     loadAll: (...args) => workspace.loadAll(...args),
+    me: authState.me,
     navigateTo: (...args) => workspace.navigateTo(...args),
+    openCreate: (...args) => workspace.openCreate(...args),
     showToast: (...args) => workspace.showToast(...args),
     uploadKey: appsState.uploadKey,
     uploading: appsState.uploading,
+    uploadError: appsState.uploadError,
+    uploadUncertain: appsState.uploadUncertain,
+    requirementsReading: appsState.requirementsReading,
+    handleSessionExpired: (...args) => workspace.handleSessionExpired(...args),
   })
 
   const workspace = useWorkspaceData({
@@ -135,6 +149,7 @@ export function useWorkspace() {
     me: authState.me,
     overview: workspaceState.overview,
     runtimeTab: workspaceState.runtimeTab,
+    saving: workspaceState.saving,
     settings: workspaceState.settings,
     stoppingExecution: executionsState.stoppingExecution,
     taskModalOpen: tasksState.taskModalOpen,
@@ -143,11 +158,22 @@ export function useWorkspace() {
     userEditForm: membersState.userEditForm,
     users: membersState.users,
     view: workspaceState.view,
+    workflowPendingStarts,
+    taskCenterKind: workspaceState.taskCenterKind,
+    createObjectOpen: workspaceState.createObjectOpen,
+    createObjectKind: workspaceState.createObjectKind,
+    runHistoryKind: workspaceState.runHistoryKind,
+    tasksLoaded: workspaceState.tasksLoaded,
+    tasksLoadError: workspaceState.tasksLoadError,
+    resetCreateSession: (...args) => apps.resetCreateSession(...args),
+    resetExecutionSession: (...args) => executions.resetExecutionSession(...args),
+    resetTaskSession: (...args) => tasks.resetTaskSession(...args),
+    refreshExecutionDetail: (...args) => executions.refreshExecutionDetail(...args),
   })
 
   watch(() => executionsState.detail.value?.id, executions.resetArtifactDownload, { flush: 'sync' })
-  watch([workspaceState.view, workspaceState.runtimeTab], ([view, tab]) => {
-    if (view === 'runtime' && tab === 'executions') {
+  watch([workspaceState.view, workspaceState.runtimeTab, workspaceState.runHistoryKind], ([view, tab, kind]) => {
+    if (view === 'runtime' && tab === 'executions' && kind === 'task') {
       executions.loadExecutionHistory({ quiet: executionsState.executionHistory.value.length > 0 })
     }
   })
@@ -177,6 +203,7 @@ export function useWorkspace() {
     ...apps,
     ...workspaceState,
     ...workspace,
+    workflowPendingStarts,
   }
   provide(workspaceKey, context)
   return context

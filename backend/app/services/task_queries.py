@@ -31,6 +31,36 @@ def validate_target_host(conn, host_id: int | None) -> None:
         raise HTTPException(status_code=409, detail="计划运行宿主机尚未批准或已撤销")
 
 
+def validate_cron_runtime(conn, task_id: int | None = None, source: str | None = None,
+                          runtime: str | None = None) -> str:
+    """Apply the first-release Cron runtime boundary without changing task data.
+
+    An explicit runtime checks an execution snapshot or candidate version. Saved
+    policy takes precedence over source inference; ordinary library imports do
+    not opt a script into a platform-owned collection/browser runtime.
+    """
+    from .. import maintenance
+    if runtime is None and task_id is not None and maintenance.available(conn):
+        policy = conn.execute('SELECT runtime FROM maintenance_policies WHERE task_id=?', (task_id,)).fetchone()
+        if policy is not None:
+            runtime = policy['runtime']
+            if runtime is None:
+                raise ValueError('无法确认 Cron 的运行方式')
+    if runtime is None:
+        if source is None:
+            if task_id is None:
+                raise ValueError('无法确认 Cron 的运行方式')
+            source = maintenance.read_source(maintenance.task_record(conn, task_id))
+        if not isinstance(source, str):
+            raise ValueError('无法确认 Cron 的运行方式')
+        from ..collection import uses_collection
+        from ..dp_runtime import uses_dp
+        runtime = ('drissionpage-v1' if uses_dp(source) else 'collection-v1') if uses_collection(source) else 'native'
+    if not isinstance(runtime, str) or runtime not in {'native', 'readonly-v1'}:
+        raise ValueError('Cron 暂不支持当前运行方式，请先改为手动、每日或每周')
+    return runtime
+
+
 TASK_SELECT = """
     SELECT
         t.*,
@@ -58,6 +88,12 @@ def _public_task(task: dict) -> dict:
             "env_path": item.get("app_env_path") or "",
         }
     )
+    if item.get('target_host_id') is not None or not item.get('first_environment_ready', 1):
+        item['runtime_ready'] = False
+    item['dependency_status'] = ('target_pending' if item.get('target_host_id') is not None else
+        ('ready' if item['runtime_ready'] else 'failed' if item.get('environment_status') == 'failed' else 'preparing'))
+    if item.get('target_host_id') is None and not item.get('first_environment_ready', 1):
+        item['next_run_at'] = None
     for key in ("enabled", "notify_on_success", "notify_on_failure", "failure_screenshot", "archived"):
         item[key] = bool(item.get(key))
     for key in ("script_path", "python_path", "app_script_path", "app_env_path"):
@@ -124,7 +160,7 @@ def _create_task_schedule_values(
     if len(clean_description) > 500:
         raise ValueError("任务说明不能超过 500 个字符")
     trigger_type = (trigger_type or "manual").strip().lower()
-    if trigger_type not in {"manual", "daily", "weekly"}:
+    if trigger_type not in {"manual", "daily", "weekly", "cron"}:
         raise ValueError("不支持的触发方式")
     try:
         config = json.loads((trigger_config or "{}").strip() or "{}")

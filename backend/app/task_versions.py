@@ -112,7 +112,7 @@ def context(task_id):
     return {'version_id':item['id'],'version':item['sequence'],'requirements':json.loads(detail['spec'])}
 
 
-def submit(task_id, source, requirements, patch, evidence, actor, *, base_id=None, origin='upload', accept_changes=False):
+def submit(task_id, source, requirements, patch, evidence, actor, *, base_id=None, origin='upload', accept_changes=False, dependency_decisions=None, filename='main.py'):
     if not isinstance(source,str) or not source.strip() or len(source.encode())>2*1024*1024: raise ValueError('Python 源码为空或超过 2MB')
     source=source.replace('\r\n','\n').replace('\r','\n')
     from .environments import _safe_requirements
@@ -121,6 +121,12 @@ def submit(task_id, source, requirements, patch, evidence, actor, *, base_id=Non
     with transaction() as conn:
         task,policy,current,details=active(conn,task_id)
         if base_id is not None and int(base_id)!=current['id']: raise ValueError('任务版本已改变，请读取最新版本后再提交')
+        analysis = None
+        if origin in CANDIDATE_ORIGINS:
+            from . import dependency_analysis as deps
+            analysis = deps.analyze(source, filename, requirements, dependency_decisions, deps.target_context(task.get('target_host_id')))
+            deps.require_resolved(analysis)
+            requirements = analysis['requirements']
         spec=normalize_patch(json.loads(details['spec']),patch,evidence)
         declared=m.declared_contract(source)
         original=json.loads(details['contract'])
@@ -148,8 +154,12 @@ def submit(task_id, source, requirements, patch, evidence, actor, *, base_id=Non
         if accept_changes:
             for key,value in guesses.items():
                 if value['value'] is not None: spec[key]={'value':value['value'],'origin':'user'}
-        seed=dict(task,requirements_text=requirements,_version_spec=json.dumps([spec,contract],sort_keys=True,ensure_ascii=False))
+        version_spec = [spec,contract]
+        if analysis is not None:
+            version_spec.append({key:analysis[key] for key in ('source_hash','user_requirements_hash','decisions','mapping_version','target')})
+        seed=dict(task,requirements_text=requirements,_version_spec=json.dumps(version_spec,sort_keys=True,ensure_ascii=False))
         candidate=m.version(conn,seed,source,approved=False,kind=origin)
+        if analysis is not None: deps.freeze(conn,candidate['id'],analysis)
         from .collection import uses_collection
         from .dp_runtime import uses_dp
         profile=('native' if origin in CANDIDATE_ORIGINS else
@@ -175,12 +185,20 @@ def submit(task_id, source, requirements, patch, evidence, actor, *, base_id=Non
 
 
 def publish(conn,task_id,version_id, *, expected_policy=None):
+    from .native_process import workflow_owned
+    from .services import cron_runs
+    from .services.task_queries import validate_cron_runtime
+    accepted = cron_runs.active_round(conn, task_id)
+    if accepted and accepted['state'] == 'pending':
+        raise ValueError('Cron 已登记且待入队，暂不能切换版本')
     task=m.task_record(conn,task_id)
     policy=conn.execute('SELECT * FROM maintenance_policies WHERE task_id=?',(task_id,)).fetchone()
     if expected_policy is not None and policy['version']!=expected_policy: raise InterruptedError('任务已有新的修改，未启用旧版本')
     item=conn.execute('SELECT * FROM task_code_versions WHERE id=? AND task_id=? AND approved=1',(version_id,task_id)).fetchone()
     if not item: raise ValueError('只能启用本任务已验证的版本')
     item=dict(item);detail=ensure_details(conn,task,item)
+    if task['trigger_type'] == 'cron':
+        validate_cron_runtime(conn, runtime=detail['runtime'])
     path=Path(item['path']).resolve()
     if not path.is_relative_to(m.RPA_APPS_DIR.resolve()) or not path.is_file() or path.read_text('utf-8-sig')!=item['source']: raise ValueError('版本文件已改变或丢失')
     env=detail['env_path']
@@ -189,8 +207,22 @@ def publish(conn,task_id,version_id, *, expected_policy=None):
         (item['path'],item['requirements'],detail['runtime'],env,utc_now(),task['app_id']))
     conn.execute('UPDATE tasks SET script_path=?,version=version+1,updated_at=? WHERE id=?',(item['path'],utc_now(),task_id))
     conn.execute('UPDATE maintenance_policies SET active_version_id=?,runtime=?,contract=?,version=version+1,updated_at=? WHERE task_id=?',(version_id,detail['runtime'],detail['contract'],utc_now(),task_id))
+    if detail['runtime'] == 'native' and detail['origin'] in CANDIDATE_ORIGINS:
+        old = conn.execute('SELECT requirements,source FROM task_code_versions WHERE id=?', (policy['active_version_id'],)).fetchone()
+        env_state = conn.execute('SELECT environment_status FROM rpa_apps WHERE id=?',(task['app_id'],)).fetchone()
+        if ((old and old['requirements'] != item['requirements']) or not task.get('first_environment_ready', 1)
+            or env_state['environment_status'] in {'pending','building'}):
+            # Keep old environments for frozen runs; confirmation requests a new revision.
+            conn.execute("UPDATE rpa_apps SET revision=revision+1,environment_status='pending',environment_error='',install_log='' WHERE id=?", (task['app_id'],))
+            conn.execute('UPDATE tasks SET first_environment_ready=0,next_run_at=CASE WHEN target_host_id IS NULL THEN NULL ELSE next_run_at END WHERE id=?', (task_id,))
     updated=dict(conn.execute('SELECT * FROM maintenance_policies WHERE task_id=?',(task_id,)).fetchone())
     for row in conn.execute("SELECT id,maintenance_snapshot FROM executions WHERE task_id=? AND status='pending'",(task_id,)).fetchall():
+        if workflow_owned(conn, row['id']):
+            continue
+        if cron_runs.has_schema(conn) and conn.execute(
+            'SELECT 1 FROM cron_rounds WHERE execution_id=? OR rerun_execution_id=?', (row['id'], row['id'])
+        ).fetchone():
+            continue
         snapshot=json.loads(row['maintenance_snapshot']) if row['maintenance_snapshot'] else json.loads(m.capture_snapshot(conn,task_id))
         snapshot.update(code_version_id=version_id,task_version=task['version']+1,policy=updated,contract=json.loads(detail['contract']),task_requirements=json.loads(detail['spec']))
         python_path=str(Path(env)/'Scripts/python.exe') if detail['runtime']=='native' else ''
@@ -331,7 +363,7 @@ def view(task_id:int,user:dict=Depends(admin_user)):
     try:
         with transaction() as conn:
             task,policy,item,detail=active(conn,task_id)
-        return {'active_version_id':item['id'],'spec':json.loads(detail['spec']),
+        return {'active_version_id':item['id'],'target_host_id':task.get('target_host_id'),'spec':json.loads(detail['spec']),
             'versions':fetch_all('''SELECT v.id,v.sequence,v.kind,v.approved,v.created_at,v.requirements,d.spec,d.base_version_id,d.origin,d.runtime,
                 u.id AS update_id,u.status AS update_status FROM task_code_versions v
                 LEFT JOIN task_version_details d ON d.version_id=v.id
@@ -351,7 +383,7 @@ async def upload(task_id:int,request:Request,user:dict=Depends(admin_user)):
         file=form.get('script')
         if not file or not file.filename.lower().endswith('.py'):raise ValueError('请上传 .py 文件')
         raw=await file.read(2*1024*1024+1)
-        result=submit(task_id,raw.decode('utf-8-sig'),str(form.get('requirements','')),json.loads(str(form.get('spec_patch','{}'))),str(form.get('evidence','')),user['id'],base_id=int(form['base_version_id']),origin='manual_candidate',accept_changes=str(form.get('accept_changes','false'))=='true')
+        result=await asyncio.to_thread(submit,task_id,raw.decode('utf-8-sig'),str(form.get('requirements','')),json.loads(str(form.get('spec_patch','{}'))),str(form.get('evidence','')),user['id'],base_id=int(form['base_version_id']),origin='manual_candidate',accept_changes=str(form.get('accept_changes','false'))=='true',dependency_decisions=json.loads(str(form.get('dependency_decisions','[]'))),filename=file.filename)
         write_audit(request,user,'version_upload',target_type='task',target_id=task_id,summary=f"上传 v{result['version']} 候选版本")
         return result
     except (ValueError,UnicodeError,KeyError) as error:raise HTTPException(400,str(error)) from None

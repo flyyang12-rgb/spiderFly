@@ -1,18 +1,25 @@
-import { computed, reactive, ref } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { baseNavItems, adminNavItems, runtimeTabs, managementTabs } from '../lib/constants'
 import { request } from '../lib/api'
 
 export function createWorkspaceDataState() {
   const view = ref('overview')
   const runtimeTab = ref('active')
-  const managementTab = ref('apps')
+  const managementTab = ref('services')
+  const taskCenterKind = ref('all')
+  const createObjectOpen = ref(false)
+  const createObjectKind = ref('task')
+  const runHistoryKind = ref('task')
+  const tasksLoaded = ref(false)
+  const tasksLoadError = ref('')
   const remoteRunTarget = ref(null)
   const loading = ref(false)
   const overview = ref({})
   const settings = ref({})
   const saving = ref(false)
   const toast = reactive({ visible: false, type: 'success', title: '', message: '' })
-  return { view, runtimeTab, managementTab, remoteRunTarget, loading, overview, settings, saving, toast }
+  return { view, runtimeTab, managementTab, remoteRunTarget, loading, overview, settings, saving, toast,
+    taskCenterKind, createObjectOpen, createObjectKind, runHistoryKind, tasksLoaded, tasksLoadError }
 }
 
 export function useWorkspaceData({
@@ -39,6 +46,7 @@ export function useWorkspaceData({
   me,
   overview,
   runtimeTab,
+  saving,
   settings,
   stoppingExecution,
   taskModalOpen,
@@ -47,10 +55,37 @@ export function useWorkspaceData({
   userEditForm,
   users,
   view,
+  workflowPendingStarts,
+  taskCenterKind,
+  createObjectOpen,
+  createObjectKind,
+  runHistoryKind,
+  tasksLoaded,
+  tasksLoadError,
+  resetCreateSession,
+  resetExecutionSession,
+  resetTaskSession,
+  refreshExecutionDetail,
 }) {
   let toastTimer = 0
 
   let pollTimer = 0
+  let sessionGeneration = 0
+  let loadGeneration = 0
+  let disposed = false
+  const controllers = new Set()
+
+  function invalidateRequests() {
+    sessionGeneration += 1
+    loadGeneration += 1
+    for (const controller of controllers) controller.abort()
+    controllers.clear()
+    loading.value = false
+  }
+
+  function currentRequest(owner, session, generation) {
+    return !disposed && Boolean(owner) && me.value === owner && session === sessionGeneration && generation === loadGeneration
+  }
 
   const navItems = computed(() => (isAdmin.value ? [...baseNavItems, ...adminNavItems] : baseNavItems))
 
@@ -69,8 +104,22 @@ export function useWorkspaceData({
   }
 
   function clearSharedData() {
+    invalidateRequests()
+    resetCreateSession?.()
+    resetExecutionSession?.()
+    resetTaskSession?.()
+    createObjectOpen.value = false
+    createObjectKind.value = 'task'
+    taskCenterKind.value = 'all'
+    runHistoryKind.value = 'task'
+    tasksLoaded.value = false
+    tasksLoadError.value = ''
+    saving.value = false
+    workflowPendingStarts?.clear()
     aiOpen.value = false
     aiSourceThread.value = null
+    taskModalOpen.value = false
+    deletingTask.value = null
     stoppingExecution.value = null
     editingUser.value = null
     deletingUser.value = null
@@ -108,42 +157,62 @@ export function useWorkspaceData({
       return
     }
     if (!quiet) loading.value = true
+    const owner = me.value
+    const session = sessionGeneration
+    const generation = ++loadGeneration
+    const controller = new AbortController()
+    controllers.add(controller)
+    const current = () => currentRequest(owner, session, generation)
     try {
-      const baseResults = await Promise.all([
-        request('/overview'),
-        request('/settings'),
-        request('/tasks'),
-        request('/executions?limit=100'),
-      ])
-      overview.value = baseResults[0]
-      settings.value = baseResults[1]
-      tasks.value = baseResults[2]
-      executions.value = baseResults[3]
-      if (view.value === 'runtime' && runtimeTab.value === 'executions') {
+      const paths = ['/overview', '/settings', '/tasks', '/executions?limit=100']
+      const baseResults = await Promise.allSettled(paths.map(path => request(path, { signal: controller.signal })))
+      if (!current()) return
+      if (baseResults.some(result => result.status === 'rejected' && result.reason?.status === 401)) {
+        handleSessionExpired()
+        return
+      }
+      const targets = [overview, settings, tasks, executions]
+      baseResults.forEach((result, index) => {
+        if (result.status === 'fulfilled') {
+          if ((index === 2 || index === 3) && !Array.isArray(result.value)) {
+            if (index === 2) { tasksLoaded.value = false; tasksLoadError.value = '单任务响应不完整，请重试读取' }
+            return
+          }
+          targets[index].value = result.value
+          if (index === 2) { tasksLoaded.value = true; tasksLoadError.value = '' }
+        } else if (index === 2) {
+          tasksLoaded.value = false
+          tasksLoadError.value = result.reason?.message || '单任务暂时没有载入，请重试'
+        }
+      })
+      const failed = baseResults.filter(result => result.status === 'rejected')
+      if (failed.length && !quiet) showToast('error', '部分数据暂时没有载入', failed.map(result => result.reason?.message || '连接失败').join('；'))
+      if (view.value === 'runtime' && runtimeTab.value === 'executions' && runHistoryKind.value === 'task') {
         await loadExecutionHistory({ quiet: true })
       }
-      if (detail.value) {
-        const detailId = detail.value.id
-        const refreshed = await request('/executions/' + detailId)
-        if (detail.value?.id === detailId) detail.value = refreshed
-      }
+      if (!current()) return
+      if (detail.value) await refreshExecutionDetail?.({ quiet: true })
+      if (!current()) return
       if (includeAdmin && isAdmin.value) {
-        const adminResults = await Promise.all([request('/users'), request('/audit-logs?limit=100')])
-        users.value = adminResults[0]
-        auditLogs.value = adminResults[1]
+        const adminResults = await Promise.allSettled([request('/users', { signal: controller.signal }), request('/audit-logs?limit=100', { signal: controller.signal })])
+        if (!current()) return
+        if (adminResults.some(result => result.status === 'rejected' && result.reason?.status === 401)) { handleSessionExpired(); return }
+        if (adminResults[0].status === 'fulfilled') users.value = adminResults[0].value
+        if (adminResults[1].status === 'fulfilled') auditLogs.value = adminResults[1].value
       }
     } catch (error) {
+      if (!current() || error.name === 'AbortError') return
       if (error.status === 401) handleSessionExpired()
       else if (!quiet) showToast('error', '数据暂时没有载入', error.message)
     } finally {
-      loading.value = false
-      schedulePoll()
+      controllers.delete(controller)
+      if (current()) { loading.value = false; schedulePoll() }
     }
   }
 
   function schedulePoll() {
     window.clearTimeout(pollTimer)
-    if (!me.value) return
+    if (!me.value || disposed) return
     const delay = activeExecutions.value.length || buildingTasks.value.length ? 1200 : 5000
     pollTimer = window.setTimeout(async () => {
       await loadAll({ quiet: true, includeAdmin: false })
@@ -151,6 +220,9 @@ export function useWorkspaceData({
   }
 
   function navigateTo(target, tab = null) {
+    if (target === 'management' && ['ai', 'settings', 'users'].includes(tab)) tab = 'services'
+    if (target === 'workflows') { taskCenterKind.value = 'workflow'; target = 'tasks' }
+    if (target === 'management' && tab === 'apps') { openCreate('task', { preserveDraft: true }); return }
     if (target === 'management' && !isAdmin.value) {
       view.value = 'overview'
       showToast('error', '此区域仅管理员可用', '普通成员可使用工作台、任务中心和运行中心')
@@ -161,8 +233,18 @@ export function useWorkspaceData({
     view.value = target
   }
 
+  function openCreate(kind = 'task', { preserveDraft = false } = {}) {
+    if (!isAdmin.value) { showToast('error', '请联系管理员新建任务或工作流'); return }
+    if (!preserveDraft) resetCreateSession?.()
+    view.value = 'tasks'
+    createObjectKind.value = kind === 'workflow' ? 'workflow' : 'task'
+    createObjectOpen.value = true
+  }
+
   function handleKeydown(event) {
     if (event.key !== 'Escape') return
+    if (event.defaultPrevented || event.target?.closest?.('.workflow-dialog')) return
+    if (saving.value) return
     taskModalOpen.value = false
     detail.value = null
     deletingTask.value = null
@@ -175,9 +257,13 @@ export function useWorkspaceData({
   }
 
   function dispose() {
+    disposed = true
+    invalidateRequests()
     stopPolling()
     window.clearTimeout(toastTimer)
   }
+
+  watch(me, (owner, previous) => { if (owner !== previous) clearSharedData() }, { flush: 'sync' })
 
   return {
     navItems,
@@ -189,6 +275,7 @@ export function useWorkspaceData({
     loadAll,
     schedulePoll,
     navigateTo,
+    openCreate,
     handleKeydown,
     stopPolling,
     dispose,

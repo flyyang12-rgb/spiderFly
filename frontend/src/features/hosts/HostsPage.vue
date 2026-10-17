@@ -3,14 +3,15 @@ import { computed, nextTick, ref, watch } from 'vue'
 import { formatFileSize, formatTime } from '../../lib/format'
 import { useWorkspaceContext } from '../../workspace/context'
 import { activeRunStates, hostStateLabels, runStatusLabels, useHosts } from './useHosts'
+import EnvironmentDetails from './EnvironmentDetails.vue'
 
-const { handleSessionExpired } = useWorkspaceContext()
+const { handleSessionExpired, isSuperAdmin } = useWorkspaceContext()
 const props = defineProps({ openRunId: { type: Number, default: null } })
 const emit = defineEmits(['run-opened'])
 const {
   hosts, runs, loading, refreshing, loadError, actionError, notice, busy, enrollment,
   selectedRunId, runDetail, detailLoading, detailError,
-  refresh, createEnrollment, hostAction, setMode, stopRun,
+  refresh, createEnrollment, hostAction, upgradeHost, setMode, stopRun,
   activateCandidate, dismissCandidate,
   openRun, closeRun, loadRunDetail,
 } = useHosts({ onSessionExpired: handleSessionExpired })
@@ -18,14 +19,16 @@ const {
 const confirmation = ref(null)
 const codeInput = ref(null)
 const detailHeading = ref(null)
+const connectOpen = ref(false)
+const expandedHosts = ref(new Set())
 let runTrigger = null
-const hostFilter = ref('all')
+const hostFilter = ref('current')
 const runFilter = ref('all')
 const pendingCount = computed(() => hosts.value.filter((host) => host.approval_status === 'pending').length)
 const readyCount = computed(() => hosts.value.filter((host) => host.state === 'idle').length)
 const activeCount = computed(() => runs.value.filter((run) => activeRunStates.has(run.status)).length)
 const visibleHosts = computed(() => hosts.value.filter((host) => hostFilter.value === 'all'
-  || (hostFilter.value === 'pending' ? host.approval_status === 'pending' : host.approval_status === 'approved')))
+  || (hostFilter.value === 'current' ? ['pending', 'approved'].includes(host.approval_status) : host.approval_status === hostFilter.value)))
 const visibleRuns = computed(() => runs.value.filter((run) => runFilter.value === 'all'
   || (runFilter.value === 'active' ? activeRunStates.has(run.status) : ['failed', 'timed_out', 'uncertain'].includes(run.status))))
 
@@ -38,17 +41,37 @@ function tone(state) {
 }
 
 function hostHint(host) {
-  if (host.approval_status === 'pending') return '核对这台电脑的名称和机器标识后批准接入。'
-  if (host.approval_status === 'rejected') return '申请已拒绝，这台电脑不能接收任务。'
-  if (host.approval_status === 'revoked') return '身份已撤销，这台电脑不能继续连接主控。'
-  if (host.state === 'uncertain') return '尚未确认旧运行已结束，继续保留占用，不派发新任务。'
-  if (!host.online) return '等待这台电脑重新连接，已排队任务保持原目标。'
-  if (host.state === 'stopping') return '停止请求已发出，等待执行端确认结束。'
-  if (host.state === 'running') return '正在执行任务，后续任务会留在这台电脑的队列中。'
-  if (!host.dispatch_enabled) return '主控调度已关闭；开启后仍需这台电脑本地同意调度。'
-  if (!host.agent_dispatch_enabled) return '请在这台电脑上运行 start.ps1 -Dispatch，开启本机调度。'
-  if (!host.interactive_session) return '这台电脑没有可用的交互式会话，请先登录 Windows 桌面。'
-  return '已连接，主控和本机均允许调度，可以领取任务。'
+  if (host.approval_status === 'pending') return '核对机器标识后批准'
+  if (['rejected', 'revoked'].includes(host.approval_status)) return ''
+  if (host.upgrade_pending) return '暂缓新派发'
+  if (host.state === 'uncertain') return '旧运行尚未确认结束，暂停派发新任务。'
+  if (!host.online) return '等待重新连接，排队任务保留原目标。'
+  if (host.state === 'stopping') return '已请求停止，等待执行端确认。'
+  if (host.state === 'running') return ''
+  if (host.environment_reporting_supported === false) return '升级 Agent 至 0.4.0 后可校验业务环境并回传依赖版本'
+  if (!host.dispatch_enabled) return '主控调度已关闭'
+  if (!host.agent_dispatch_enabled) return '本机调度已关闭，请在 Agent 托盘开启'
+  if (!host.interactive_session) return '请先登录此电脑的 Windows 桌面。'
+  return ''
+}
+
+function upgradeReason(host) {
+  if (!host.remote_upgrade_supported) return '首次需在目标电脑更新到 0.5.0'
+  if (!host.online) return '目标电脑离线'
+  if (host.upgrade_pending) return '正在升级或等待结果确认'
+  if (host.active_run_id) return '任务结束后可升级'
+  return `升级至 ${host.current_agent_version}`
+}
+
+function upgradeLabel(job) {
+  return { queued: '等待升级', downloading: '正在下载', installing: '正在升级',
+    awaiting_reconnect: '等待重连', succeeded: `已升级至 ${job.target_version}`,
+    failed: '升级失败', uncertain: '升级结果待确认', expired: '升级请求已过期', cancelled: '升级已取消' }[job.status] || job.status
+}
+
+function toggleHostDetails(id) {
+  if (expandedHosts.value.has(id)) expandedHosts.value.delete(id)
+  else expandedHosts.value.add(id)
 }
 
 function artifactUrl(value) {
@@ -59,7 +82,7 @@ function artifactUrl(value) {
 }
 
 function eventLabel(event) {
-  return { started: '开始', stdout: '输出', stderr: '错误输出', finished: '结束', uncertain: '状态待确认' }[event.kind] || event.kind
+  return { started: '开始', stdout: '输出', stderr: '错误输出', finished: '结束', uncertain: '状态待确认', environment: '环境校验' }[event.kind] || event.kind
 }
 
 async function showRun(id, event) {
@@ -103,17 +126,7 @@ async function copyCode() {
 </script>
 
 <template>
-  <section class="hosts-page" aria-labelledby="hosts-heading">
-    <header class="host-heading">
-      <div>
-        <h2 id="hosts-heading">宿主机</h2>
-        <p>接入局域网电脑，查看远程运行。运行电脑和任务在任务中心设置。</p>
-      </div>
-      <button class="host-button" type="button" :disabled="refreshing" @click="refresh()">
-        {{ refreshing ? '正在刷新…' : '刷新状态' }}
-      </button>
-    </header>
-
+  <section class="hosts-page" aria-label="宿主机管理">
     <p v-if="notice" class="host-feedback success" role="status">{{ notice }}</p>
     <p v-if="actionError" class="host-feedback error" role="alert">{{ actionError }}</p>
     <div v-if="loadError" class="host-feedback error" role="alert">
@@ -123,74 +136,76 @@ async function copyCode() {
     <div v-if="loading" class="host-empty" role="status">正在载入宿主机和远程运行…</div>
 
     <template v-else>
-      <div class="host-metrics" aria-label="宿主机概况">
-        <div><span>已登记电脑</span><strong>{{ hosts.length }}</strong></div>
-        <div><span>待批准</span><strong>{{ pendingCount }}</strong></div>
-        <div><span>调度空闲</span><strong>{{ readyCount }}</strong></div>
-        <div><span>近期未结束</span><strong>{{ activeCount }}</strong></div>
-      </div>
-
-      <section class="host-panel" aria-labelledby="enrollment-heading">
-        <header class="host-section-heading"><h3 id="enrollment-heading">接入新电脑</h3></header>
-        <ol class="host-steps">
-          <li>生成一次性接入码并下载 Agent 安装包。</li>
-          <li>在新电脑解压后双击“安装并接入Agent”。</li>
-          <li>填写主控地址、接入码和电脑名称。</li>
-          <li>电脑出现在下方待批准列表，管理员核对后批准。</li>
-          <li>在两台电脑上开启调度，再到任务中心选择运行电脑并启动任务。</li>
-        </ol>
-        <p class="host-help">Agent 需要已登录的 Windows 桌面。请在另一台电脑接入，无需部署数据库、模型或知识库。</p>
-        <div class="host-card-actions">
-          <button class="host-button primary" type="button" :disabled="Boolean(busy)" @click="createEnrollment">
-            {{ busy === 'enrollment' ? '正在生成…' : '生成一次性接入码' }}
-          </button>
-          <a class="host-button" href="/api/hosts/agent-download" download>下载 Agent 安装包</a>
-        </div>
-        <div v-if="enrollment" class="host-enrollment" aria-live="polite">
-          <label for="host-enrollment-code">接入码</label>
-          <div class="host-copy-row">
-            <input id="host-enrollment-code" ref="codeInput" :value="enrollment.code" readonly autocomplete="off" spellcheck="false" @focus="$event.target.select()" />
-            <button class="host-button" type="button" @click="copyCode">复制</button>
+      <section class="host-panel host-computers" aria-labelledby="host-list-heading">
+        <header class="host-section-heading host-list-heading">
+          <div class="host-list-title"><h2 id="host-list-heading">电脑</h2><span>{{ visibleHosts.length }} 台</span></div>
+          <div class="host-toolbar">
+            <select id="host-filter" v-model="hostFilter" aria-label="电脑范围"><option value="current">当前接入</option><option value="pending">待批准</option><option value="approved">已批准</option><option value="all">全部电脑</option></select>
+            <button class="host-button" type="button" :disabled="refreshing" @click="refresh()">{{ refreshing ? '正在刷新…' : '刷新' }}</button>
+            <button class="host-button" :class="{ primary: !connectOpen }" type="button" :aria-expanded="connectOpen" aria-controls="host-enrollment-panel" @click="connectOpen = !connectOpen">{{ connectOpen ? '收起接入' : '接入新电脑' }}</button>
           </div>
-          <p>有效期至 {{ formatTime(enrollment.expires_at) }}，只供一台电脑使用。离开本页后无法再次查看接入码。</p>
-          <label for="host-server-url">主控地址</label>
-          <input id="host-server-url" :value="enrollment.server_url" readonly @focus="$event.target.select()" />
-          <p>填写新电脑能访问的主控地址。若显示 127.0.0.1 或 localhost，请改用主控的局域网 IP。</p>
-          <button class="host-button quiet" type="button" @click="enrollment = null">隐藏接入码</button>
-        </div>
-      </section>
-
-      <section class="host-panel" aria-labelledby="host-list-heading">
-        <header class="host-section-heading">
-          <div><h3 id="host-list-heading">已登记的宿主机</h3><p>状态自动刷新。主控和 Agent 都开启调度、桌面会话可用时，电脑才会领取任务。</p></div>
-          <div class="host-filter"><label for="host-filter">显示</label><select id="host-filter" v-model="hostFilter"><option value="all">全部电脑</option><option value="pending">待批准</option><option value="approved">已批准</option></select></div>
         </header>
-        <div v-if="!visibleHosts.length" class="host-empty"><strong>{{ hosts.length ? '没有符合条件的电脑' : '还没有电脑申请接入' }}</strong><p>{{ hosts.length ? '切换筛选查看其他电脑。' : '生成接入码，在另一台 Windows 电脑启动 Agent 后，申请会显示在这里。' }}</p></div>
+        <div class="host-summary" aria-label="宿主机概况"><span>已登记 <strong>{{ hosts.length }}</strong></span><span>待批准 <strong>{{ pendingCount }}</strong></span><span>可调度 <strong>{{ readyCount }}</strong></span><span>未结束运行 <strong>{{ activeCount }}</strong></span></div>
+
+        <section v-show="connectOpen" id="host-enrollment-panel" class="host-connect" aria-label="接入新电脑">
+          <div class="host-card-actions">
+            <button class="host-button primary" type="button" :disabled="Boolean(busy)" @click="createEnrollment">{{ busy === 'enrollment' ? '正在生成…' : '生成接入码' }}</button>
+            <a class="host-button" href="/api/hosts/agent-download" download>下载 Agent 安装包</a>
+          </div>
+          <details class="host-guide">
+            <summary>接入步骤</summary>
+            <ol class="host-steps">
+              <li>在另一台已登录 Windows 桌面的电脑上，解压 Agent，双击“安装并接入Agent”，填写主控地址、接入码和电脑名称。</li>
+              <li>在下方核对名称与机器标识，批准接入。</li>
+              <li>主控和 Agent 都开启调度后，在任务中心选择运行电脑。</li>
+            </ol>
+          </details>
+          <div v-if="enrollment" class="host-enrollment" aria-live="polite">
+            <label for="host-enrollment-code">接入码</label>
+            <div class="host-copy-row"><input id="host-enrollment-code" ref="codeInput" :value="enrollment.code" readonly autocomplete="off" spellcheck="false" @focus="$event.target.select()" /><button class="host-button" type="button" @click="copyCode">复制</button></div>
+            <p>{{ formatTime(enrollment.expires_at) }} 到期 · 仅限一台电脑 · 离开本页后无法再次查看</p>
+            <label for="host-server-url">主控地址</label>
+            <input id="host-server-url" :value="enrollment.server_url" readonly @focus="$event.target.select()" />
+            <p>若为 127.0.0.1 或 localhost，请改用主控的局域网 IP。</p>
+            <button class="host-button quiet" type="button" @click="enrollment = null">隐藏接入码</button>
+          </div>
+        </section>
+
+        <div v-if="!visibleHosts.length" class="host-empty"><strong>{{ hostFilter === 'pending' ? '暂无待批准电脑' : hostFilter === 'approved' ? '暂无已批准电脑' : hostFilter === 'all' ? '暂无已登记电脑' : '暂无当前接入的电脑' }}</strong></div>
         <div v-else class="host-list">
+          <div class="host-column-labels" aria-hidden="true"><span>电脑</span><span>状态</span><span>操作</span></div>
           <article v-for="host in visibleHosts" :key="host.id" class="host-card">
-            <div class="host-card-header"><div class="host-name"><h4>{{ host.name }}</h4><span class="host-subtle">#{{ host.id }} · Agent {{ host.agent_version || '版本未知' }}</span></div><span class="host-badge" :class="tone(host.state)"><i aria-hidden="true"></i>{{ hostStateLabels[host.state] || host.state }}</span></div>
-            <p class="host-machine-id">机器标识：<code>{{ host.machine_id }}</code></p>
-            <p class="host-card-hint">{{ hostHint(host) }}</p>
-            <dl class="host-facts">
-              <div><dt>连接</dt><dd>{{ host.online ? '在线' : '离线' }}</dd></div>
-              <div><dt>主控调度</dt><dd>{{ host.dispatch_enabled ? '已开启' : '已关闭' }}</dd></div>
-              <div><dt>本机调度</dt><dd>{{ host.agent_dispatch_enabled ? '已开启' : '已关闭' }}</dd></div>
-              <div><dt>桌面会话</dt><dd>{{ host.interactive_session ? '可用' : '不可用' }}</dd></div>
-            </dl>
-            <div class="host-card-footer"><span class="host-subtle">最近心跳 {{ formatTime(host.last_seen_at) }}</span>
-              <div class="host-card-actions">
+            <div class="host-row">
+              <div class="host-name"><h3>{{ host.name }}</h3><p v-if="host.approval_status === 'pending'" class="host-machine-id">机器标识：<code>{{ host.machine_id }}</code></p><span v-else class="host-connection">{{ host.online ? '在线' : '离线' }} · Agent {{ host.agent_version || '?' }}</span></div>
+              <div class="host-row-state"><span class="host-badge" :class="tone(host.state)"><i aria-hidden="true"></i>{{ host.state === 'non_dispatch' ? '未就绪' : hostStateLabels[host.state] || host.state }}</span><p v-if="hostHint(host)" class="host-card-hint">{{ hostHint(host) }}</p></div>
+              <div class="host-card-actions host-row-actions">
                 <template v-if="host.approval_status === 'pending'">
                   <button class="host-button primary" type="button" :disabled="Boolean(busy)" @click="hostAction(host, 'approve')">{{ busy === `host:${host.id}` ? '处理中…' : '批准接入' }}</button>
                   <button class="host-button" type="button" :disabled="Boolean(busy)" @click="confirmation = { host, action: 'reject' }">拒绝</button>
                 </template>
                 <template v-else-if="host.approval_status === 'approved'">
+                  <button v-if="isSuperAdmin && host.agent_update_available" class="host-button" type="button" :title="upgradeReason(host)" :aria-label="`${host.name}：${upgradeReason(host)}`" :disabled="Boolean(busy) || !host.remote_upgrade_supported || !host.online || Boolean(host.active_run_id) || host.upgrade_pending" @click="upgradeHost(host)">{{ busy === `upgrade:${host.id}` ? '提交中…' : '升级' }}</button>
                   <button v-if="host.active_run_id" class="host-button" type="button" @click="showRun(host.active_run_id, $event)">查看运行 #{{ host.active_run_id }}</button>
                   <button class="host-button" type="button" :disabled="Boolean(busy) || Boolean(host.active_run_id)" @click="setMode(host)">{{ busy === `host:${host.id}` ? '处理中…' : host.dispatch_enabled ? '关闭主控调度' : '开启主控调度' }}</button>
-                  <button class="host-button danger" type="button" :disabled="Boolean(busy)" @click="confirmation = { host, action: 'revoke' }">撤销接入</button>
                 </template>
+                <button class="host-button quiet" type="button" :aria-expanded="expandedHosts.has(host.id)" :aria-controls="`host-machine-${host.id}`" :aria-label="`${host.name}：${expandedHosts.has(host.id) ? '收起' : '查看'}详情`" @click="toggleHostDetails(host.id)">{{ expandedHosts.has(host.id) ? '收起' : '详情' }}</button>
               </div>
             </div>
+            <p v-if="host.approval_status === 'approved' && host.agent_update_available && host.remote_upgrade_supported === false" class="host-help">首次需在目标电脑更新到 0.5.0，之后可在此升级。</p>
+            <div v-if="host.agent_update" class="host-update-status" aria-live="polite">
+              <details v-if="['failed', 'uncertain'].includes(host.agent_update.status)"><summary>{{ upgradeLabel(host.agent_update) }}</summary><p>{{ host.agent_update.message }}</p></details>
+              <span v-else>{{ upgradeLabel(host.agent_update) }}</span>
+            </div>
             <p v-if="host.active_run_id && host.approval_status === 'approved'" class="host-help">更改调度模式前，请先停止当前运行并等待电脑确认。</p>
+            <div v-show="expandedHosts.has(host.id)" :id="`host-machine-${host.id}`" class="host-machine-info">
+              <dl class="host-facts">
+                <div><dt>连接</dt><dd>{{ host.online ? '在线' : '离线' }}</dd></div>
+                <div><dt>主控调度</dt><dd>{{ host.dispatch_enabled ? '已开启' : '已关闭' }}</dd></div>
+                <div><dt>本机调度</dt><dd>{{ host.agent_dispatch_enabled ? '已开启' : '已关闭' }}</dd></div>
+                <div><dt>桌面会话</dt><dd>{{ host.interactive_session ? '可用' : '不可用' }}</dd></div>
+              </dl>
+              <div class="host-machine-meta"><div><p>#{{ host.id }} · Agent {{ host.agent_version || '版本未知' }}</p><p v-if="host.approval_status !== 'pending'">机器标识：<code>{{ host.machine_id }}</code></p><p>最近心跳 {{ formatTime(host.last_seen_at) }}</p></div><button v-if="host.approval_status === 'approved'" class="host-button danger" type="button" :disabled="Boolean(busy)" @click="confirmation = { host, action: 'revoke' }">撤销接入</button></div>
+            </div>
             <div v-if="confirmation?.host.id === host.id" class="host-confirm" @keydown.esc="confirmation = null">
               <p>{{ confirmation.action === 'revoke' ? `撤销「${host.name}」后，它将无法继续连接主控。` : `拒绝「${host.name}」的接入申请？` }}</p>
               <div class="host-card-actions"><button class="host-button" type="button" :disabled="Boolean(busy)" @click="confirmation = null">取消</button><button class="host-button danger" type="button" :disabled="Boolean(busy)" @click="confirmAction">{{ busy ? '处理中…' : confirmation.action === 'revoke' ? '确认撤销' : '确认拒绝' }}</button></div>
@@ -200,8 +215,8 @@ async function copyCode() {
       </section>
 
       <section class="host-panel" aria-labelledby="remote-runs-heading">
-        <header class="host-section-heading"><div><h3 id="remote-runs-heading">远程运行记录</h3><p>显示最近 {{ runs.length }} 条，最多 100 条。本机运行请到运行中心查看。</p></div><div class="host-filter"><label for="run-filter">显示</label><select id="run-filter" v-model="runFilter"><option value="all">全部状态</option><option value="active">尚未结束</option><option value="attention">失败或待确认</option></select></div></header>
-        <div v-if="!visibleRuns.length" class="host-empty"><strong>{{ runs.length ? '没有符合条件的运行' : '还没有远程运行' }}</strong><p>{{ runs.length ? '切换筛选查看其他状态。' : '在任务中心选择运行电脑并启动后，远程运行记录会显示在这里。' }}</p></div>
+        <header class="host-section-heading"><div><h3 id="remote-runs-heading">远程运行记录</h3><p>最近 {{ runs.length }} 条，最多 100 条</p></div><div class="host-filter"><select id="run-filter" v-model="runFilter" aria-label="远程运行状态"><option value="all">全部状态</option><option value="active">尚未结束</option><option value="attention">失败或待确认</option></select></div></header>
+        <div v-if="!visibleRuns.length" class="host-empty"><strong>{{ runs.length ? '没有符合条件的运行' : '暂无远程运行' }}</strong></div>
         <ul v-else class="host-runs">
           <li v-for="run in visibleRuns" :key="run.id" :class="{ selected: selectedRunId === run.id }">
             <div class="host-run-summary"><strong>{{ run.task_name }}</strong><span>#{{ run.id }} · v{{ run.version_sequence ?? '?' }} · {{ run.host_name }} · {{ formatTime(run.created_at) }}</span><p v-if="run.waiting_reason">{{ run.waiting_reason }}</p></div>
@@ -237,6 +252,7 @@ async function copyCode() {
             <div v-for="event in runDetail.events" :key="event.seq" class="host-log-entry" :class="{ 'log-error': event.kind === 'stderr' }"><span class="host-log-label">#{{ event.seq }} {{ eventLabel(event) }}{{ event.status ? ' · ' + (runStatusLabels[event.status] || event.status) : '' }}</span><pre v-if="event.text">{{ event.text }}</pre></div>
           </div>
           <p v-else class="host-help">{{ runDetail.status === 'queued' ? '任务尚未开始，等待目标电脑领取。' : '执行端尚未回传日志。' }}</p>
+          <EnvironmentDetails :environment="runDetail.environment" :status="runDetail.environment_status" />
           <h4 class="host-subheading">结果文件</h4>
           <ul v-if="runDetail.artifacts?.length" class="host-artifacts"><li v-for="artifact in runDetail.artifacts" :key="artifact.name"><div><strong>{{ artifact.name }}</strong><span>{{ formatFileSize(artifact.size) }}</span></div><a v-if="artifactUrl(artifact.download_url)" class="host-button" :href="artifactUrl(artifact.download_url)" :aria-label="`下载 ${artifact.name}`" download>下载</a><span v-else class="host-help">下载地址不可用</span></li></ul>
           <p v-else class="host-help">暂未收到结果文件。脚本需要把结果写入本次产物目录。</p>
@@ -254,9 +270,8 @@ async function copyCode() {
 .hosts-page h3 { color: var(--host-ink); font-size: 15px; line-height: 22px; }
 .hosts-page h4 { color: var(--host-ink); font-size: 14px; line-height: 20px; }
 .hosts-page code { font-family: 'SFMono-Regular', Consolas, monospace; overflow-wrap: anywhere; }
-.host-heading, .host-section-heading, .host-card-header, .host-card-footer, .host-detail-summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; }
-.host-heading p, .host-section-heading p { margin-top: 4px; color: var(--host-muted); font-size: 12px; }
-.host-heading { align-items: flex-start; }
+.host-section-heading, .host-detail-summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; }
+.host-section-heading p { margin-top: 4px; color: var(--host-muted); font-size: 12px; }
 .host-button { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; min-height: 36px; padding: 7px 12px; border: 1px solid var(--host-border); border-radius: 8px; background: #fff; color: var(--host-text); font-family: inherit; font-size: 13px; font-weight: 500; line-height: 20px; text-decoration: none; white-space: nowrap; cursor: pointer; transition: background-color 140ms, border-color 140ms, transform 140ms; }
 .host-button:hover:not(:disabled) { border-color: #aeb8ae; background: var(--host-soft); }
 .host-button:active:not(:disabled) { transform: translateY(1px); }
@@ -270,13 +285,21 @@ async function copyCode() {
 .host-feedback { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding: 12px 16px; border: 1px solid var(--host-border); border-radius: 8px; overflow-wrap: anywhere; }
 .host-feedback.success { background: #edf8f0; border-color: #bddfc9; color: #176b35; }
 .host-feedback.error { background: #fff4f0; border-color: #efd0c6; color: #a53721; }
-.host-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
-.host-metrics > div { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 16px; border: 1px solid var(--host-border); border-radius: 12px; background: #fff; }
-.host-metrics span { color: var(--host-muted); font-size: 12px; }
-.host-metrics strong { color: var(--host-ink); font-size: 24px; line-height: 32px; font-weight: 600; }
 .host-panel { min-width: 0; padding: 20px; border: 1px solid var(--host-border); border-radius: 12px; background: #fff; }
 .host-section-heading { margin-bottom: 16px; align-items: flex-start; }
-.host-steps { display: grid; gap: 8px; margin: 0 0 12px; padding-left: 20px; }
+.host-list-heading { align-items: center; margin-bottom: 8px; }
+.host-list-title { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.host-list-title h2 { font-size: 16px; line-height: 24px; }
+.host-list-title > span, .host-connection { color: var(--host-muted); font-size: 12px; }
+.host-toolbar { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.hosts-page .host-toolbar select { width: auto; min-width: 124px; height: 36px; }
+.host-summary { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 20px; padding-bottom: 16px; color: var(--host-muted); font-size: 12px; }
+.host-summary strong { margin-left: 3px; color: var(--host-text); font-weight: 500; font-variant-numeric: tabular-nums; }
+.host-connect { display: grid; gap: 12px; margin-bottom: 16px; padding: 16px; border-radius: 8px; background: var(--host-soft); }
+.host-connect .host-guide { margin-top: 0; }
+.host-guide { margin-top: 16px; color: var(--host-muted); font-size: 12px; }
+.host-guide summary { width: fit-content; cursor: pointer; }
+.host-steps { display: grid; gap: 8px; margin: 12px 0 0; padding-left: 20px; }
 .host-help { color: var(--host-muted); font-size: 12px; line-height: 20px; overflow-wrap: anywhere; }
 .host-panel > .host-help { margin-bottom: 12px; }
 .host-maintenance { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 12px 0; padding: 14px 16px; border: 1px solid #ead8b5; border-radius: 10px; background: #fffaf0; }
@@ -298,11 +321,18 @@ async function copyCode() {
 .host-inline-warning { padding: 10px 12px; border: 1px solid #e7dca8; border-radius: 8px; background: #fffbeb; color: #715912; font-size: 12px; overflow-wrap: anywhere; }
 .host-filter { display: flex; flex: 0 0 auto; align-items: center; gap: 8px; }
 .host-filter select { width: auto; min-width: 110px; }
-.host-list { display: grid; gap: 12px; }
-.host-card { min-width: 0; padding: 16px; border: 1px solid var(--host-border); border-radius: 8px; }
+.host-list { display: grid; }
+.host-card { min-width: 0; padding: 16px 0; }
+.host-card:last-child { padding-bottom: 0; }
+.host-card + .host-card { border-top: 1px solid var(--host-border); }
+.host-row, .host-column-labels { display: grid; grid-template-columns: minmax(160px, 1fr) minmax(150px, .85fr) minmax(240px, 300px); align-items: center; gap: 20px; }
+.host-column-labels { padding: 10px 0; border-top: 1px solid var(--host-border); border-bottom: 1px solid var(--host-border); color: var(--host-muted); font-size: 12px; }
+.host-column-labels > :last-child { text-align: right; }
+.host-name h3 { font-size: 14px; line-height: 22px; overflow-wrap: anywhere; }
+.host-connection { display: block; margin-top: 3px; }
+.host-row-state { display: grid; justify-items: start; gap: 4px; min-width: 0; }
+.host-row-actions { justify-content: flex-end; }
 .host-name { min-width: 0; }
-.host-name h4 { overflow-wrap: anywhere; }
-.host-subtle { color: var(--host-muted); font-size: 11px; }
 .host-badge { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 5px; padding: 3px 7px; border-radius: 6px; background: #f0f2ef; color: #5d655d; font-size: 11px; line-height: 18px; white-space: nowrap; }
 .host-badge i { width: 6px; height: 6px; flex: 0 0 auto; border-radius: 50%; background: currentColor; }
 .host-badge.good { background: #eaf6ed; color: #167536; }
@@ -310,14 +340,16 @@ async function copyCode() {
 .host-badge.warning { background: #fcf6db; color: #775e16; }
 .host-badge.info { background: #eaf2f4; color: #365f6b; }
 .host-machine-id { margin-top: 8px !important; color: var(--host-muted); font-size: 11px; }
-.host-card-hint { margin: 8px 0 12px !important; font-size: 12px; }
+.host-card-hint { color: var(--host-muted); font-size: 12px; overflow-wrap: anywhere; }
 .host-facts, .host-run-facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
 .host-facts div, .host-run-facts div { min-width: 0; }
 .host-facts dt, .host-run-facts dt { color: var(--host-muted); font-size: 11px; }
 .host-facts dd, .host-run-facts dd { margin: 4px 0 0; font-size: 12px; overflow-wrap: anywhere; }
-.host-card-footer { margin-top: 12px; padding-top: 12px; border-top: 1px solid #ecefec; flex-wrap: wrap; }
 .host-card-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .host-card > .host-help { margin-top: 8px; }
+.host-update-status { margin-top: 8px; font-size: 12px; color: var(--host-muted); overflow-wrap: anywhere; }
+.host-update-status summary { width: fit-content; cursor: pointer; color: #a53721; }
+.host-update-status details p { margin-top: 8px; }
 .host-confirm { display: grid; gap: 12px; margin-top: 12px; padding: 12px; border: 1px solid #efd0c6; border-radius: 8px; background: #fff8f5; }
 .host-confirm .host-card-actions { justify-content: flex-end; }
 .host-empty { display: grid; gap: 4px; padding: 28px 16px; border-radius: 8px; background: var(--host-soft); text-align: center; }
@@ -334,10 +366,13 @@ async function copyCode() {
 .host-detail-summary strong { font-size: 14px; overflow-wrap: anywhere; }
 .host-detail-summary p { margin-top: 4px; color: var(--host-muted); }
 .host-detail > .host-inline-warning, .host-detail > .host-feedback { margin-bottom: 12px; }
-.host-technical { margin-top: 16px; border: 1px solid var(--host-border); border-radius: 8px; padding: 10px 12px; }
+.host-technical { margin-top: 16px; padding-top: 12px; border-top: 1px solid #ecefec; }
 .host-technical summary { cursor: pointer; font-size: 12px; }
 .host-technical p { margin: 8px 0; color: var(--host-muted); font-size: 12px; }
 .host-technical code { font-size: 11px; }
+.host-machine-info { margin-top: 16px; padding-top: 16px; border-top: 1px solid #ecefec; }
+.host-machine-meta { display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 12px; margin-top: 16px; }
+.host-machine-meta p { margin-top: 4px; color: var(--host-muted); font-size: 12px; overflow-wrap: anywhere; }
 .host-subheading { margin: 20px 0 8px !important; }
 .host-log { max-height: 440px; overflow: auto; padding: 12px; border: 1px solid var(--host-border); border-radius: 8px; background: #f8f9f7; overscroll-behavior: contain; }
 .host-log-entry + .host-log-entry { padding-top: 10px; margin-top: 10px; border-top: 1px solid #e5e9e3; }
@@ -348,8 +383,8 @@ async function copyCode() {
 .host-artifacts li > div { display: grid; min-width: 0; gap: 4px; }
 .host-artifacts strong { font-size: 12px; overflow-wrap: anywhere; }
 .host-artifacts span { color: var(--host-muted); font-size: 11px; }
-@media (max-width: 1000px) { .host-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 720px) { .host-panel { padding: 16px; } .host-section-heading { flex-wrap: wrap; } .host-facts, .host-run-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); } .host-runs > li { align-items: flex-start; flex-direction: column; padding: 12px 8px; } .host-card-footer, .host-maintenance { align-items: flex-start; flex-direction: column; } .host-maintenance-actions { width: 100%; justify-content: flex-start; } .host-run-summary + .host-card-actions { align-self: stretch; justify-content: space-between; } }
-@media (max-width: 400px) { .host-heading { flex-wrap: wrap; } .host-panel { padding: 12px; } .host-card { padding: 12px; } .host-metrics { gap: 8px; } .host-metrics > div { padding: 8px 12px; } .host-metrics strong { font-size: 20px; } .host-card-header { align-items: flex-start; } .host-badge { padding: 3px 5px; } .host-card-actions { gap: 6px; } .host-button { padding: 7px 10px; } .host-enrollment { padding: 12px; } .host-detail-summary { flex-wrap: wrap; } }
+@media (max-width: 1000px) { .host-column-labels { display: none; } .host-row { grid-template-columns: minmax(160px, 1fr) minmax(140px, .8fr); gap: 12px; } .host-row-actions { grid-column: 1 / -1; justify-content: flex-start; } .host-list { border-top: 1px solid var(--host-border); } }
+@media (max-width: 720px) { .host-panel { padding: 16px; } .host-section-heading { flex-wrap: wrap; } .host-toolbar { justify-content: flex-start; } .host-row { grid-template-columns: minmax(0, 1fr); gap: 8px; } .host-row-state { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; } .host-row-actions { gap: 8px; } .host-facts, .host-run-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); } .host-runs > li { align-items: flex-start; flex-direction: column; padding: 12px 8px; } .host-maintenance { align-items: flex-start; flex-direction: column; } .host-maintenance-actions { width: 100%; justify-content: flex-start; } .host-run-summary + .host-card-actions { align-self: stretch; justify-content: space-between; } }
+@media (max-width: 400px) { .host-panel { padding: 12px; } .host-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; width: 100%; gap: 6px; } .hosts-page .host-toolbar select { width: 100%; min-width: 0; padding: 0 6px; } .host-summary { gap: 6px 12px; } .host-summary > span:first-child { display: none; } .host-badge { padding: 3px 5px; } .host-button { padding: 7px 10px; } .host-enrollment, .host-connect { padding: 12px; } .host-detail-summary { flex-wrap: wrap; } }
 @media (prefers-reduced-motion: reduce) { .host-button { transition: none; } .host-button:active:not(:disabled) { transform: none; } }
 </style>

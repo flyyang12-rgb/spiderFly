@@ -21,7 +21,8 @@ const { forceStopExecution, stoppingBusy, stoppingExecution } = useWorkspaceCont
       </header>
       <div class="modal-body confirm-copy">
         <p>将终止本次 Python 进程及其子进程，未保存的内容可能丢失，已经完成的业务操作不会撤销。</p>
-        <p>保留运行记录和日志；进程退出并清理完成后，队列继续执行下一项。</p>
+        <p v-if="stoppingExecution.trigger_source === 'workflow'">这是工作流中的一步。停止会结束所属整轮，后续步骤不再执行；本步退出并完成收尾后保留运行记录和日志。</p>
+        <p v-else>保留运行记录和日志；进程退出并清理完成后，队列继续执行下一项。</p>
       </div>
       <footer>
         <button class="button ghost" type="button" :disabled="stoppingBusy" @click="stoppingExecution = null">

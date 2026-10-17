@@ -42,10 +42,11 @@ def recover(journal):
 
 class Client:
     def __init__(self, api, journal, root: Path, *, dispatch=False, session_check=interactive_session,
-                 on_status=None, shutdown_file: Path | None = None):
+                 on_status=None, shutdown_file: Path | None = None, updater=None):
         self.api, self.journal, self.root = api, journal, root.resolve()
         self.dispatch, self.session_check = dispatch, session_check
         self.worker = None
+        self.updater = updater
         self.shutdown = threading.Event()
         self.last_status = None
         self.on_status = on_status
@@ -157,8 +158,16 @@ class Client:
         self.journal.terminal_after_upload(run_id)
 
     def tick(self):
+        resume_path = self.root / 'upgrade.resume.json'
+        if resume_path.exists():
+            resume = json.loads(resume_path.read_text('utf-8-sig'))
+            if resume.get('version') == __version__:
+                self.api.request('POST', '/api/agent/upgrade-resume', {'token': resume['token']})
+                resume_path.unlink(missing_ok=True)
         # Even a failing upload must not prevent heartbeat, stop, or revocation handling.
         self.heartbeat()
+        if self.updater:
+            self.updater.poll()
         self.flush()
 
     def heartbeat(self):
@@ -178,8 +187,11 @@ class Client:
             "dispatch_enabled": self.dispatch, "interactive_session": interactive,
             "active_run_id": active["id"] if active else None,
             "recovery_required": bool(active and active["recovery_required"]),
+            'remote_upgrade_ready': bool(self.updater and self.updater.ready),
         })
         host = response["host"]
+        if self.updater:
+            self.updater.observe(host)
         state = host.get("state", host.get("approval_status", "unknown"))
         self.publish(connection="connected", host_state=state, interactive=interactive,
                      dispatch=self.dispatch, error="")
@@ -191,6 +203,9 @@ class Client:
                 self.worker.stop_event.set()
             return
         self.worker = None
+        if self.updater and response.get('update') and not active:
+            self.updater.accept(response['update'])
+            return
         run = response.get("run")
         if run and active:
             if run["id"] != active["id"]:

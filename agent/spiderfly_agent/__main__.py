@@ -55,6 +55,9 @@ def main():
         if not config_path.exists():
             parser.error("尚未注册，请先执行 setup")
         config = json.loads(config_path.read_text(encoding="utf-8"))
+        from .updater import RemoteUpdater
+        api = Api(config['server'], key, config['host_id'])
+        updater = RemoteUpdater(api, directory, machine_id)
         journal = Journal(directory / "journal.sqlite3")
         pid_path = directory / "agent.pid.json"
         shutdown_path = directory / "shutdown.request"
@@ -63,8 +66,8 @@ def main():
             "pid": os.getpid(), "version": __version__, "protocol_version": PROTOCOL_VERSION,
             "started_at": datetime.now(timezone.utc).isoformat(),
         })
-        client = Client(Api(config["server"], key, config["host_id"]), journal, directory,
-                        dispatch=args.dispatch, shutdown_file=shutdown_path)
+        client = Client(api, journal, directory, dispatch=args.dispatch,
+                        shutdown_file=shutdown_path, updater=updater)
         signal.signal(signal.SIGINT, lambda *_: client.shutdown.set())
         signal.signal(signal.SIGTERM, lambda *_: client.shutdown.set())
         try:

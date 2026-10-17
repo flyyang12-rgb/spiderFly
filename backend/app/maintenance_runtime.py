@@ -92,8 +92,14 @@ def capture_pages(contract):
         pages[url] = page
     return pages
 
-async def execute_source(source, *, pages, template='', timeout=120, stop=None, profile=None, allowed_hosts=(), checkpoint=None, on_log=None):
-    payload = json.dumps({'source': source, 'pages': pages, 'template': template, 'timeout': timeout, 'hosts': list(allowed_hosts)}, ensure_ascii=True).encode()
+async def execute_source(source, *, pages, template='', timeout=120, stop=None, profile=None, allowed_hosts=(), checkpoint=None, on_log=None, cleanup_receipt=None, cleanup_token=None):
+    request = {'source': source, 'pages': pages, 'template': template, 'timeout': timeout, 'hosts': list(allowed_hosts)}
+    if cleanup_receipt:
+        path = Path(cleanup_receipt).resolve().as_posix()
+        if os.name == 'nt':
+            path = '/mnt/' + path[0].lower() + path[2:]
+        request.update(cleanup_receipt=path, cleanup_token=cleanup_token)
+    payload = json.dumps(request, ensure_ascii=True).encode()
     if checkpoint:
         checkpoint = Path(checkpoint).resolve().as_posix()
         if os.name == 'nt': checkpoint = '/mnt/' + checkpoint[0].lower() + checkpoint[2:]

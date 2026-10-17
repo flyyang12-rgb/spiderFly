@@ -24,8 +24,9 @@ from ..collection_progress import feed_progress, progress_view
 from ..config import DATA_DIR, SERVER_URL
 
 PROTOCOL_VERSION = 1
-CURRENT_AGENT_VERSION = "0.3.0"
+CURRENT_AGENT_VERSION = "0.5.0"
 MINIMUM_AGENT_VERSION = "0.3.0"
+ENVIRONMENT_AGENT_VERSION = "0.4.0"
 HEARTBEAT_TIMEOUT = 15
 SIGNATURE_WINDOW = 90
 MAX_SCRIPT_BYTES = 2 * 1024 * 1024
@@ -111,6 +112,10 @@ def init_tables() -> None:
                 size INTEGER NOT NULL, sha256 TEXT NOT NULL, created_at TEXT NOT NULL,
                 PRIMARY KEY(run_id, name)
             )""",
+            """CREATE TABLE IF NOT EXISTS remote_environment_records (
+                run_id INTEGER PRIMARY KEY REFERENCES remote_runs(id) ON DELETE CASCADE,
+                report_json TEXT NOT NULL, received_at TEXT NOT NULL
+            )""",
             """CREATE TABLE IF NOT EXISTS remote_run_notice_reads (
                 run_id INTEGER NOT NULL REFERENCES remote_runs(id) ON DELETE CASCADE,
                 user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -123,7 +128,18 @@ def init_tables() -> None:
         )
         for statement in statements:
             conn.execute(statement)
+        host_columns = {row['name'] for row in conn.execute('PRAGMA table_info(agent_hosts)')}
+        if 'upgrade_token' not in host_columns:
+            conn.execute("ALTER TABLE agent_hosts ADD COLUMN upgrade_token TEXT NOT NULL DEFAULT ''")
+            conn.execute('ALTER TABLE agent_hosts ADD COLUMN upgrade_expires_at REAL NOT NULL DEFAULT 0')
+        if 'remote_upgrade_id' not in host_columns:
+            conn.execute("ALTER TABLE agent_hosts ADD COLUMN remote_upgrade_id TEXT NOT NULL DEFAULT ''")
+            conn.execute('ALTER TABLE agent_hosts ADD COLUMN remote_upgrade_ready INTEGER NOT NULL DEFAULT 0')
+        from . import agent_updates
+        agent_updates.init_tables(conn)
         columns = {row["name"] for row in conn.execute("PRAGMA table_info(remote_runs)")}
+        if 'environment_report_required' not in columns:
+            conn.execute('ALTER TABLE remote_runs ADD COLUMN environment_report_required INTEGER NOT NULL DEFAULT 0')
         if "claimed_at" not in columns:
             conn.execute("ALTER TABLE remote_runs ADD COLUMN claimed_at TEXT")
         if "trigger_source" not in columns:
@@ -198,6 +214,8 @@ def _online(host: dict) -> bool:
 
 
 def _expire_leases(conn) -> None:
+    from . import agent_updates
+    agent_updates.expire(conn)
     # An offer that was never acknowledged cannot have started and is safe to
     # requeue/cancel. Once claimed, only a terminal Agent event frees the host.
     for row in conn.execute("SELECT * FROM agent_hosts WHERE active_run_id IS NOT NULL").fetchall():
@@ -219,7 +237,14 @@ def _expire_leases(conn) -> None:
 
 
 def public_host(conn, host: dict) -> dict:
-    item = {key: value for key, value in host.items() if key != "public_key"}
+    from . import agent_updates
+    item = {key: value for key, value in host.items() if key not in {'public_key', 'upgrade_token', 'upgrade_expires_at', 'remote_upgrade_id'}}
+    item['upgrade_pending'] = _upgrading(host)
+    item['current_agent_version'] = CURRENT_AGENT_VERSION
+    item['remote_upgrade_supported'] = bool(host.get('remote_upgrade_ready')) and (_version_tuple(host['agent_version']) or (0, 0, 0)) >= agent_updates.REMOTE_VERSION
+    item['agent_update_available'] = (_version_tuple(host['agent_version']) or (0, 0, 0)) < _version_tuple(CURRENT_AGENT_VERSION)
+    item['agent_update'] = agent_updates.latest(conn, host['id'])
+    item['environment_reporting_supported'] = (_version_tuple(host['agent_version']) or (0, 0, 0)) >= _version_tuple(ENVIRONMENT_AGENT_VERSION)
     for key in ("dispatch_enabled", "agent_dispatch_enabled", "interactive_session"):
         item[key] = bool(item[key])
     item["online"] = _online(host)
@@ -227,6 +252,8 @@ def public_host(conn, host: dict) -> dict:
     active = conn.execute("SELECT status FROM remote_runs WHERE id=?", (host["active_run_id"],)).fetchone()
     if approval != "approved":
         state = approval
+    elif _upgrading(host):
+        state = 'upgrading'
     elif active and active["status"] == "uncertain":
         state = "uncertain"
     elif not item["online"]:
@@ -365,11 +392,16 @@ def public_run(conn, run: dict) -> dict:
     item["collection_progress"] = progress_view(item.get("collection_progress"))
     host = host_row(conn, run["host_id"])
     item["host_name"] = host["name"]
+    record = conn.execute('SELECT report_json FROM remote_environment_records WHERE run_id=?', (run['id'],)).fetchone()
+    capable = (_version_tuple(host['agent_version']) or (0, 0, 0)) >= _version_tuple(ENVIRONMENT_AGENT_VERSION)
+    item['environment_status'] = json.loads(record['report_json'])['status'] if record else (
+        'pending' if run['status'] not in TERMINAL and (run.get('environment_report_required') or capable) else 'unreported')
     item["stop_requested"] = bool(run["stop_requested"])
     state = public_host(conn, host)["state"]
     item["waiting_reason"] = ""
     if run["status"] == "queued":
         item["waiting_reason"] = {
+            'upgrading': '目标电脑正在升级',
             "offline": "目标宿主机离线", "non_dispatch": "等待主控与本机开启调度，并保持用户已登录",
             "running": "目标宿主机忙碌", "stopping": "等待目标宿主机停止", "uncertain": "等待确认旧任务状态",
         }.get(state, "等待目标宿主机领取")
@@ -387,6 +419,12 @@ def create_run_in_transaction(conn, host_id: int, task_id: int, request_id: str,
         if existing["host_id"] != host_id or existing["task_id"] != task_id or existing["requested_by"] != actor["id"]:
             raise HTTPException(409, "该请求 ID 已用于其他任务或宿主机")
         return public_run(conn, dict(existing))
+    from . import cron_runs, workflows
+    if cron_runs.active_round(conn, task_id):
+        raise HTTPException(409, '同任务的本机 Cron 或维护尚未结束，不能创建远程运行')
+    workflow_reason = workflows.task_busy_reason(conn, task_id, workflow_only=True)
+    if workflow_reason:
+        raise HTTPException(409, workflow_reason)
     host = host_row(conn, host_id)
     if host["approval_status"] != "approved":
         raise HTTPException(409, "目标宿主机尚未批准或已撤销")
@@ -494,10 +532,13 @@ def heartbeat(host_id: int, payload: dict) -> dict:
         require_compatible_agent(payload["protocol_version"], payload["agent_version"])
         conn.execute(
             """UPDATE agent_hosts SET last_seen_at=?,updated_at=?,agent_version=?,
-               agent_dispatch_enabled=?,interactive_session=? WHERE id=?""",
+               agent_dispatch_enabled=?,interactive_session=?,remote_upgrade_ready=? WHERE id=?""",
             (database.utc_now(), database.utc_now(), payload["agent_version"],
-             int(payload["dispatch_enabled"]), int(payload["interactive_session"]), host_id),
+             int(payload["dispatch_enabled"]), int(payload["interactive_session"]), int(payload.get('remote_upgrade_ready', False)), host_id),
         )
+        from . import agent_updates
+        agent_updates.late_busy(conn, host, payload.get('active_run_id'), payload['recovery_required'])
+        agent_updates.reconnected(conn, host, payload['agent_version'])
         active_id = host["active_run_id"]
         reported = payload.get("active_run_id")
         if reported is not None and reported != active_id:
@@ -522,7 +563,8 @@ def heartbeat(host_id: int, payload: dict) -> dict:
         host = host_row(conn, host_id)
         if (active_id is None and reported is None and not payload["recovery_required"]
                 and host["approval_status"] == "approved"
-                and host["dispatch_enabled"] and host["agent_dispatch_enabled"] and host["interactive_session"]):
+                and host["dispatch_enabled"] and host["agent_dispatch_enabled"] and host["interactive_session"]
+                and not _upgrading(host)):
             row = conn.execute("SELECT id FROM remote_runs WHERE host_id=? AND status='queued' ORDER BY id LIMIT 1", (host_id,)).fetchone()
             if row:
                 active_id = row["id"]
@@ -536,7 +578,8 @@ def heartbeat(host_id: int, payload: dict) -> dict:
                 "stop_requested": bool(run and run["stop_requested"]),
                 "protocol_version": PROTOCOL_VERSION,
                 "minimum_agent_version": MINIMUM_AGENT_VERSION,
-                "current_agent_version": CURRENT_AGENT_VERSION}
+                "current_agent_version": CURRENT_AGENT_VERSION,
+                "update": agent_updates.offer(conn, host_row(conn, host_id))}
 
 
 def claim_run(host_id: int, run_id: int) -> dict:
@@ -544,6 +587,8 @@ def claim_run(host_id: int, run_id: int) -> dict:
     with database.transaction() as conn:
         host = host_row(conn, host_id)
         run = _run_row(conn, run_id, host_id)
+        if _upgrading(host):
+            raise HTTPException(409, 'Agent 正在升级，暂缓领取新任务')
         if host["approval_status"] != "approved" or host["active_run_id"] != run_id:
             raise HTTPException(409, "任务租约已失效，不能确认领取")
         if run["stop_requested"] or run["status"] == "stopping":
@@ -551,13 +596,15 @@ def claim_run(host_id: int, run_id: int) -> dict:
         if run["status"] not in {"preparing", "uncertain"} or run["started_at"] is not None:
             raise HTTPException(409, "任务已经开始或状态不允许确认领取")
         if run["claimed_at"] is None:
-            conn.execute("UPDATE remote_runs SET claimed_at=?,status='preparing' WHERE id=?",
-                         (database.utc_now(), run_id))
+            required = (_version_tuple(host['agent_version']) or (0, 0, 0)) >= _version_tuple(ENVIRONMENT_AGENT_VERSION)
+            conn.execute("UPDATE remote_runs SET claimed_at=?,status='preparing',environment_report_required=? WHERE id=?",
+                         (database.utc_now(), int(required), run_id))
         elif run["status"] == "uncertain":
             # An idempotent retry from the same durable local claim can safely
             # recover an authorization response lost before execution began.
             conn.execute("UPDATE remote_runs SET status='preparing' WHERE id=?", (run_id,))
-        return {key: run[key] for key in ("id", "task_name", "timeout_seconds", "package_hash")}
+        return {**{key: run[key] for key in ("id", "task_name", "timeout_seconds", "package_hash")},
+                'environment_report_version': 1}
 
 
 def package(host_id: int, run_id: int) -> dict:
@@ -573,6 +620,40 @@ def package(host_id: int, run_id: int) -> dict:
         if run["claimed_at"] is None or run["status"] not in {"preparing", "running"}:
             raise HTTPException(409, "运行状态待确认或已结束，不能下载任务包")
         return {key: run[key] for key in ("script", "requirements", "package_hash")}
+
+
+def _upgrading(host: dict) -> bool:
+    return bool(host.get('remote_upgrade_id') or (host.get('upgrade_token') and host.get('upgrade_expires_at', 0) > time.time()))
+
+
+def upgrade_pause(host_id: int, token: str) -> dict:
+    """Reserve this idle machine while its user upgrades it; no program push."""
+    with database.transaction() as conn:
+        _expire_leases(conn)
+        host = host_row(conn, host_id)
+        if host['approval_status'] not in {'approved', 'pending'}:
+            raise HTTPException(403, '宿主机接入已被拒绝或撤销')
+        remote = conn.execute('SELECT id,status,expires_at FROM agent_update_jobs WHERE token=?', (token,)).fetchone()
+        if remote and (remote['id'] != host['remote_upgrade_id'] or remote['status'] != 'installing' or remote['expires_at'] <= time.time()):
+            raise HTTPException(409, '远程升级授权已失效')
+        if host['active_run_id'] is not None:
+            raise HTTPException(409, '任务或回传尚未结束，请稍后再升级')
+        if _upgrading(host) and host['upgrade_token'] != token:
+            raise HTTPException(409, '已有升级操作正在进行')
+        expires = time.time() + 1800
+        conn.execute('UPDATE agent_hosts SET upgrade_token=?,upgrade_expires_at=? WHERE id=?', (token, expires, host_id))
+        return {'paused': True, 'expires_at': expires, 'dispatch_enabled': bool(host['agent_dispatch_enabled'])}
+
+
+def upgrade_resume(host_id: int, token: str) -> dict:
+    with database.transaction() as conn:
+        host = host_row(conn, host_id)
+        if host['upgrade_token'] and host['upgrade_token'] != token:
+            raise HTTPException(409, '升级操作已变化，不能解除其他操作的暂停')
+        if host.get('remote_upgrade_id'):
+            return {'paused': True}
+        conn.execute("UPDATE agent_hosts SET upgrade_token='',upgrade_expires_at=0 WHERE id=?", (host_id,))
+        return {'paused': False}
 
 
 def accept_events(host_id: int, run_id: int, events: list[dict]) -> dict:
@@ -593,7 +674,24 @@ def accept_events(host_id: int, run_id: int, events: list[dict]) -> dict:
             if event["seq"] != run["ack_seq"] + 1:
                 raise HTTPException(409, f"事件序号不连续，下一序号应为 {run['ack_seq'] + 1}")
             kind = event["kind"]
+            if kind != 'environment' and event.get('environment') is not None:
+                raise HTTPException(422, '仅环境事件可携带环境记录')
+            if kind == 'environment':
+                from ..agent_environment import validate_report
+                if run['claimed_at'] is None or run['started_at'] is not None:
+                    raise HTTPException(409, '环境记录必须在领取后、业务开始前提交')
+                if conn.execute('SELECT 1 FROM remote_environment_records WHERE run_id=?', (run_id,)).fetchone():
+                    raise HTTPException(409, '本次运行已有环境记录')
+                if event.get('environment') is None:
+                    raise HTTPException(422, '环境事件缺少环境记录')
+                report = validate_report(event['environment'], run)
+                conn.execute('INSERT INTO remote_environment_records VALUES(?,?,?)',
+                             (run_id, json.dumps(report, ensure_ascii=False), database.utc_now()))
             if kind == "started":
+                if run.get('environment_report_required'):
+                    facts = conn.execute('SELECT report_json FROM remote_environment_records WHERE run_id=?', (run_id,)).fetchone()
+                    if not facts or json.loads(facts['report_json'])['status'] != 'ready':
+                        raise HTTPException(409, '本次业务环境尚未通过校验')
                 if run["started_at"] is not None:
                     raise HTTPException(409, "运行已经开始，不能再次开始")
                 run["started_at"] = database.utc_now()
@@ -606,6 +704,8 @@ def accept_events(host_id: int, run_id: int, events: list[dict]) -> dict:
                     raise HTTPException(400, "结束事件必须包含有效终态")
                 if event["status"] == "succeeded" and event.get("exit_code") != 0:
                     raise HTTPException(400, "成功事件必须包含退出码 0")
+                if event['status'] == 'succeeded' and run.get('environment_report_required') and run['started_at'] is None:
+                    raise HTTPException(409, '未完成环境校验并开始业务，不能提交成功')
                 run.update(status=event["status"], finished_at=database.utc_now(), exit_code=event["exit_code"], error=event["text"][:2000])
                 run["notification_status"] = (
                     "pending" if event["status"] in {"failed", "timed_out"} and run["notify_on_failure"]
@@ -701,6 +801,8 @@ def run_detail(run_id: int) -> dict:
     with database.transaction() as conn:
         _expire_leases(conn)
         item = public_run(conn, _run_row(conn, run_id))
+        record = conn.execute('SELECT report_json,received_at FROM remote_environment_records WHERE run_id=?', (run_id,)).fetchone()
+        item['environment'] = {**json.loads(record['report_json']), 'received_at': record['received_at']} if record else None
         item["events"] = [dict(json.loads(row["payload_json"]), created_at=row["created_at"]) for row in conn.execute(
             "SELECT * FROM (SELECT * FROM remote_events WHERE run_id=? ORDER BY seq DESC LIMIT 500) ORDER BY seq", (run_id,))]
         item["events_truncated"] = item["ack_seq"] > len(item["events"])

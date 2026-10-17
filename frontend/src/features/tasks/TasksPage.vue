@@ -45,7 +45,7 @@ const {
         <label class="filter-field"
           ><span>触发方式</span
           ><select v-model="filters.trigger_type">
-            <option value="all">全部触发方式</option>
+            <option value="all">全部</option>
             <option v-for="option in triggerOptions" :key="option.value" :value="option.value">
               {{ option.label }}
             </option>
@@ -54,7 +54,7 @@ const {
         <label class="filter-field"
           ><span>归属人</span
           ><select v-model="filters.owner">
-            <option value="all">全部归属人</option>
+            <option value="all">全部</option>
             <option v-for="owner in ownerOptions" :key="owner.value" :value="owner.value">
               {{ owner.label }}
             </option>
@@ -87,7 +87,7 @@ const {
       <header class="panel-heading">
         <div>
           <h2>任务列表</h2>
-          <p>{{ filteredTasks.length }} 项</p>
+          <p>{{ filteredTasks.length }} 个任务</p>
         </div>
       </header>
       <div v-if="filteredTasks.length" class="table-wrap">
@@ -134,7 +134,7 @@ const {
                 <div class="primary-cell">
                   <strong>{{ triggerLabel(task.trigger_type) }}</strong
                   ><small>{{ triggerDetail(task) }}</small>
-                  <small>{{ '默认运行电脑：' + (task.target_host_name || '主控本机 A') + '（手动和计划）' }}</small>
+                  <small>{{ '运行电脑：' + (task.target_host_name || '主控本机') }}</small>
                 </div>
               </td>
               <td>
@@ -172,7 +172,7 @@ const {
                     class="button primary compact"
                     type="button"
                     :disabled="!task.enabled || (task.target_host_id ? !isAdmin : task.environment_status !== 'ready')"
-                    :title="task.target_host_id && !isAdmin ? '远程电脑上的任务需由管理员运行' : '将在 ' + (task.target_host_name || '主控本机 A') + ' 运行'"
+                    :title="task.target_host_id && !isAdmin ? '远程电脑上的任务需由管理员运行' : '将在 ' + (task.target_host_name || '主控本机') + ' 运行'"
                     @click="runTask(task)"
                   >
                     运行
@@ -213,11 +213,10 @@ const {
       </div>
       <div v-else-if="tasks.length" class="empty-state">
         <strong>没有匹配的任务</strong>
-        <p>调整筛选条件后再试。</p>
+
         <button class="button secondary" type="button" @click="resetFilters">清空筛选</button>
       </div>
       <div v-else class="empty-state">
-        <div class="empty-canopy"><span></span><span></span><span></span></div>
         <strong>还没有任务</strong>
       </div>
     </section>

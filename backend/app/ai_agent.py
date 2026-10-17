@@ -547,7 +547,10 @@ class Message(BaseModel):
 
 @router.get("/settings")
 def get_settings(user: dict = Depends(admin_user)):
-    return ai_settings.settings()
+    try:
+        return ai_settings.settings()
+    except ValueError as exc:
+        raise HTTPException(400, ai_settings.redact(str(exc))) from None
 
 
 @router.put("/settings")
@@ -556,11 +559,46 @@ async def update_settings(request: Request, user: dict = Depends(super_admin_use
     if len(body) > 4000:
         raise HTTPException(400, "配置内容过长")
     try:
-        result = ai_settings.save_settings(json.loads(body))
+        payload = json.loads(body)
     except (ValueError, TypeError):
-        raise HTTPException(400, "模型配置无效，请检查模型、预算和密钥格式") from None
+        raise HTTPException(400, "模型配置格式无效") from None
+    try:
+        result = await asyncio.to_thread(ai_settings.save_settings, payload)
+    except ValueError as exc:
+        raise HTTPException(400, ai_settings.redact(str(exc))) from None
+    except Exception:
+        raise HTTPException(400, "DeepSeek 配置保存失败，请检查网络和本机配置") from None
     write_audit(request, user, "ai_settings", target_type="ai", summary="更新模型配置（不含密钥）")
     return result
+
+
+@router.get("/settings/key")
+def get_setting_key(response: Response, user: dict = Depends(super_admin_user)):
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Pragma"] = "no-cache"
+    try:
+        return ai_settings.display_key()
+    except ValueError as exc:
+        raise HTTPException(400, ai_settings.redact(str(exc)), headers={"Cache-Control": "no-store"}) from None
+    except Exception:
+        raise HTTPException(400, "密钥无法读取，请重新输入", headers={"Cache-Control": "no-store"}) from None
+
+
+@router.post("/settings/models")
+async def list_setting_models(request: Request, user: dict = Depends(super_admin_user)):
+    body = await request.body()
+    if len(body) > 4000:
+        raise HTTPException(400, "模型列表请求内容过长")
+    try:
+        payload = json.loads(body)
+    except (ValueError, TypeError):
+        raise HTTPException(400, "模型列表请求格式无效") from None
+    try:
+        return await asyncio.to_thread(ai_settings.fetch_models, payload)
+    except ValueError as exc:
+        raise HTTPException(400, ai_settings.redact(str(exc))) from None
+    except Exception:
+        raise HTTPException(400, "DeepSeek 模型列表连接失败，请检查网络和密钥") from None
 
 
 @router.post("/settings/test")
@@ -569,6 +607,16 @@ async def test_settings(user: dict = Depends(super_admin_user)):
         return await asyncio.to_thread(ai_settings.check_connection)
     except Exception as exc:
         raise HTTPException(400, ai_settings.redact(str(exc)) if isinstance(exc, ValueError) else "DeepSeek 连接失败，请检查网络和配置") from None
+
+
+@router.get("/settings/balance")
+async def get_account_balance(user: dict = Depends(admin_user)):
+    try:
+        return await asyncio.to_thread(ai_settings.account_balance)
+    except ValueError as exc:
+        raise HTTPException(400, ai_settings.redact(str(exc))) from None
+    except Exception:
+        raise HTTPException(400, "DeepSeek 余额查询失败，请稍后重试") from None
 
 
 @router.get("/threads")

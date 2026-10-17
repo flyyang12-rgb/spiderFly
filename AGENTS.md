@@ -23,10 +23,11 @@
 | 职责 | 主要文件（相对 `backend/app/`） |
 | --- | --- |
 | HTTP、账号与权限 | `main.py` 组装；`api/` 提供接口；`security.py`、`schemas.py` 负责权限与参数 |
-| 数据、触发和持久队列 | `database.py`、`scheduling.py`、`services/execution_queue.py`、`services/runtime.py` |
+| 数据、触发和持久队列 | `database.py`、`scheduling.py`、`services/creation_requests.py`、`services/execution_queue.py`、`services/runtime.py` |
 | 执行与宿主机资源 | `runner.py`、`host_runtime.py`、`instance_lock.py` |
-| 上传与环境安装 | `environments.py` |
-| 结果与通知 | `execution_results.py`、`execution_artifacts.py`、`collection_progress.py`、`feishu.py` |
+| 上传、静态依赖与环境安装 | `environments.py`、`dependency_analysis.py`、`dependency_catalog.py`、`stdlib_312.json` |
+| Agent 业务环境事实 | 独立 `agent/spiderfly_agent/environment.py`/`worker.py` 核验；`agent_environment.py`/`services/host_dispatch.py` 验证并保存；复用原 journal/签名/补传 |
+| 结果与通知 | `execution_results.py`、`execution_artifacts.py`、`collection_progress.py`、`feishu.py`、`feishu_settings.py` |
 | AI 对话与网页探索 | `ai_agent.py`、`ai_settings.py`、`ai_tools.py`、`ai_knowledge.py`、`ai_browser.py`、`ai_scraping.py` |
 | 版本、修复与受限验证 | `task_versions.py`、`maintenance.py`、`maintenance_runtime.py`、`collection.py`；原生 DP：`dp_runtime.py`、`dp_probe.py` |
 
@@ -89,7 +90,7 @@ DP 当前平台能力以 [runtime.md](backend/ai_knowledge/drissionpage/runtime.
 
 ## 运行资料与隔离
 
-- 配置读取仓库根 `.env`。真实账号、上传文件、环境、数据库、日志、浏览器资料和密钥都不得提交或回显。
+- 配置读取仓库根 `.env`。真实账号、上传文件、环境、数据库、日志、浏览器资料和密钥不得提交或输出到聊天、日志。用户于 2026-10-15 授权 DeepSeek 密钥在超级管理员配置页明文显示；专用读取接口仅限超级管理员，其余配置接口、普通管理员、业务环境与对话仍不返回密钥。本地 DPAPI 保存规则保持。
 - 默认任务入口为 `data/apps/<应用ID>/<原文件名>.py`；实际根目录可由配置指定。数据库和执行快照使用记录的绝对路径。
 - 修改仓库示例不会替换已上传任务，不直接改 `data/apps/` 绕过任务版本和审计流程。
 - 工作区任务前后清空；需要保留的结果放本次产物目录。不得借用用户业务资料或真实任务做临时测试。

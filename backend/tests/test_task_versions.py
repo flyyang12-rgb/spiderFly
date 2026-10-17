@@ -37,7 +37,7 @@ class VersionTests(unittest.TestCase):
         self.assertNotIn('# update',self.path.read_text('utf-8'))
 
     def test_manual_candidate_is_not_tested_or_runnable_until_admin_confirms(self):
-        bad = "if True print('saved without syntax preflight')\n"
+        bad = "raise RuntimeError('synthetic: source is not executed during upload')\n"
         candidate = v.submit(
             self.task_id, bad, '', {}, '', self.user['id'],
             base_id=self.base, origin='manual_candidate'

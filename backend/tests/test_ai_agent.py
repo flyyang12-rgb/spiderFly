@@ -374,10 +374,10 @@ class AgentTests(unittest.TestCase):
     @unittest.skipUnless(os.name == "nt", "Windows DPAPI")
     def test_dpapi_roundtrip_blank_key_preserves_existing_secret(self):
         secret = "sk-" + "synthetic" * 5
-        settings.save_settings({"api_key": secret})
-        self.assertNotIn(secret.encode(), settings.SECRET_PATH.read_bytes())
-        settings.save_settings({"api_key": "", "max_calls": 3})
-        with patch.dict(os.environ, {"DEEPSEEK_API_KEY": ""}):
+        with patch.dict(os.environ, {"DEEPSEEK_API_KEY": ""}), patch.object(settings, "_official_models", return_value=list(settings.MODELS)):
+            settings.save_settings({"api_key": secret})
+            self.assertNotIn(secret.encode(), (settings.AI_DIR / "settings.json").read_bytes())
+            settings.save_settings({"api_key": "", "max_calls": 3})
             self.assertEqual(settings.api_key(), secret)
 
 

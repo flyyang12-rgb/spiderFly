@@ -32,6 +32,7 @@ class TemporaryJournal(unittest.TestCase):
         self.root = Path(self.temporary.name)
         self.journal = Journal(self.root / "journal.sqlite3")
         self.run_info = {"id": 1, "task_name": "synthetic", "timeout_seconds": 10,
+                         "environment_report_version": 1,
                          "package_hash": package_hash("print('ok')", "")}
 
     def tearDown(self):
@@ -234,13 +235,18 @@ class WorkerTests(TemporaryJournal):
 
     def test_environment_cache_reuses_ready_interpreter(self):
         worker = self.make_worker("print('ok')")
+        worker.deadline = time.monotonic() + 20
         cache = self.root / "envs" / worker.run_info["package_hash"][:32]
         python = cache / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
         python.parent.mkdir(parents=True)
         python.write_bytes(b"synthetic marker")
         (cache / ".ready").write_text(worker.run_info["package_hash"])
-        worker.command = Mock(side_effect=AssertionError("cache must not install"))
-        self.assertEqual(Worker.prepare_environment(worker, "", worker.run_info["package_hash"]), python)
+        worker.work.mkdir(parents=True)
+        worker.command = Mock(return_value=0)
+        with patch('spiderfly_agent.worker.read_probe', return_value={'python':'3.12.10','bits':64,'packages':[]}):
+            self.assertEqual(Worker.prepare_environment(worker, "", worker.run_info["package_hash"]), python)
+        self.assertEqual(worker.command.call_count, 2)
+        self.assertFalse(any('install' in call.args[0] for call in worker.command.call_args_list))
 
     def test_dependency_install_failure_is_reported(self):
         worker = self.make_worker("print('ok')", requirements="missing-package")

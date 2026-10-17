@@ -49,6 +49,11 @@ async def startup() -> None:
             print(f"[SpiderFly] 首次登录信息：{bootstrap_file}")
         reconcile_schedules()
         maintenance.init_tables()
+        from ..native_process import recover_settlements
+        from . import cron_runs, workflows
+        await asyncio.to_thread(recover_settlements, clean_workspace=True)
+        await asyncio.to_thread(cron_runs.reconcile, recover=True)
+        await asyncio.to_thread(workflows.reconcile, recover=True)
         ai_agent.start()
         _scheduler_task = asyncio.create_task(scheduler_loop(_dispatch_scheduled_task))
         _queue_worker_task = asyncio.create_task(_queue_worker_loop())

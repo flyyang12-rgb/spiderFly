@@ -2,14 +2,17 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from datetime import datetime, time, timedelta, timezone
 from typing import Any, Awaitable, Callable
 
-from .database import execute, fetch_all, fetch_one, utc_now
+from .database import execute, execute_result, fetch_all, fetch_one, utc_now
+from .cron_schedule import cron_times, normalize_cron
 
 
 CHINA_TZ = timezone(timedelta(hours=8), name="Asia/Shanghai")
-TRIGGER_TYPES = {"manual", "once", "interval", "daily", "weekly"}
+logger = logging.getLogger(__name__)
+TRIGGER_TYPES = {"manual", "once", "interval", "daily", "weekly", "cron"}
 INTERVAL_SECONDS = {
     "seconds": 1,
     "minutes": 60,
@@ -53,6 +56,8 @@ def normalize_trigger(trigger_type: str, config: dict[str, Any] | None) -> dict[
 
     if trigger_type == "manual":
         return {}
+    if trigger_type == "cron":
+        return {"expression": normalize_cron(source.get("expression", ""))}
     if trigger_type == "once":
         run_at = str(source.get("run_at") or "").strip()
         if not run_at:
@@ -95,6 +100,8 @@ def compute_next_run(
 
     if trigger_type == "manual":
         return None
+    if trigger_type == "cron":
+        return cron_times(config["expression"], after_utc, 1)[0].isoformat(timespec="seconds")
     if trigger_type == "once":
         candidate = _aware(config["run_at"])
         return candidate.isoformat(timespec="seconds") if candidate > after_utc else None
@@ -136,6 +143,8 @@ def encode_trigger_config(value: dict[str, Any]) -> str:
 
 def reconcile_schedules() -> None:
     for task in fetch_all("SELECT * FROM tasks WHERE enabled = 1 AND trigger_type != 'manual'"):
+        if task.get('target_host_id') is None and not task.get('first_environment_ready', 1):
+            continue
         if task.get("next_run_at"):
             continue
         config = decode_trigger_config(task.get("trigger_config"))
@@ -146,6 +155,18 @@ def reconcile_schedules() -> None:
 async def scheduler_loop(enqueue: Callable[[int, str], Awaitable[int]]) -> None:
     while True:
         now = utc_now()
+        from .services import cron_runs, execution_queue, workflow_schedules
+        # Restore accepted occurrences before accepting later schedule points.
+        try:
+            await asyncio.to_thread(cron_runs.reconcile, now=now)
+            await asyncio.to_thread(cron_runs.dispatch_pending, execution_queue._enqueue_task_in_transaction)
+            await asyncio.to_thread(workflow_schedules.scan_due, now=now)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception('Cron 轮次核对或派发失败，保留登记记录并等待下次核对')
+            await asyncio.sleep(1)
+            continue
         due_tasks = await asyncio.to_thread(
             fetch_all,
             """
@@ -154,19 +175,33 @@ async def scheduler_loop(enqueue: Callable[[int, str], Awaitable[int]]) -> None:
               AND trigger_type != 'manual'
               AND next_run_at IS NOT NULL
               AND next_run_at <= ?
+              AND (target_host_id IS NOT NULL OR first_environment_ready = 1)
             ORDER BY next_run_at ASC
             """,
             (now,),
         )
         for task in due_tasks:
+            if task["trigger_type"] == "cron":
+                try:
+                    await asyncio.to_thread(
+                        cron_runs.register_due, task["id"], now,
+                        task["next_run_at"], task["version"],
+                    )
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    logger.exception('任务 %s 的 Cron 登记失败，计划点仍保留待核对', task['id'])
+                continue
             config = decode_trigger_config(task.get("trigger_config"))
             scheduled_for = task["next_run_at"]
             next_run = compute_next_run(task["trigger_type"], config, after=now)
-            await asyncio.to_thread(
-                execute,
-                "UPDATE tasks SET next_run_at = ?, last_triggered_at = ?, updated_at = ? WHERE id = ?",
-                (next_run, scheduled_for, now, task["id"]),
+            _, changed = await asyncio.to_thread(
+                execute_result,
+                "UPDATE tasks SET next_run_at = ?, last_triggered_at = ?, updated_at = ? WHERE id = ? AND version=? AND enabled=1 AND archived=0 AND (target_host_id IS NOT NULL OR first_environment_ready=1)",
+                (next_run, scheduled_for, now, task["id"], task['version']),
             )
+            if changed != 1:
+                continue
             try:
                 await enqueue(task["id"], "schedule")
             except Exception:

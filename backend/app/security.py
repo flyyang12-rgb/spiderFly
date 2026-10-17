@@ -169,7 +169,7 @@ def admin_user(user: dict = Depends(ready_user)) -> dict:
 
 def super_admin_user(user: dict = Depends(ready_user)) -> dict:
     if user["role"] != "super_admin":
-        raise HTTPException(status_code=403, detail="只有超级管理员可以管理成员")
+        raise HTTPException(status_code=403, detail="需要超级管理员权限")
     return user
 
 
@@ -307,9 +307,10 @@ def write_audit(
     target_type: str = "",
     target_id: int | None = None,
     summary: str = "",
+    conn=None,
 ) -> None:
     ip = request.client.host if request.client else ""
-    execute(
+    (conn.execute if conn is not None else execute)(
         """
         INSERT INTO audit_logs (
             user_id, username, action, target_type, target_id,

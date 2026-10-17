@@ -12,11 +12,17 @@
     [string]$BackupPath,
     [string]$PackagePath,
     [switch]$IncludeCaches,
-    [switch]$ConfirmRestore
+    [switch]$ConfirmRestore,
+    [string]$InstallDir,
+    [string]$ProgramBackupPath
 )
 
 $ErrorActionPreference = 'Stop'
-$agentRoot = $PSScriptRoot
+$agentRoot = if($InstallDir) { [IO.Path]::GetFullPath($InstallDir) } else { $PSScriptRoot }
+if($InstallDir -and (-not(Test-Path -LiteralPath (Join-Path $agentRoot 'start.ps1')) -or
+                    -not(Test-Path -LiteralPath (Join-Path $agentRoot 'spiderfly_agent/__init__.py')))) {
+    throw '请选择原 Agent 安装目录'
+}
 $dataRoot = [System.IO.Path]::GetFullPath($DataDir)
 $pidPath = Join-Path $dataRoot 'agent.pid.json'
 $shutdownPath = Join-Path $dataRoot 'shutdown.request'
@@ -36,9 +42,16 @@ function Get-AgentProcess {
         $allowedExecutables = @($expectedPython)
         $venvConfig = Join-Path $agentRoot '.venv\pyvenv.cfg'
         if (Test-Path -LiteralPath $venvConfig -PathType Leaf) {
-            $baseExecutable = Get-Content -LiteralPath $venvConfig | Where-Object { $_ -match '^executable\s*=\s*(.+)$' } | Select-Object -First 1
+            $venvLines = Get-Content -LiteralPath $venvConfig -Encoding UTF8
+            $baseExecutable = $venvLines | Where-Object { $_ -match '^executable\s*=\s*(.+)$' } | Select-Object -First 1
             if ($baseExecutable -match '^executable\s*=\s*(.+)$') {
                 $allowedExecutables += [System.IO.Path]::GetFullPath($Matches[1].Trim())
+            }
+            # A venv created by another venv records that launcher as executable,
+            # while Windows actually runs home/python.exe as the child process.
+            $baseHome = $venvLines | Where-Object { $_ -match '^home\s*=\s*(.+)$' } | Select-Object -First 1
+            if ($baseHome -match '^home\s*=\s*(.+)$') {
+                $allowedExecutables += [System.IO.Path]::GetFullPath((Join-Path $Matches[1].Trim() 'python.exe'))
             }
         }
         $commandLine = [string]$process.CommandLine
@@ -47,13 +60,16 @@ function Get-AgentProcess {
                 [System.IO.Path]::GetFullPath($process.ExecutablePath) -notin $allowedExecutables -or
                 $commandLine -notmatch '(?i)(?:^|\s)-m\s+spiderfly_agent(?:\s|$)' -or
                 $commandLine -notmatch $dataArgument) {
+            # A process can disappear while CIM is reading its final properties.
+            # Only confirmed absence is safe; an existing unknown PID still fails.
+            if (-not (Get-CimInstance Win32_Process -Filter "ProcessId=$([int]$record.pid)" -ErrorAction Stop)) { return $null }
             throw "PID $($record.pid) 已被其他进程占用，未执行操作；请人工核对 $pidPath"
         }
         return @{ Process = $process; Record = $record }
     } catch [Microsoft.PowerShell.Commands.ProcessCommandException] {
         return $null
     } catch [Microsoft.Management.Infrastructure.CimException] {
-        return $null
+        throw '无法确认 Agent 进程状态，未执行操作；请检查本机 CIM 服务和权限'
     }
 }
 
@@ -174,14 +190,15 @@ switch ($Action) {
         if (Test-Path -LiteralPath $BackupPath) { throw "备份文件已存在：$BackupPath" }
         $temporary = Join-Path ([System.IO.Path]::GetTempPath()) ('spiderfly-agent-backup-' + [guid]::NewGuid().ToString('N'))
         New-Item -ItemType Directory -Path (Join-Path $temporary 'state') -Force | Out-Null
-        $names = @('identity.json', 'config.json', 'journal.sqlite3', 'journal.sqlite3-wal', 'journal.sqlite3-shm', 'runs')
+        $names = @('identity.json', 'config.json', 'journal.sqlite3', 'journal.sqlite3-wal', 'journal.sqlite3-shm', 'runs',
+                   'controller-update-key.json','remote-update.json','upgrade.resume.json')
         if ($IncludeCaches) { $names += 'envs' }
         foreach ($name in $names) {
             $source = Join-Path $dataRoot $name
             if (Test-Path -LiteralPath $source) { Copy-Item -LiteralPath $source -Destination (Join-Path $temporary 'state') -Recurse -Force }
         }
         $manifest = @{
-            format = 1; created_at = [DateTimeOffset]::UtcNow.ToString('O'); agent_version = '0.3.0'
+            format = 1; created_at = [DateTimeOffset]::UtcNow.ToString('O'); agent_version = '0.5.0'
             source_machine = $env:COMPUTERNAME; source_user = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
             includes_environment_cache = [bool]$IncludeCaches
             files = @(Get-ChildItem -LiteralPath (Join-Path $temporary 'state') -File -Recurse | ForEach-Object {
@@ -227,13 +244,19 @@ switch ($Action) {
         $required = @('README.md', 'requirements.txt', 'start.ps1', 'manage.ps1',
             'setup.ps1', 'install-python.ps1', '安装并接入Agent.bat', 'spiderfly_agent\__init__.py')
         foreach ($name in $required) { if (-not (Test-Path -LiteralPath (Join-Path $sourceRoot $name) -PathType Leaf)) { throw "升级包缺少 $name" } }
-        $archive = Join-Path (Split-Path $agentRoot -Parent) ("SpiderFlyAgent-program-{0}.zip" -f (Get-Date -Format 'yyyyMMdd-HHmmss'))
+        $archive = if($ProgramBackupPath) { [IO.Path]::GetFullPath($ProgramBackupPath) } else {
+            Join-Path (Split-Path $agentRoot -Parent) ("SpiderFlyAgent-program-{0}-{1}.zip" -f (Get-Date -Format 'yyyyMMdd-HHmmss'),[guid]::NewGuid().ToString('N').Substring(0,8))
+        }
+        if(Test-Path -LiteralPath $archive){throw '程序备份文件已存在，不会覆盖'}
         $programNames = @('README.md', 'requirements.txt', 'start.ps1', 'manage.ps1',
-            'setup.ps1', 'install-python.ps1', '安装并接入Agent.bat', 'spiderfly_agent')
+            'setup.ps1', 'install-python.ps1', '安装并接入Agent.bat', 'spiderfly_agent',
+            'upgrade.ps1', 'upgrade-core.ps1', 'upgrade-ui.ps1', 'upgrade-transport.py', '升级Agent.bat', 'remote-upgrade.ps1', 'controller-trust.json', 'update-manifest.json')
         $programFiles = $programNames | ForEach-Object { Join-Path $agentRoot $_ } | Where-Object { Test-Path -LiteralPath $_ }
         Compress-Archive -Path $programFiles -DestinationPath $archive -CompressionLevel Optimal
         foreach ($name in $programNames) {
-            Copy-Item -LiteralPath (Join-Path $sourceRoot $name) -Destination $agentRoot -Recurse -Force
+            if(Test-Path -LiteralPath (Join-Path $sourceRoot $name)) {
+                Copy-Item -LiteralPath (Join-Path $sourceRoot $name) -Destination $agentRoot -Recurse -Force
+            }
         }
         if (Test-Path -LiteralPath $temporary) { Remove-Item -LiteralPath $temporary -Recurse -Force }
         Write-Host "Agent 程序已人工升级；旧程序备份：$archive" -ForegroundColor Green

@@ -1,4 +1,4 @@
-import { computed, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { API, request } from '../../lib/api'
 
 export function createExecutionsState() {
@@ -8,6 +8,7 @@ export function createExecutionsState() {
   const executionHistoryTotal = ref(0)
   const executionHistoryPage = ref(1)
   const executionHistoryLoading = ref(false)
+  const executionHistoryError = ref('')
   const detail = ref(null)
   const artifactDownload = reactive({ busy: false, path: '', message: '', error: false })
   const stoppingExecution = ref(null)
@@ -26,6 +27,7 @@ export function createExecutionsState() {
     executionHistoryTotal,
     executionHistoryPage,
     executionHistoryLoading,
+    executionHistoryError,
     detail,
     artifactDownload,
     stoppingExecution,
@@ -41,6 +43,7 @@ export function useExecutions({
   executionFilters,
   executionHistory,
   executionHistoryLoading,
+  executionHistoryError = ref(''),
   executionHistoryPage,
   executionHistoryTotal,
   executions,
@@ -58,6 +61,30 @@ export function useExecutions({
   let artifactDownloadGeneration = 0
 
   let executionHistoryGeneration = 0
+  let detailGeneration = 0
+  let sessionGeneration = 0
+  let stopGeneration = 0
+  let disposed = false
+  const controllers = new Set()
+  const cancelling = new Set()
+  let appliedFilters = { ...executionFilters }
+
+  function sessionToken() { return { generation: sessionGeneration, user: me.value } }
+  function currentSession(token) {
+    return !disposed && Boolean(token.user) && me.value === token.user && token.generation === sessionGeneration
+  }
+  function ready() { return !disposed && Boolean(me.value) && !me.value.must_change_password }
+  async function api(path, options = {}) {
+    const controller = new AbortController()
+    controllers.add(controller)
+    try { return await request(path, { ...options, signal: controller.signal }) }
+    finally { controllers.delete(controller) }
+  }
+  function actionFailed(error, title) {
+    if (error.name === 'AbortError') return
+    if (error.status === 401) handleSessionExpired()
+    else showToast('error', title, error.message)
+  }
 
   const activeExecutions = computed(() =>
     executions.value.filter((item) => ['pending', 'running'].includes(item.status)),
@@ -111,36 +138,43 @@ export function useExecutions({
   )
 
   async function loadExecutionHistory({ page = executionHistoryPage.value, quiet = false } = {}) {
-    if (!me.value) return
+    if (disposed || !me.value) return
+    if (quiet && executionHistoryLoading.value) return
+    const token = sessionToken()
     const generation = ++executionHistoryGeneration
-    if (!quiet) executionHistoryLoading.value = true
+    if (!quiet) {
+      executionHistoryLoading.value = true
+      appliedFilters = { ...executionFilters }
+    }
     const params = new URLSearchParams({
       page: String(page),
       page_size: String(EXECUTION_PAGE_SIZE),
     })
-    if (executionFilters.task_name.trim()) params.set('task_name', executionFilters.task_name.trim())
-    if (executionFilters.status !== 'all') params.set('status', executionFilters.status)
-    if (executionFilters.requester.trim()) params.set('requester', executionFilters.requester.trim())
-    if (executionFilters.date_from) params.set('date_from', executionFilters.date_from)
-    if (executionFilters.date_to) params.set('date_to', executionFilters.date_to)
+    if (appliedFilters.task_name.trim()) params.set('task_name', appliedFilters.task_name.trim())
+    if (appliedFilters.status !== 'all') params.set('status', appliedFilters.status)
+    if (appliedFilters.requester.trim()) params.set('requester', appliedFilters.requester.trim())
+    if (appliedFilters.date_from) params.set('date_from', appliedFilters.date_from)
+    if (appliedFilters.date_to) params.set('date_to', appliedFilters.date_to)
     try {
-      const result = await request('/executions/history?' + params.toString())
-      if (generation !== executionHistoryGeneration) return
+      const result = await api('/executions/history?' + params.toString())
+      if (!currentSession(token) || generation !== executionHistoryGeneration) return
+      if (!Array.isArray(result?.items)) throw new Error('运行记录返回格式不完整，请重试读取')
       const totalPages = Math.max(1, Number(result.total_pages) || 1)
       if (page > totalPages) {
         executionHistoryPage.value = totalPages
         await loadExecutionHistory({ page: totalPages, quiet })
         return
       }
-      executionHistory.value = Array.isArray(result.items) ? result.items : []
+      executionHistory.value = result.items
       executionHistoryTotal.value = Number(result.total) || 0
       executionHistoryPage.value = Number(result.page) || page
+      executionHistoryError.value = ''
     } catch (error) {
-      if (generation !== executionHistoryGeneration) return
+      if (!currentSession(token) || generation !== executionHistoryGeneration || error.name === 'AbortError') return
+      executionHistoryError.value = error.message || '运行记录暂时没有载入'
       if (error.status === 401) handleSessionExpired()
-      else if (!quiet) showToast('error', '运行记录暂时没有载入', error.message)
     } finally {
-      if (generation === executionHistoryGeneration) executionHistoryLoading.value = false
+      if (currentSession(token) && generation === executionHistoryGeneration) executionHistoryLoading.value = false
     }
   }
 
@@ -176,31 +210,45 @@ export function useExecutions({
   }
 
   async function cancelExecution(item) {
+    if (!ready() || cancelling.has(item.id) || (item.status !== 'pending' && !isAdmin.value)) return
+    const token = sessionToken()
+    cancelling.add(item.id)
     try {
-      await request('/executions/' + item.id + '/cancel', { method: 'POST' })
-      showToast('success', item.status === 'pending' ? '已从队列移除' : '已提交停止请求')
+      await api('/executions/' + item.id + '/cancel', { method: 'POST' })
+      if (!currentSession(token)) return
+      if (item.trigger_source === 'workflow') {
+        showToast('success', '已提交所属流程的停止请求', '后续步骤不再执行，当前步骤完成收尾后结束本轮')
+      } else showToast('success', item.status === 'pending' ? '已从队列移除' : '已提交停止请求')
       await loadAll({ quiet: true, includeAdmin: false })
     } catch (error) {
-      showToast('error', '无法取消', error.message)
+      if (currentSession(token)) actionFailed(error, '无法取消')
+    } finally {
+      if (currentSession(token)) cancelling.delete(item.id)
     }
   }
 
   async function forceStopExecution() {
-    if (!isAdmin.value || !stoppingExecution.value || stoppingBusy.value) return
+    if (!ready() || !isAdmin.value || !stoppingExecution.value || stoppingBusy.value) return
     const target = stoppingExecution.value
+    const token = sessionToken()
+    const generation = ++stopGeneration
     stoppingBusy.value = true
     try {
-      await request('/executions/' + target.id + '/stop', { method: 'POST' })
+      await api('/executions/' + target.id + '/stop', { method: 'POST' })
+      if (!currentSession(token) || generation !== stopGeneration) return
       if (detail.value?.id === target.id) detail.value.stop_requested = true
-      stoppingExecution.value = null
-      showToast('success', '已请求强制停止', '进程退出并完成清理后，队列会继续运行')
+      if (stoppingExecution.value === target) stoppingExecution.value = null
+      showToast('success', target.trigger_source === 'workflow' ? '已请求强制停止所属流程' : '已请求强制停止',
+        target.trigger_source === 'workflow' ? '后续步骤不再执行，当前步骤完成收尾后结束本轮' : '进程退出并完成清理后，队列会继续运行')
       await loadAll({ quiet: true, includeAdmin: false })
     } catch (error) {
-      stoppingExecution.value = null
-      showToast('error', '无法强制停止', error.message)
+      if (!currentSession(token) || generation !== stopGeneration || error.name === 'AbortError') return
+      if (stoppingExecution.value === target) stoppingExecution.value = null
+      actionFailed(error, '无法强制停止')
+      if (!currentSession(token)) return
       await loadAll({ quiet: true, includeAdmin: false })
     } finally {
-      stoppingBusy.value = false
+      if (currentSession(token) && generation === stopGeneration) stoppingBusy.value = false
     }
   }
 
@@ -216,13 +264,24 @@ export function useExecutions({
   }
 
   async function openExecution(item) {
+    if (disposed || !me.value || !item?.id) return
+    resetArtifactDownload()
     detail.value = { ...item }
+    return refreshExecutionDetail()
+  }
+
+  async function refreshExecutionDetail({ quiet = false } = {}) {
+    if (disposed || !me.value || !detail.value?.id) return
+    const id = detail.value.id
+    const token = sessionToken()
+    const generation = ++detailGeneration
     try {
-      const result = await request('/executions/' + item.id)
-      if (detail.value?.id === item.id) detail.value = result
+      const result = await api('/executions/' + id)
+      if (currentSession(token) && generation === detailGeneration && detail.value?.id === id) detail.value = result
     } catch (error) {
+      if (!currentSession(token) || generation !== detailGeneration || detail.value?.id !== id || error.name === 'AbortError') return
       if (error.status === 401) handleSessionExpired()
-      else if (detail.value?.id === item.id) showToast('error', '无法载入完整日志', error.message)
+      else if (!quiet) showToast('error', '无法载入完整日志', error.message)
     }
   }
 
@@ -234,7 +293,8 @@ export function useExecutions({
   }
 
   async function downloadArtifact(file) {
-    if (!detailFinished.value || artifactDownload.busy) return
+    if (disposed || !me.value || !detailFinished.value || artifactDownload.busy) return
+    const token = sessionToken()
     const executionId = detail.value.id
     const generation = artifactDownloadGeneration
     const controller = new AbortController()
@@ -249,7 +309,7 @@ export function useExecutions({
         cache: 'no-store',
         signal: controller.signal,
       })
-      if (generation !== artifactDownloadGeneration || detail.value?.id !== executionId) return
+      if (!currentSession(token) || generation !== artifactDownloadGeneration || detail.value?.id !== executionId) return
       if (response.status === 401) {
         handleSessionExpired()
         return
@@ -272,17 +332,41 @@ export function useExecutions({
       link.remove()
       artifactDownload.message = '下载请求已交给浏览器，请在浏览器下载列表查看。'
     } catch (error) {
-      if (generation !== artifactDownloadGeneration || error.name === 'AbortError') return
+      if (!currentSession(token) || generation !== artifactDownloadGeneration || detail.value?.id !== executionId || error.name === 'AbortError') return
       artifactDownload.error = true
       artifactDownload.message =
         error instanceof TypeError ? '暂时无法连接服务器，请检查网络后重试。' : error.message
     } finally {
-      if (generation === artifactDownloadGeneration) {
+      if (currentSession(token) && generation === artifactDownloadGeneration) {
         artifactDownload.busy = false
         artifactDownloadController = null
       }
     }
   }
+
+  function suspendExecutionHistory() {
+    executionHistoryGeneration += 1
+    executionHistoryLoading.value = false
+  }
+
+  function resetExecutionSession() {
+    sessionGeneration += 1
+    detailGeneration += 1
+    stopGeneration += 1
+    suspendExecutionHistory()
+    controllers.forEach((controller) => controller.abort())
+    resetArtifactDownload()
+    cancelling.clear()
+    executions.value = []; executionHistory.value = []; detail.value = null
+    executionHistoryTotal.value = 0; executionHistoryPage.value = 1; executionHistoryError.value = ''
+    stoppingExecution.value = null; stoppingBusy.value = false
+    Object.assign(executionFilters, { task_name: '', status: 'all', requester: '', date_from: '', date_to: '' })
+    appliedFilters = { ...executionFilters }
+  }
+
+  watch(me, (user, previous) => { if (user !== previous) resetExecutionSession() }, { flush: 'sync' })
+  watch(() => detail.value?.id, () => { detailGeneration += 1; resetArtifactDownload() }, { flush: 'sync' })
+  onBeforeUnmount(() => { disposed = true; resetExecutionSession() })
 
   return {
     activeExecutions,
@@ -305,6 +389,9 @@ export function useExecutions({
     taskIsActive,
     viewTaskExecution,
     openExecution,
+    refreshExecutionDetail,
+    suspendExecutionHistory,
+    resetExecutionSession,
     resetArtifactDownload,
     downloadArtifact,
   }

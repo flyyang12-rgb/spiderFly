@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import sqlite3
 import uuid
+from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 from .. import security
@@ -20,6 +22,7 @@ from ..services.task_queries import (
     _schedule_values,
     _task_or_404,
     validate_target_host,
+    validate_cron_runtime,
 )
 
 
@@ -59,6 +62,13 @@ def create_task(
             if payload.target_host_id is not None and user["role"] not in {"admin", "super_admin"}:
                 raise HTTPException(status_code=403, detail="只有管理员可以指定默认运行电脑")
             validate_target_host(conn, payload.target_host_id)
+            if payload.trigger_type == "cron" and payload.target_host_id is not None:
+                raise HTTPException(status_code=400, detail="Cron 首版仅支持主控本机，请选择主控本机")
+            if payload.trigger_type == 'cron':
+                try:
+                    validate_cron_runtime(conn, source=Path(script).read_text('utf-8-sig'))
+                except ValueError as exc:
+                    raise HTTPException(400, str(exc)) from exc
             current_app = conn.execute(
                 "SELECT id FROM rpa_apps WHERE id = ? AND archived = 0",
                 (payload.app_id,),
@@ -109,6 +119,8 @@ def create_task(
                 ),
             )
             task_id = int(cursor.lastrowid)
+            security.write_audit(request, user, 'create_task', target_type='task', target_id=task_id,
+                                 summary=f'创建任务 {payload.name}', conn=conn)
     except sqlite3.IntegrityError as exc:
         detail = (
             "这个程序已经绑定任务，请上传一个新的程序"
@@ -116,14 +128,6 @@ def create_task(
             else "任务名称已存在"
         )
         raise HTTPException(status_code=409, detail=detail) from exc
-    security.write_audit(
-        request,
-        user,
-        "create_task",
-        target_type="task",
-        target_id=task_id,
-        summary=f"创建任务 {payload.name}",
-    )
     return _task_or_404(task_id, public=True)
 
 
@@ -137,6 +141,7 @@ def update_task(
     current = _task_or_404(task_id)
     values = payload.model_dump(exclude_unset=True)
     expected_version = int(values.pop("version", current["version"]))
+    config_edit = any(key != 'enabled' for key in values)
     if not values:
         return _public_task(current)
     if "target_host_id" in values and user["role"] not in {"admin", "super_admin"}:
@@ -156,10 +161,11 @@ def update_task(
             detail="任务不能更换程序；请删除后上传新程序并重新创建",
         )
     try:
-        if values == {"enabled": False}:
+        if values == {"enabled": False} or not current.get('first_environment_ready', 1):
             # Stopping a schedule must remain possible when its environment is broken.
             app_item = {"name": current["app_name"]}
             script, python_path = current["script_path"], current["python_path"]
+            app_item = {"name": current["app_name"]}
         else:
             app_item, script, python_path = app_runtime(final_app_id)
         final_enabled = bool(values.get("enabled", current["enabled"]))
@@ -170,6 +176,8 @@ def update_task(
         encoded_config, next_run_at = _schedule_values(
             final_trigger_type, final_trigger_config, final_enabled
         )
+        if not current.get('first_environment_ready', 1) and values.get('target_host_id', current.get('target_host_id')) is None:
+            next_run_at = None
     except (ValueError, FileNotFoundError, RuntimeError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -193,6 +201,24 @@ def update_task(
     params.extend([utc_now(), task_id, expected_version])
     try:
         with transaction() as conn:
+            fresh = conn.execute('SELECT * FROM tasks WHERE id=?', (task_id,)).fetchone()
+            if not fresh or fresh['version'] != expected_version:
+                raise HTTPException(status_code=409, detail="任务已被其他伙伴修改，请刷新后重试")
+            from ..services.workflow_schedules import assert_task_plan_allowed
+            assert_task_plan_allowed(conn, task_id, final_trigger_type)
+            from ..services import cron_runs
+            round_item = cron_runs.active_round(conn, task_id)
+            if config_edit and round_item and round_item['state'] == 'pending':
+                raise HTTPException(status_code=409, detail="Cron 已登记且待入队，完成入队后才能修改配置")
+            if config_edit and (fresh['trigger_type'] == 'cron' or round_item) and conn.execute("SELECT 1 FROM executions WHERE task_id=? AND status IN ('pending','running')", (task_id,)).fetchone():
+                raise HTTPException(status_code=409, detail="排队或运行中的任务只能停用，不能修改配置")
+            if final_trigger_type == "cron" and values.get("target_host_id", fresh["target_host_id"]) is not None:
+                raise HTTPException(status_code=400, detail="Cron 首版仅支持主控本机，请选择主控本机")
+            if final_trigger_type == 'cron' and not (not config_edit and values.get('enabled') == 0):
+                try:
+                    validate_cron_runtime(conn, task_id=task_id)
+                except ValueError as exc:
+                    raise HTTPException(400, str(exc)) from exc
             if "target_host_id" in values:
                 validate_target_host(conn, values["target_host_id"])
             current_app = conn.execute(
@@ -212,6 +238,7 @@ def update_task(
                 raise HTTPException(status_code=409, detail="任务已被其他伙伴修改，请刷新后重试")
             if values.get("enabled") == 0:
                 now = utc_now()
+                pending_ids = [row['id'] for row in conn.execute("SELECT id FROM executions WHERE task_id=? AND status='pending'", (task_id,))]
                 cancelled = conn.execute(
                     """
                     UPDATE executions
@@ -221,6 +248,9 @@ def update_task(
                     (now, task_id),
                 )
                 if cancelled.rowcount:
+                    from ..native_process import confirm_unstarted
+                    for execution_id in pending_ids:
+                        confirm_unstarted(conn, execution_id)
                     conn.execute(
                         f"UPDATE tasks SET last_status = {TASK_EXECUTION_STATUS_SQL} WHERE id = ?",
                         ("cancelled", task_id),
@@ -234,21 +264,24 @@ def update_task(
                            WHERE task_id=? AND status='queued'""",
                         (now, task_id),
                     )
+            security.write_audit(request, user, 'update_task', target_type='task', target_id=task_id,
+                                 summary=f"更新任务 {values.get('name', current['name'])}", conn=conn)
     except sqlite3.IntegrityError as exc:
         raise HTTPException(status_code=409, detail="任务名称已存在") from exc
-
-    security.write_audit(
-        request,
-        user,
-        "update_task",
-        target_type="task",
-        target_id=task_id,
-        summary=f"更新任务 {values.get('name', current['name'])}",
-    )
     return _task_or_404(task_id, public=True)
 
 
 @router.delete("/api/tasks/{task_id}", status_code=204)
+async def delete_task_endpoint(
+    task_id: int, request: Request, user: dict = Depends(admin_user),
+) -> None:
+    from ..services import workflows
+    stop_ids = await asyncio.to_thread(workflows.prepare_task_deletion, task_id)
+    from .workflows import _dispatch_stops
+    _dispatch_stops(stop_ids)
+    await asyncio.to_thread(delete_task, task_id, request, user)
+
+
 def delete_task(
     task_id: int,
     request: Request,
@@ -281,6 +314,14 @@ async def run_task(
 ) -> dict:
     request_id = payload.request_id if payload and payload.request_id else f"task-manual-{uuid.uuid4().hex}"
     with transaction() as conn:
+        from ..services import cron_runs
+        original = cron_runs.find_manual(conn, task_id, int(user['id']), request_id)
+        if original:
+            execution = conn.execute('SELECT id,status FROM executions WHERE id=?', (original['execution_id'],)).fetchone()
+            return {'run_type': 'local', 'execution_id': original['execution_id'] if execution else None,
+                    'cron_round_id': original['id'], 'target_host_id': None, 'target_host_name': '主控本机',
+                    'status': execution['status'] if execution else (original.get('execution_status') or original.get('final_status') or original['state']),
+                    'message': '已返回原本机运行' if execution else (original.get('result_summary') or '原运行资料已删除，保留触发摘要')}
         has_remote_runs = conn.execute(
             "SELECT 1 FROM sqlite_master WHERE type='table' AND name='remote_runs'"
         ).fetchone()
@@ -296,7 +337,7 @@ async def run_task(
                     "target_host_name": run["host_name"], "status": run["status"],
                     "waiting_reason": run["waiting_reason"], "message": "已返回原远程运行"}
         task_row = conn.execute(
-            "SELECT id,name,enabled,target_host_id FROM tasks WHERE id=? AND archived=0", (task_id,),
+            "SELECT id,name,enabled,target_host_id,trigger_type FROM tasks WHERE id=? AND archived=0", (task_id,),
         ).fetchone()
         if not task_row:
             raise HTTPException(status_code=404, detail="任务不存在")
@@ -319,7 +360,10 @@ async def run_task(
             summary=f"手动运行 {task_row['name']}，远程电脑 {result['target_host_name']}，运行记录 #{result['remote_run_id']}",
         )
         return result
-    execution_id = await _enqueue_task(task_id, "manual", int(user["id"]))
+    if task_row['trigger_type'] == 'cron':
+        execution_id = await _enqueue_task(task_id, "manual", int(user["id"]), request_id)
+    else:
+        execution_id = await _enqueue_task(task_id, "manual", int(user["id"]))
     task = _task_or_404(task_id)
     security.write_audit(
         request,

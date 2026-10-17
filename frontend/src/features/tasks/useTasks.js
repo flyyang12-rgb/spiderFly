@@ -30,6 +30,7 @@ export function createTasksState() {
     daily_time: '09:00',
     weekly_days: [1],
     weekly_time: '09:00',
+    cron_expression: '0 9 * * *',
   })
   return { tasks, taskModalOpen, editingTask, deletingTask, targetHosts, targetHostsLoading, filters, taskForm }
 }
@@ -42,8 +43,10 @@ export function useTasks({
   filters,
   isAdmin,
   loadAll,
+  handleSessionExpired,
   me,
   navigateTo,
+  openExecution,
   remoteRunTarget,
   saving,
   showToast,
@@ -55,6 +58,41 @@ export function useTasks({
   targetHostsLoading,
 }) {
   const pendingRuns = new Map()
+  let sessionGeneration = 0
+  let editorGeneration = 0
+  const controllers = new Set()
+
+  function operation() {
+    const owner = me.value
+    const generation = sessionGeneration
+    return () => Boolean(owner) && me.value === owner && generation === sessionGeneration
+  }
+  async function api(path, options = {}) {
+    const controller = new AbortController()
+    controllers.add(controller)
+    try { return await request(path, { ...options, signal: controller.signal }) }
+    finally { controllers.delete(controller) }
+  }
+  function reportError(error, title) {
+    if (error.name === 'AbortError') return
+    if (error.status === 401) handleSessionExpired?.()
+    else showToast('error', title, error.message)
+  }
+  function resetTaskSession() {
+    sessionGeneration++
+    editorGeneration++
+    for (const controller of controllers) controller.abort()
+    controllers.clear()
+    pendingRuns.clear()
+    targetHosts.value = []
+    targetHostsLoading.value = false
+    saving.value = false
+    taskModalOpen.value = false
+    editingTask.value = null
+    deletingTask.value = null
+    resetFilters()
+    Object.assign(taskForm, { name: '', description: '', app_id: '', target_host_id: '', trigger_type: 'manual', daily_time: '09:00', weekly_time: '09:00', weekly_days: [1], cron_expression: '0 9 * * *' })
+  }
   const manualTasks = computed(() =>
     tasks.value.filter((task) => task.enabled && task.trigger_type === 'manual'),
   )
@@ -109,11 +147,13 @@ export function useTasks({
   }
 
   function openEdit(task) {
+    if (!me.value || saving.value) return
     if (taskIsActive(task)) {
-      showToast('error', '任务正在排队或运行', '当前只能停用计划，完成后才能修改其他内容')
+      showToast('error', '任务正在排队或运行', '当前只能停用任务，完成后才能修改其他内容')
       return
     }
     editingTask.value = task
+    editorGeneration++
     const config = task.trigger_config || {}
     Object.assign(taskForm, {
       name: task.name || '',
@@ -129,8 +169,9 @@ export function useTasks({
         : 'manual',
       target_host_id: task.target_host_id ? String(task.target_host_id) : '',
       daily_time: config.time || '09:00',
-      weekly_days: config.weekdays || [1],
+      weekly_days: [...(config.weekdays || [1])],
       weekly_time: config.time || '09:00',
+      cron_expression: task.trigger_type === 'cron' ? config.expression || '' : '0 9 * * *',
     })
     taskModalOpen.value = true
     loadTargetHosts()
@@ -139,12 +180,14 @@ export function useTasks({
   async function loadTargetHosts() {
     if (!isAdmin.value || targetHostsLoading.value) return
     targetHostsLoading.value = true
+    const current = operation()
     try {
-      targetHosts.value = await request('/hosts')
+      const result = await api('/hosts')
+      if (current()) targetHosts.value = result
     } catch (error) {
-      showToast('error', '宿主机列表载入失败', error.message)
+      if (current()) reportError(error, '宿主机列表载入失败')
     } finally {
-      targetHostsLoading.value = false
+      if (current()) targetHostsLoading.value = false
     }
   }
 
@@ -166,6 +209,7 @@ export function useTasks({
   }
 
   async function saveTask() {
+    if (!me.value || saving.value) return
     if (!taskForm.name.trim()) {
       showToast('error', '请填写任务名称')
       return
@@ -174,34 +218,48 @@ export function useTasks({
       showToast('error', '请至少选择一个星期')
       return
     }
+    if (taskForm.trigger_type === 'cron' && taskForm.target_host_id) {
+      showToast('error', 'Cron 首版仅支持主控本机', '请将默认运行电脑设为主控本机后重试')
+      return
+    }
+    if (taskForm.trigger_type === 'cron' && !taskForm.cron_expression.trim()) {
+      showToast('error', '请填写 Cron 表达式')
+      return
+    }
     saving.value = true
+    const validSession = operation()
+    const editor = editorGeneration
+    const current = () => validSession() && editor === editorGeneration
     try {
       const method = editingTask.value ? 'PATCH' : 'POST'
       const path = editingTask.value ? '/tasks/' + editingTask.value.id : '/tasks'
-      await request(path, { method, body: JSON.stringify(taskPayload()) })
+      await api(path, { method, body: JSON.stringify(taskPayload()) })
+      if (!current()) return
       taskModalOpen.value = false
       showToast('success', '任务已更新')
       await loadAll({ quiet: true, includeAdmin: false })
     } catch (error) {
+      if (!current() || error.name === 'AbortError') return
       if (error.status === 409 && error.message.includes('其他伙伴修改')) {
-        showToast('error', '这项任务已被其他人修改', '已刷新最新内容，请重新打开后再编辑')
-        taskModalOpen.value = false
-        await loadAll({ quiet: true, includeAdmin: false })
+        showToast('error', '这项任务已被其他人修改', '输入已保留，请核对最新设置后重新编辑')
       } else {
-        showToast('error', '保存失败', error.message)
+        reportError(error, '保存失败')
       }
     } finally {
-      saving.value = false
+      if (current()) saving.value = false
     }
   }
 
   async function runTask(task) {
+    if (!me.value) return
+    const current = operation()
     try {
       const requestId = pendingRuns.get(task.id) || manualRequestId()
       pendingRuns.set(task.id, requestId)
-      const result = await request('/tasks/' + task.id + '/run', {
+      const result = await api('/tasks/' + task.id + '/run', {
         method: 'POST', body: JSON.stringify({ request_id: requestId }),
       })
+      if (!current()) return
       pendingRuns.delete(task.id)
       if (result?.run_type === 'remote') {
         showToast('success', '任务已提交到 ' + result.target_host_name,
@@ -217,38 +275,45 @@ export function useTasks({
         position ? '当前排在第 ' + position + ' 位' : '主控本机会按顺序执行',
       )
       navigateTo('runtime', 'active')
+      if (result?.execution_id) openExecution?.({ id: result.execution_id, task_name: task.name })
       await loadAll({ quiet: true, includeAdmin: false })
-      detail.value = executions.value.find((item) => item.id === result?.execution_id) || null
     } catch (error) {
-      showToast('error', '无法运行任务', error.message)
+      if (current()) reportError(error, '无法运行任务')
     }
   }
 
   async function toggleTask(task) {
+    if (!me.value) return
+    const current = operation()
     try {
-      await request('/tasks/' + task.id, {
+      await api('/tasks/' + task.id, {
         method: 'PATCH',
         body: JSON.stringify({ enabled: !Boolean(task.enabled), version: task.version }),
       })
+      if (!current()) return
       showToast('success', task.enabled ? '任务已停用' : '任务已启用')
       await loadAll({ quiet: true, includeAdmin: false })
     } catch (error) {
+      if (!current() || error.name === 'AbortError') return
       if (error.status === 409 && error.message.includes('其他伙伴修改')) {
         showToast('error', '状态已被其他人更新', '页面已自动刷新')
-      } else showToast('error', '状态更新失败', error.message)
+      } else reportError(error, '状态更新失败')
       await loadAll({ quiet: true, includeAdmin: false })
     }
   }
 
   async function confirmDelete() {
     if (!deletingTask.value || !isAdmin.value) return
+    const current = operation()
+    const target = deletingTask.value
     try {
-      await request('/tasks/' + deletingTask.value.id, { method: 'DELETE' })
+      await api('/tasks/' + target.id, { method: 'DELETE' })
+      if (!current() || deletingTask.value !== target) return
       showToast('success', '任务已彻底删除', '程序、独立环境和运行记录已清理')
       deletingTask.value = null
       await loadAll({ quiet: true, includeAdmin: false })
     } catch (error) {
-      showToast('error', '删除失败', error.message)
+      if (current() && deletingTask.value === target) reportError(error, '删除失败')
     }
   }
 
@@ -279,5 +344,6 @@ export function useTasks({
     toggleWeekday,
     resetFilters,
     loadTargetHosts,
+    resetTaskSession,
   }
 }

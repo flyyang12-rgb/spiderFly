@@ -12,13 +12,14 @@ from pathlib import Path
 from typing import Any
 
 from .config import (
+    DATA_DIR,
     DEFAULT_TASK_TIMEOUT_SECONDS,
     MANAGED_BROWSER_PORT,
     RPA_APPS_DIR,
     RPA_ENVS_DIR,
     WORK_DIR,
 )
-from .database import TASK_EXECUTION_STATUS_SQL, append_execution_output, execute, fetch_one, utc_now
+from .database import TASK_EXECUTION_STATUS_SQL, append_execution_output, execute, fetch_one, transaction, utc_now
 from .execution_results import (
     ExecutionWorkspace,
     ResolvedOutcome,
@@ -27,6 +28,7 @@ from .execution_results import (
 )
 from .feishu import FeishuNotifier, capture_active_window_jpeg
 from .host_runtime import cleanup_after_run, prepare_work_directory
+from . import native_process
 
 
 FINAL_STATUSES = {"success", "failed", "timeout", "cancelled"}
@@ -41,6 +43,7 @@ class ExecutionControl:
     stop_event: asyncio.Event = field(default_factory=asyncio.Event)
     reason: str = ""
     accepting: bool = True
+    settlement_id: int | None = None
 
 
 _execution_controls: dict[int, ExecutionControl] = {}
@@ -72,8 +75,15 @@ def _check_stop(control: ExecutionControl) -> None:
         raise ForceStopRequested(control.reason)
 
 
-async def _wait_for_process(process, control: ExecutionControl, timeout: float) -> None:
-    process_wait = asyncio.create_task(process.wait())
+async def _wait_for_parent_exit(process) -> None:
+    # asyncio Process.wait can wait for inherited output pipes after the parent
+    # has exited. Owned descendants must be settled before draining those pipes.
+    while process.returncode is None:
+        await asyncio.sleep(0.03)
+
+
+async def _wait_for_process(process, control: ExecutionControl, timeout: float, *, parent_exit_only=False) -> None:
+    process_wait = asyncio.create_task(_wait_for_parent_exit(process) if parent_exit_only else process.wait())
     stop_wait = asyncio.create_task(control.stop_event.wait())
     try:
         done, _ = await asyncio.wait({process_wait, stop_wait}, timeout=timeout, return_when=asyncio.FIRST_COMPLETED)
@@ -103,6 +113,45 @@ def validate_script(script_path: str, python_path: str) -> tuple[Path, str]:
         raise FileNotFoundError(f"脚本不存在：{script}")
     if not interpreter.is_file():
         raise FileNotFoundError(f"Python 环境不存在：{interpreter}")
+    return script, str(interpreter)
+
+
+def _workflow_execution_snapshot(execution_id: int) -> dict[str, Any]:
+    from .services import workflows
+    with transaction() as conn:
+        snapshot = workflows.execution_snapshot(conn, execution_id)
+    if not snapshot or snapshot.get('runtime') != 'native':
+        raise ValueError('流程步骤缺少普通 Python 冻结执行参数')
+    return snapshot
+
+
+def _check_workflow_allowed(execution_id: int, control: ExecutionControl) -> None:
+    """The persisted stop flag also covers the claim-to-runner and gated-launch gaps."""
+    _check_stop(control)
+    from .services import workflows
+    try:
+        with transaction() as conn:
+            workflows.assert_execution_allowed(conn, execution_id)
+    except InterruptedError as exc:
+        control.reason = str(exc) or '流程已停止'
+        control.stop_event.set()
+        raise ForceStopRequested(control.reason) from exc
+    _check_stop(control)
+
+
+def validate_workflow_script(script_path: str, python_path: str) -> tuple[Path, str]:
+    """Frozen workflow files have a separate managed root; content hashes are verified by the service."""
+    script = Path(script_path).expanduser().resolve()
+    interpreter = Path(python_path).expanduser().resolve()
+    try:
+        script.relative_to((DATA_DIR / 'workflow_snapshots').resolve())
+        interpreter.relative_to(RPA_ENVS_DIR.resolve())
+    except ValueError as exc:
+        raise ValueError('流程脚本或 Python 环境不在 SpiderFly 管理目录内') from exc
+    if script.suffix.lower() != '.py' or not script.is_file():
+        raise ValueError('流程冻结脚本不存在或无效')
+    if not interpreter.is_file():
+        raise FileNotFoundError('流程冻结 Python 环境不存在')
     return script, str(interpreter)
 
 
@@ -240,7 +289,11 @@ def _runtime_environment(
     execution_id: int | None = None,
     work_dir: Path | None = None,
     template_file: Path | None = None,
+    browser_port: int | None = None,
 ) -> dict[str, str]:
+    port = MANAGED_BROWSER_PORT if browser_port is None else browser_port
+    if type(port) is not int or not 1024 <= port <= 65535:
+        raise ValueError('浏览器端口参数无效')
     environment = {
         key: value
         for key, value in os.environ.items()
@@ -262,29 +315,50 @@ def _runtime_environment(
             if item.casefold() not in lowered
         )
         environment[variable] = ",".join(entries)
-    environment["SPIDERFLY_BROWSER_PORT"] = str(MANAGED_BROWSER_PORT)
+    environment["SPIDERFLY_BROWSER_PORT"] = str(port)
     if workspace is not None and execution_id is not None:
         environment.update(workspace.environment(execution_id))
     if work_dir is not None:
         environment["SPIDERFLY_WORK_DIR"] = str(work_dir)
         environment["SPIDERFLY_BROWSER_PROFILE_DIR"] = str(
-            Path(work_dir) / f".spiderfly-browser-{MANAGED_BROWSER_PORT}"
+            Path(work_dir) / f".spiderfly-browser-{port}"
         )
     if template_file is not None:
         environment["SPIDERFLY_TEMPLATE_FILE"] = str(template_file)
     return environment
 
 
-async def _cleanup_public_work_directory(execution_id: int) -> str:
+async def _cleanup_public_work_directory(execution_id: int, *, settlement_id: int | None = None) -> str:
     try:
+        if settlement_id is not None and not await asyncio.to_thread(native_process.processes_gone, settlement_id):
+            raise RuntimeError('本次进程树未确认退出，公共工作区暂不清理')
         await asyncio.to_thread(cleanup_after_run, WORK_DIR)
+        if settlement_id is not None:
+            await asyncio.to_thread(native_process.mark_workspace_cleanup, settlement_id, True)
         return ""
     except Exception as exc:
         message = f"公共工作文件夹清理失败：{exc}"
+        if settlement_id is not None:
+            await asyncio.to_thread(native_process.mark_workspace_cleanup, settlement_id, False, message)
         await asyncio.to_thread(
             append_execution_output, execution_id, "stderr", f"{message}\n"
         )
         return message
+
+
+async def _finish_owned_job(execution_id: int, job, process) -> None:
+    if job is None:
+        # No launcher or user process has been started on this path.
+        await asyncio.to_thread(native_process.mark_processes_gone, execution_id)
+        return
+    try:
+        await job.finish()
+        if process is not None:
+            await asyncio.wait_for(process.wait(), PROCESS_TERMINATION_SECONDS)
+    except Exception as exc:
+        await asyncio.to_thread(native_process.mark_uncertain, execution_id, str(exc))
+    finally:
+        job.close()  # KILL_ON_CLOSE also applies on failures; absence is not a receipt.
 
 
 async def _terminate_process(process: asyncio.subprocess.Process) -> None:
@@ -406,17 +480,22 @@ async def run_execution(execution_id: int) -> None:
     try:
         await _run_execution(execution_id, control)
     finally:
-        _execution_controls.pop(execution_id, None)
+        try:
+            if control.settlement_id is not None:
+                await asyncio.to_thread(native_process.mark_runner_returned, control.settlement_id)
+        finally:
+            _execution_controls.pop(execution_id, None)
 
 
-async def _run_execution(execution_id: int, control: ExecutionControl) -> None:
+async def _run_execution(execution_id: int, control: ExecutionControl) -> int | None:
     task = await asyncio.to_thread(
         fetch_one,
         """
-        SELECT t.*, e.script_path_snapshot, e.python_path_snapshot, e.maintenance_snapshot,
+        SELECT t.*, e.task_id AS execution_task_id,
+               e.script_path_snapshot, e.python_path_snapshot, e.maintenance_snapshot,
                a.template_filename, a.template_path
         FROM executions e
-        JOIN tasks t ON t.id = e.task_id
+        LEFT JOIN tasks t ON t.id = e.task_id
         LEFT JOIN rpa_apps a ON a.id = t.app_id
         WHERE e.id = ?
         """,
@@ -424,14 +503,20 @@ async def _run_execution(execution_id: int, control: ExecutionControl) -> None:
     )
     if not task:
         return
-    if task.get('maintenance_snapshot'):
+    workflow_execution = await asyncio.to_thread(native_process.is_workflow_execution, execution_id)
+    if not workflow_execution and task.get('maintenance_snapshot'):
         import json
         snapshot = json.loads(task['maintenance_snapshot'])
         if snapshot['policy']['runtime'] in {'readonly-v1', 'collection-v1', 'drissionpage-v1'}:
             from .maintenance import run_managed_execution
             await run_managed_execution(execution_id, task, control)
             return
-    task_id = int(task["id"])
+    settlement_id = execution_id if await asyncio.to_thread(native_process.is_coordinated_execution, execution_id) else None
+    job_name = await asyncio.to_thread(native_process.begin_settlement, execution_id) if settlement_id is not None else None
+    control.settlement_id = settlement_id
+    owned_job = None
+    owned_finished = False
+    task_id = int(task.get('id') or task['execution_task_id'])
     started = time.monotonic()
 
     status = "failed"
@@ -450,9 +535,18 @@ async def _run_execution(execution_id: int, control: ExecutionControl) -> None:
     finalized_outcome: ResolvedOutcome | None = None
     try:
         _check_stop(control)
+        if workflow_execution:
+            # Read the accepted round's files and parameters, never current task/app content.
+            task = await asyncio.to_thread(_workflow_execution_snapshot, execution_id)
+            timeout = task.get('timeout_seconds')
+            if type(timeout) is not int or not 60 <= timeout <= 86400:
+                raise ValueError('流程冻结超时参数无效')
+            if type(task.get('browser_port')) is not int or not 1024 <= task['browser_port'] <= 65535:
+                raise ValueError('流程冻结浏览器端口参数无效')
+            await asyncio.to_thread(_check_workflow_allowed, execution_id, control)
         workspace = await asyncio.to_thread(create_execution_workspace, execution_id)
         _check_stop(control)
-        script, interpreter = validate_script(
+        script, interpreter = (validate_workflow_script if workflow_execution else validate_script)(
             task["script_path_snapshot"], task["python_path_snapshot"]
         )
         public_work_dir, staged_template = await asyncio.to_thread(
@@ -480,32 +574,48 @@ async def _run_execution(execution_id: int, control: ExecutionControl) -> None:
         )
         _check_stop(control)
         creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
-        process = await asyncio.create_subprocess_exec(
-            interpreter,
-            "-u",
-            str(script),
-            cwd=str(script.parent),
-            env=_runtime_environment(
+        runtime_environment = _runtime_environment(
                 workspace,
                 execution_id,
                 public_work_dir,
                 staged_template,
-            ),
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            creationflags=creationflags,
+                browser_port=task['browser_port'] if workflow_execution else None,
         )
+        if settlement_id is not None:
+            owned_job = await asyncio.to_thread(native_process.OwnedJob, execution_id, job_name)
+            _check_stop(control)
+            process = await native_process.launch_owned(
+                execution_id, owned_job, interpreter, script,
+                cwd=str(script.parent), env=runtime_environment,
+                before_gate=(lambda: _check_workflow_allowed(execution_id, control))
+                if workflow_execution else (lambda: _check_stop(control)),
+            )
+        else:
+            process = await asyncio.create_subprocess_exec(
+                interpreter, "-u", str(script), cwd=str(script.parent), env=runtime_environment,
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, creationflags=creationflags,
+            )
         stdout_task = asyncio.create_task(_consume_stream(process.stdout, execution_id, "stdout"))
         stderr_task = asyncio.create_task(_consume_stream(process.stderr, execution_id, "stderr"))
-        timeout = DEFAULT_TASK_TIMEOUT_SECONDS
+        timeout = task['timeout_seconds'] if workflow_execution else DEFAULT_TASK_TIMEOUT_SECONDS
         try:
-            await _wait_for_process(process, control, timeout)
+            if settlement_id is not None:
+                await _wait_for_process(process, control, timeout, parent_exit_only=True)
+            else:
+                await _wait_for_process(process, control, timeout)
         except asyncio.TimeoutError:
             failure_image, screenshot_note = await _capture_failure_image(execution_id, task, workspace)
             screenshot_attempted = True
-            await _terminate_process(process)
+            if settlement_id is not None:
+                await _finish_owned_job(execution_id, owned_job, process)
+                owned_finished = True
+            else:
+                await _terminate_process(process)
             status = "timeout"
             error_message = f"运行超过任务设置的 {timeout} 秒，已终止"
+        if settlement_id is not None and not owned_finished:
+            await _finish_owned_job(execution_id, owned_job, process)
+            owned_finished = True
         await _finish_stream_tasks(stdout_task, stderr_task)
         exit_code = process.returncode
         if status != "timeout":
@@ -523,20 +633,27 @@ async def _run_execution(execution_id: int, control: ExecutionControl) -> None:
                 ).strip()
     except ForceStopRequested:
         control.accepting = False
-        if process:
-            termination = asyncio.create_task(_stop_process_confirmed(process, execution_id))
+        if settlement_id is not None or process:
+            termination = asyncio.create_task(
+                _finish_owned_job(execution_id, owned_job, process)
+                if settlement_id is not None else _stop_process_confirmed(process, execution_id))
             try:
                 await asyncio.shield(termination)
             except asyncio.CancelledError:
                 # Shutdown must not abandon a stop already in progress.
                 await termination
                 shutdown_requested = True
+            owned_finished = settlement_id is not None
         await _finish_stream_tasks(stdout_task, stderr_task)
         exit_code = process.returncode if process else None
         status = "cancelled"
         error_message = control.reason
     except asyncio.CancelledError:
-        if process:
+        if settlement_id is not None:
+            finishing = asyncio.create_task(_finish_owned_job(execution_id, owned_job, process))
+            await asyncio.shield(finishing)
+            owned_finished = True
+        elif process:
             await _terminate_process(process)
         await _finish_stream_tasks(stdout_task, stderr_task)
         duration_ms = int((time.monotonic() - started) * 1000)
@@ -544,7 +661,7 @@ async def _run_execution(execution_id: int, control: ExecutionControl) -> None:
             status="cancelled",
             error_message="SpiderFly 服务停止，运行已取消",
         )
-        cleanup_error = await _cleanup_public_work_directory(execution_id)
+        cleanup_error = await _cleanup_public_work_directory(execution_id, settlement_id=settlement_id)
         if cleanup_error:
             cancelled_outcome = ResolvedOutcome(
                 status="cancelled",
@@ -559,7 +676,10 @@ async def _run_execution(execution_id: int, control: ExecutionControl) -> None:
         )
         raise
     except Exception as exc:
-        if process and process.returncode is None:
+        if settlement_id is not None and not owned_finished:
+            await _finish_owned_job(execution_id, owned_job, process)
+            owned_finished = True
+        elif process and process.returncode is None:
             await _terminate_process(process)
         await _finish_stream_tasks(stdout_task, stderr_task)
         if process:
@@ -568,6 +688,13 @@ async def _run_execution(execution_id: int, control: ExecutionControl) -> None:
         await asyncio.to_thread(append_execution_output, execution_id, "stderr", f"{exc}\n")
     finally:
         control.accepting = False
+        if settlement_id is not None and not owned_finished:
+            finishing = asyncio.create_task(_finish_owned_job(execution_id, owned_job, process))
+            try:
+                await asyncio.shield(finishing)
+            except asyncio.CancelledError:
+                await finishing
+                shutdown_requested = True
 
     # Resolve business failures as well as nonzero exits before cleaning the UI/workspace.
     duration_ms = int((time.monotonic() - started) * 1000)
@@ -583,7 +710,7 @@ async def _run_execution(execution_id: int, control: ExecutionControl) -> None:
             failure_image, screenshot_note = await _capture_failure_image(execution_id, task, workspace)
             screenshot_attempted = True
 
-    cleanup_error = await _cleanup_public_work_directory(execution_id)
+    cleanup_error = await _cleanup_public_work_directory(execution_id, settlement_id=settlement_id)
     if cleanup_error:
         if status == "success":
             status = "failed"
@@ -635,3 +762,4 @@ async def _run_execution(execution_id: int, control: ExecutionControl) -> None:
 
     if shutdown_requested:
         raise asyncio.CancelledError
+    return settlement_id

@@ -199,6 +199,13 @@ def _settle_reruns(conn):
         WHERE j.status='activated' AND j.rerun_execution_id IS NOT NULL AND j.ended_at IS NULL
         AND (e.status IS NULL OR e.status NOT IN ('pending','running'))""").fetchall()
     for row in rows:
+        from .services import cron_runs
+        if cron_runs.has_schema(conn) and conn.execute(
+            'SELECT 1 FROM cron_rounds WHERE rerun_execution_id=?', (row['rerun_execution_id'],)
+        ).fetchone():
+            from .native_process import cleanup_confirmed
+            if not cleanup_confirmed(conn, row['rerun_execution_id']):
+                continue
         # A restart may leave no duration for an interrupted run. Keep its reservation.
         seconds = ((row['duration_ms'] or 0) / 1000 if row['duration_ms'] is not None or not row['started_at']
                    else max(0, row['reserved_seconds'] - row['elapsed_seconds']))
@@ -215,37 +222,90 @@ def reconcile_reruns():
 def current_job(job_id):
     job = fetch_one('SELECT * FROM maintenance_jobs WHERE id=?', (job_id,))
     if not job or job['stop_requested'] or job['status'] not in ACTIVE: raise InterruptedError('维护已停止')
+    from .native_process import is_workflow_execution
+    if is_workflow_execution(job['execution_id']): raise InterruptedError('流程步骤不进入自动启用与重跑维护')
     old = read_snapshot(job['snapshot'])
     policy = fetch_one('SELECT * FROM maintenance_policies WHERE task_id=?', (job['task_id'],))
     if not policy or policy['version'] != old['policy']['version'] or policy['mode'] == 'off': raise InterruptedError('维护设置已改变，候选没有启用')
     return job, old
 
+def _failure_decision(conn, execution_id, code, reason):
+    from .services import cron_runs
+    cron_runs.decide_maintenance(execution_id, conn=conn, reason=reason, reason_code=code)
+    if cron_runs.has_schema(conn):
+        observed = conn.execute('SELECT * FROM cron_rounds WHERE execution_id=?', (execution_id,)).fetchone()
+        if observed:
+            return {'decision': observed['maintenance_decision'], 'reason_code': observed['maintenance_reason_code'],
+                    'reason': observed['maintenance_reason'], 'maintenance_job_id': observed['maintenance_job_id']}
+    job = conn.execute('SELECT id FROM maintenance_jobs WHERE execution_id=?', (execution_id,)).fetchone() if available(conn) else None
+    return {'decision': 'entered' if job else 'none', 'reason_code': code,
+            'reason': reason, 'maintenance_job_id': job['id'] if job else None}
+
+
 def record_failure(execution_id):
     with transaction() as conn:
-        if not available(conn): return
+        from .native_process import workflow_owned
+        if workflow_owned(conn, execution_id):
+            return {'decision': 'none', 'reason_code': 'workflow_step',
+                    'reason': '流程步骤失败不进入独立任务自动维护', 'maintenance_job_id': None}
+        if not available(conn):
+            return _failure_decision(conn, execution_id, 'maintenance_unavailable', '维护数据尚未就绪，未进入自动维护')
         _settle_reruns(conn)
+        from .services import cron_runs
+        if cron_runs.has_schema(conn):
+            observed = conn.execute("SELECT * FROM cron_rounds WHERE execution_id=? AND maintenance_decision!='pending'",
+                                    (execution_id,)).fetchone()
+            if observed and observed['maintenance_reason']:
+                return {'decision': observed['maintenance_decision'], 'reason_code': observed['maintenance_reason_code'],
+                        'reason': observed['maintenance_reason'], 'maintenance_job_id': observed['maintenance_job_id']}
         # One repair earns one business rerun, never a repair/rerun loop.
-        if conn.execute('SELECT 1 FROM maintenance_jobs WHERE rerun_execution_id=?', (execution_id,)).fetchone(): return
+        if conn.execute('SELECT 1 FROM maintenance_jobs WHERE rerun_execution_id=?', (execution_id,)).fetchone():
+            return _failure_decision(conn, execution_id, 'repair_rerun', '本次是已授权的修复重跑，不再发起自动维护')
         execution = conn.execute('SELECT * FROM executions WHERE id=?', (execution_id,)).fetchone()
-        if not execution or execution['status'] not in {'failed','timeout'} or not execution['maintenance_snapshot']: return
-        if not conn.execute("SELECT 1 FROM tasks t JOIN rpa_apps a ON a.id=t.app_id WHERE t.id=? AND a.environment_status!='removing'",(execution['task_id'],)).fetchone(): return
+        if not execution:
+            return _failure_decision(conn, execution_id, 'execution_missing', '关联执行不存在，未进入自动维护')
+        if execution['status'] not in {'failed','timeout'}:
+            if execution['status'] not in {'success', 'cancelled'}:
+                return {'decision': 'pending', 'reason_code': 'execution_not_terminal',
+                        'reason': '执行尚未结束，维护决定仍待确认', 'maintenance_job_id': None}
+            succeeded = execution['status'] == 'success'
+            return _failure_decision(conn, execution_id,
+                'execution_succeeded' if succeeded else 'execution_cancelled',
+                '执行成功，无需自动维护' if succeeded else '执行已取消，不进入自动维护')
+        if not execution['maintenance_snapshot']:
+            return _failure_decision(conn, execution_id, 'snapshot_missing', '执行缺少冻结维护快照，未进入自动维护')
+        if not conn.execute("SELECT 1 FROM tasks t JOIN rpa_apps a ON a.id=t.app_id WHERE t.id=? AND a.environment_status!='removing'",(execution['task_id'],)).fetchone():
+            return _failure_decision(conn, execution_id, 'task_unavailable', '任务已删除或环境正在移除，未进入自动维护')
+        if conn.execute('SELECT 1 FROM maintenance_jobs WHERE execution_id=?', (execution_id,)).fetchone():
+            return _failure_decision(conn, execution_id, 'queued', '已登记自动维护，修复及重跑结果单独记录')
         old = read_snapshot(execution['maintenance_snapshot'],conn)
         policy = conn.execute('SELECT * FROM maintenance_policies WHERE task_id=?', (execution['task_id'],)).fetchone()
-        if not policy or policy['mode'] == 'off' or policy['version'] != old['policy']['version']: return
-        if execution['result_code'] in {'READONLY_INPUT_ERROR','FORCE_STOPPED'}: return
-        if conn.execute('SELECT 1 FROM maintenance_jobs WHERE execution_id=?', (execution_id,)).fetchone(): return
+        if not policy:
+            return _failure_decision(conn, execution_id, 'policy_missing', '维护策略不存在，未进入自动维护')
+        if policy['mode'] == 'off':
+            return _failure_decision(conn, execution_id, 'policy_disabled', '执行结束时维护策略已关闭，未进入自动维护')
+        if policy['version'] != old['policy']['version']:
+            return _failure_decision(conn, execution_id, 'policy_changed', '维护策略已变更，原冻结版本不再自动维护')
+        if execution['result_code'] in {'READONLY_INPUT_ERROR','FORCE_STOPPED'}:
+            return _failure_decision(conn, execution_id,
+                'readonly_input_error' if execution['result_code'] == 'READONLY_INPUT_ERROR' else 'force_stopped',
+                '受限执行输入不可用，不通过修改代码发起自动维护' if execution['result_code'] == 'READONLY_INPUT_ERROR' else '执行已被强制停止，不进入自动维护')
         # Same version, contract and failure signature cannot generate unlimited fixes.
         signature = execution['error_message'][-2000:]
         fingerprint = hashlib.sha256((old['source'] + str(old['policy']['version']) + signature).encode()).hexdigest()
         cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat(timespec='seconds')
-        repeated = conn.execute('SELECT 1 FROM maintenance_jobs WHERE task_id=? AND (status IN (?,?,?,?) OR (fingerprint=? AND created_at>?))',
+        repeated = conn.execute('SELECT status FROM maintenance_jobs WHERE task_id=? AND (status IN (?,?,?,?) OR (fingerprint=? AND created_at>?))',
             (execution['task_id'], *ACTIVE, fingerprint, cutoff)).fetchone()
-        if repeated: return
+        if repeated:
+            return _failure_decision(conn, execution_id,
+                'maintenance_busy' if repeated['status'] in ACTIVE else 'duplicate_failure',
+                '同任务已有活动维护，未重复发起自动维护' if repeated['status'] in ACTIVE else '同版本相同故障在24小时内已维护，未重复发起自动维护')
         config = {key: ai_settings.settings()[key] for key in ai_settings.DEFAULTS}
         config['max_calls'] = min(config['max_calls'], 3)
         config['max_seconds'] = min(config['max_seconds'], 900)
         conn.execute('INSERT INTO maintenance_jobs(task_id,execution_id,status,snapshot,model_config,fingerprint,created_at) VALUES(?,?,\'pending\',?,?,?,?)',
                      (execution['task_id'], execution_id, execution['maintenance_snapshot'], json.dumps(config), fingerprint, utc_now()))
+        return _failure_decision(conn, execution_id, 'queued', '已登记自动维护，修复及重跑结果单独记录')
 
 def claim_generation():
     with transaction() as conn:
@@ -352,6 +412,16 @@ def remove_task_files(job_ids, execution_ids):
         elif path.exists(): path.unlink()
 
 def activate(conn, job, old, candidate, rerun_timeout=120):
+    from .native_process import workflow_owned
+    if workflow_owned(conn, job['execution_id']):
+        raise InterruptedError('流程步骤失败不自动启用修复或重跑')
+    for row in conn.execute("SELECT id FROM executions WHERE task_id=? AND status='pending'", (job['task_id'],)):
+        if workflow_owned(conn, row['id']):
+            raise BlockingIOError('等待已排队流程步骤结束后再启用修复和重跑')
+    from .services import cron_runs
+    accepted = cron_runs.active_round(conn, job['task_id'])
+    if accepted and accepted['state'] == 'pending':
+        raise BlockingIOError('等待已登记 Cron 完成入队后再启用修复')
     fresh = conn.execute('SELECT status,stop_requested FROM maintenance_jobs WHERE id=?', (job['id'],)).fetchone()
     if not fresh or fresh['stop_requested'] or fresh['status'] != 'testing':
         raise InterruptedError('维护已停止')
@@ -380,6 +450,13 @@ def activate(conn, job, old, candidate, rerun_timeout=120):
     queued = conn.execute("SELECT id,maintenance_snapshot FROM executions WHERE task_id=? AND status='pending' ORDER BY id", (task['id'],)).fetchall()
     compatible = []
     for row in queued:
+        if workflow_owned(conn, row['id']):
+            continue
+        from .services import cron_runs
+        if cron_runs.has_schema(conn) and conn.execute(
+            'SELECT 1 FROM cron_rounds WHERE execution_id=? OR rerun_execution_id=?', (row['id'], row['id'])
+        ).fetchone():
+            continue
         if not row['maintenance_snapshot']:
             continue
         saved = read_snapshot(row['maintenance_snapshot'], conn)
@@ -399,6 +476,20 @@ def activate(conn, job, old, candidate, rerun_timeout=120):
 
 
 def _enqueue_repaired_run(conn, job, task, candidate, policy, compatible, timeout):
+    from .native_process import workflow_owned
+    if workflow_owned(conn, job['execution_id']):
+        raise InterruptedError('流程步骤失败不自动创建修复重跑')
+    for row in conn.execute("SELECT id FROM executions WHERE task_id=? AND status IN ('pending','running')", (task['id'],)):
+        if workflow_owned(conn, row['id']):
+            raise BlockingIOError('等待当前流程步骤结束后再安排修复重跑')
+    compatible = [execution_id for execution_id in compatible if not workflow_owned(conn, execution_id)]
+    from .services import cron_runs
+    cron_round = conn.execute('SELECT * FROM cron_rounds WHERE execution_id=?', (job['execution_id'],)).fetchone() if cron_runs.has_schema(conn) else None
+    if cron_round:
+        compatible = []
+        existing = conn.execute('SELECT rerun_execution_id FROM maintenance_jobs WHERE id=?', (job['id'],)).fetchone()
+        if cron_round['rerun_execution_id'] is not None or (existing and existing['rerun_execution_id'] is not None):
+            return
     if not task['enabled'] or timeout < 1:
         reason = '任务已停用，未自动重跑' if not task['enabled'] else '维护预算已用完，未自动重跑'
         conn.execute('UPDATE maintenance_jobs SET rerun_reason=? WHERE id=?', (reason, job['id']))
@@ -418,6 +509,9 @@ def _enqueue_repaired_run(conn, job, task, candidate, policy, compatible, timeou
     snapshot['rerun_timeout_seconds'] = timeout
     conn.execute('UPDATE executions SET maintenance_snapshot=? WHERE id=?', (json.dumps(snapshot, ensure_ascii=False), execution_id))
     conn.execute('UPDATE maintenance_jobs SET rerun_execution_id=? WHERE id=?', (execution_id, job['id']))
+    if cron_round:
+        conn.execute('UPDATE cron_rounds SET maintenance_decision=\'entered\',maintenance_job_id=?,rerun_execution_id=? WHERE id=?',
+                     (job['id'], execution_id, cron_round['id']))
     conn.execute(f'UPDATE tasks SET last_status={TASK_EXECUTION_STATUS_SQL},updated_at=? WHERE id=?', ('pending', utc_now(), task['id']))
     conn.execute('INSERT INTO maintenance_events(job_id,message,created_at) VALUES(?,?,?)',
                  (job['id'], f"已安排自动重跑 · 执行 #{execution_id}" + ('（沿用排队记录）' if compatible else ''), utc_now()))
@@ -428,6 +522,13 @@ async def run_next_trial():
         if conn.execute("SELECT 1 FROM executions WHERE status='running'").fetchone(): return False
         row = conn.execute("SELECT * FROM maintenance_jobs WHERE status='ready' ORDER BY id LIMIT 1").fetchone()
         if not row: return False
+        # A ready repair must yield to an already accepted workflow step, rather
+        # than repeatedly validating and blocking that step from reaching the worker.
+        from .native_process import workflow_owned
+        if any(workflow_owned(conn, queued['id']) for queued in conn.execute(
+            "SELECT id FROM executions WHERE task_id=? AND status='pending'", (row['task_id'],)
+        )):
+            return False
         job = dict(row)
         conn.execute("UPDATE maintenance_jobs SET status='testing' WHERE id=?", (job['id'],))
     started = time.monotonic()
@@ -500,9 +601,18 @@ async def run_next_trial():
 
 async def run_managed_execution(execution_id, task, control):
     from . import runner
+    from . import native_process
+    from uuid import uuid4
     from .execution_results import create_execution_workspace, ResolvedOutcome
+    owned = native_process.is_cron_execution(execution_id)
+    if owned:
+        native_process.begin_settlement(execution_id)
+        control.settlement_id = execution_id
     old = read_snapshot(task['maintenance_snapshot'])
     workspace = create_execution_workspace(execution_id)
+    cleanup_token = uuid4().hex if owned else None
+    cleanup_receipt = workspace.temporary_dir / 'sandbox-cleanup.json' if owned else None
+    external_started = False
     started = time.monotonic()
     code = 'READONLY_RUN_FAILED'
     result = None
@@ -515,10 +625,16 @@ async def run_managed_execution(execution_id, task, control):
         pages = await asyncio.to_thread(runtime.capture_pages, old['contract']) if old['policy']['runtime'] not in {'collection-v1', 'drissionpage-v1'} else {}
         ai_settings.atomic_write(JOB_ROOT / 'inputs' / f'{execution_id}.json', json.dumps(pages).encode())
         code = 'ACCEPTANCE_FAILED'
+        if owned and old['policy']['runtime'] != 'readonly-v1':
+            raise ValueError('Cron 首版尚未接入此专用执行器的收尾确认')
         timeout = max(1, min(120, int(old.get('rerun_timeout_seconds', 120))))
         async def on_log(text):
             await asyncio.to_thread(runner.append_execution_output, execution_id, 'stdout', text)
-        result = await execute_profile(old, old['source'], pages=pages, template=old['template'], timeout=timeout, stop=control.stop_event, state_scope=f"task:{old['task_id']}", on_log=on_log)
+        if owned:
+            native_process.start_external_settlement(execution_id, cleanup_receipt, cleanup_token)
+            external_started = True
+        result = await execute_profile(old, old['source'], pages=pages, template=old['template'], timeout=timeout, stop=control.stop_event, state_scope=f"task:{old['task_id']}", on_log=on_log,
+                                       **({'cleanup_receipt': cleanup_receipt, 'cleanup_token': cleanup_token} if owned else {}))
         runner._check_stop(control)
         if old['policy']['runtime'] in {'collection-v1', 'drissionpage-v1'} and any('访问受限' in message for message in result.get('network', {}).get('errors', [])):
             code = 'READONLY_INPUT_ERROR'
@@ -537,8 +653,20 @@ async def run_managed_execution(execution_id, task, control):
         note = str(error) if isinstance(error,(ValueError,TimeoutError)) else type(error).__name__
         outcome = ResolvedOutcome(status='failed',error_message=ai_settings.redact(note),result_source='acceptance',business_outcome='failure',result_code=code,result_message=ai_settings.redact(note)[:1000],retryable=False)
         execute('UPDATE executions SET stderr=? WHERE id=?', (ai_settings.redact(note)[-64000:], execution_id))
+    finally:
+        if owned:
+            if external_started:
+                native_process.verify_external_receipt(execution_id)
+            else:
+                native_process.mark_processes_gone(execution_id)
+            cleanup_error = await runner._cleanup_public_work_directory(execution_id, settlement_id=execution_id)
+            native_process.mark_workspace_cleanup(execution_id, not cleanup_error, cleanup_error)
+    if owned and cleanup_error and outcome.status == 'success':
+        outcome = ResolvedOutcome(status='failed', error_message=cleanup_error, result_code='CLEANUP_UNCONFIRMED')
     await runner._finalize(execution_id, task['id'], outcome, int((time.monotonic()-started)*1000), result['exit_code'] if result else None)
     await runner._send_notification(execution_id, task, outcome.status, int((time.monotonic()-started)*1000), outcome.error_message or outcome.result_message, outcome.result_code)
+    if owned:
+        native_process.mark_runner_returned(execution_id)
 
 def policy_view(task_id):
     policy = fetch_one('SELECT * FROM maintenance_policies WHERE task_id=?', (task_id,)) or {'task_id':task_id,'mode':'auto','version':0,'runtime':'native','contract':'{}','pause_on_failure':0,'active_version_id':None}
@@ -639,8 +767,10 @@ async def save_settings(request:Request,user:dict=Depends(super_admin_user)):
     return settings()
 
 
-async def execute_profile(old, source, *, pages, template='', timeout=120, stop=None, state_scope=None, on_log=None):
+async def execute_profile(old, source, *, pages, template='', timeout=120, stop=None, state_scope=None, on_log=None, cleanup_receipt=None, cleanup_token=None):
     if old['policy']['runtime'] in {'collection-v1', 'drissionpage-v1'}:
         from .collection import execute
         return await execute(source, old['requirements'], old['contract'], timeout=timeout, stop=stop, state_scope=state_scope, **({"on_log": on_log} if on_log else {}))
-    return await runtime.execute_source(source, pages=pages, template=template, timeout=timeout, stop=stop, **({"on_log": on_log} if on_log else {}))
+    return await runtime.execute_source(source, pages=pages, template=template, timeout=timeout, stop=stop,
+        **({"on_log": on_log} if on_log else {}),
+        **({'cleanup_receipt': cleanup_receipt, 'cleanup_token': cleanup_token} if cleanup_receipt else {}))

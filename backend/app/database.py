@@ -172,7 +172,7 @@ def _recover_interrupted_work(conn: sqlite3.Connection) -> None:
         """
         SELECT task_id, MIN(id) AS keep_id
         FROM executions
-        WHERE status = 'pending' AND trigger_source NOT IN ('schedule', 'maintenance')
+        WHERE status = 'pending' AND trigger_source NOT IN ('schedule', 'maintenance', 'workflow')
         GROUP BY task_id
         HAVING COUNT(*) > 1
         """
@@ -183,7 +183,7 @@ def _recover_interrupted_work(conn: sqlite3.Connection) -> None:
             UPDATE executions
             SET status = 'cancelled', ended_at = ?,
                 error_message = '重启恢复时合并了重复排队记录'
-            WHERE task_id = ? AND status = 'pending' AND trigger_source NOT IN ('schedule', 'maintenance') AND id != ?
+            WHERE task_id = ? AND status = 'pending' AND trigger_source NOT IN ('schedule', 'maintenance', 'workflow') AND id != ?
             """,
             (now, row["task_id"], row["keep_id"]),
         )
@@ -349,6 +349,7 @@ def init_db() -> None:
 
         task_columns = _column_names(conn, "tasks")
         task_migrations = {
+            "first_environment_ready": "ALTER TABLE tasks ADD COLUMN first_environment_ready INTEGER NOT NULL DEFAULT 1",
             "failure_screenshot": "ALTER TABLE tasks ADD COLUMN failure_screenshot INTEGER NOT NULL DEFAULT 0",
             "app_name": "ALTER TABLE tasks ADD COLUMN app_name TEXT NOT NULL DEFAULT ''",
             "app_id": "ALTER TABLE tasks ADD COLUMN app_id INTEGER",
@@ -365,6 +366,14 @@ def init_db() -> None:
         for column, statement in task_migrations.items():
             if column not in task_columns:
                 conn.execute(statement)
+        conn.execute('''CREATE TABLE IF NOT EXISTS dependency_analyses (
+            version_id INTEGER PRIMARY KEY REFERENCES task_code_versions(id) ON DELETE CASCADE,
+            analysis TEXT NOT NULL, created_at TEXT NOT NULL)''')
+        conn.execute('''CREATE TABLE IF NOT EXISTS environment_records (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, app_id INTEGER NOT NULL REFERENCES rpa_apps(id) ON DELETE CASCADE,
+            revision INTEGER NOT NULL, version_id INTEGER, env_path TEXT NOT NULL,
+            requirements_hash TEXT NOT NULL, target TEXT NOT NULL, status TEXT NOT NULL,
+            evidence TEXT NOT NULL, completed_at TEXT NOT NULL)''')
         conn.execute(
             """
             UPDATE tasks SET timeout_seconds = ?
@@ -393,6 +402,14 @@ def init_db() -> None:
             if column not in execution_columns:
                 conn.execute(statement)
 
+        from .services.cron_runs import ensure_schema as ensure_cron_schema
+        from .native_process import ensure_schema as ensure_settlement_schema
+        from .services.workflows import ensure_schema as ensure_workflow_schema
+        ensure_cron_schema(conn)
+        ensure_settlement_schema(conn)
+        ensure_workflow_schema(conn)
+        from .services.creation_requests import ensure_schema as ensure_creation_schema
+        ensure_creation_schema(conn)
         _migrate_legacy_apps(conn)
         _recover_interrupted_work(conn)
         conn.executescript(

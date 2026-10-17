@@ -27,6 +27,7 @@ if len(data) > 32 * 1024 * 1024:
     raise RuntimeError('Request too large')
 request = json.loads(data)
 request['collection'] = collection
+reply = None
 timeout = max(1, min(300, int(request['timeout'])))
 with tempfile.TemporaryDirectory(prefix='spiderfly-job-') as directory:
     work = Path(directory)
@@ -84,14 +85,23 @@ with tempfile.TemporaryDirectory(prefix='spiderfly-job-') as directory:
             raise ValueError('试跑回执无效')
         if broker:
             parsed['network'] = {'requests': broker.count, 'pages': broker.trace, 'errors': broker.failures[:20], 'resumed': broker.resumed}
-        print(json.dumps(parsed, ensure_ascii=True))
+        reply = parsed
     except BaseException as error:
         try:
             os.killpg(process.pid, signal.SIGKILL)
         except ProcessLookupError:
             pass
         process.wait()
-        print(json.dumps({'exit_code': 1, 'log': str(error), 'artifacts': [], 'result': ''}, ensure_ascii=True))
+        reply = {'exit_code': 1, 'log': str(error), 'artifacts': [], 'result': ''}
     finally:
         selector.close()
         if broker: broker.close()
+
+# Only the trusted driver can reach this path, after namespace, broker and
+# temporary directory cleanup. Killing the Windows WSL bridge cannot forge it.
+if request.get('cleanup_receipt') and request.get('cleanup_token'):
+    receipt = Path(request['cleanup_receipt'])
+    temporary = receipt.with_suffix('.pending')
+    temporary.write_text(json.dumps({'token': request['cleanup_token'], 'complete': True}), encoding='utf-8')
+    os.replace(temporary, receipt)
+print(json.dumps(reply, ensure_ascii=True))

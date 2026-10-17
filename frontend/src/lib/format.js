@@ -3,6 +3,7 @@ import { triggerOptions, weekdayOptions } from './constants'
 export function triggerConfig(form) {
   if (form.trigger_type === 'daily') return { time: form.daily_time }
   if (form.trigger_type === 'weekly') return { weekdays: form.weekly_days, time: form.weekly_time }
+  if (form.trigger_type === 'cron') return { expression: String(form.cron_expression || '').trim() }
   return {}
 }
 
@@ -17,6 +18,7 @@ export function triggerLabel(type) {
 
 export function triggerDetail(task) {
   const config = task.trigger_config || {}
+  if (task.trigger_type === 'cron') return (config.expression || '尚未设置表达式') + ' · 北京时间'
   if (task.trigger_type === 'daily') return '每天 ' + config.time
   if (task.trigger_type === 'weekly') {
     const days = (config.weekdays || [])
@@ -28,7 +30,7 @@ export function triggerDetail(task) {
 }
 
 export function sourceLabel(source) {
-  return { schedule: '定时调度', maintenance: '修复重跑' }[source] || '手动运行'
+  return { schedule: '定时调度', maintenance: '修复重跑', workflow: '流程步骤' }[source] || '手动运行'
 }
 
 export function statusLabel(status) {
@@ -112,6 +114,9 @@ export function auditActionLabel(action) {
     rebuild_app: '修复运行环境',
     rebuild_environment: '修复运行环境',
     create_user: '创建成员',
+    agent_upgrade: '发起 Agent 升级',
+    agent_upgrade_succeeded: 'Agent 升级成功',
+    agent_upgrade_failed: 'Agent 升级失败',
   }
   return map[action] || action || '系统操作'
 }

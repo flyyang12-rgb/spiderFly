@@ -25,7 +25,7 @@ class ManagementScriptTests(unittest.TestCase):
         (venv / "Scripts").mkdir(parents=True)
         (venv / "Scripts" / "python.exe").touch()
         base_python = sys._base_executable
-        (venv / "pyvenv.cfg").write_text(f"executable = {base_python}\n", encoding="utf-8")
+        (venv / "pyvenv.cfg").write_text(f"executable = {sys.executable}\nhome = {Path(base_python).parent}\n", encoding="utf-8")
         module = self.root / "spiderfly_agent"
         module.mkdir()
         (module / "__main__.py").write_text(

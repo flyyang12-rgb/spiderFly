@@ -1,0 +1,355 @@
+{
+  "kind": "single-Windows synthetic controller plus real Agent Worker, real signed HTTP, venv/pip/probe; not two-PC acceptance",
+  "host_id": 4,
+  "task_id": 4,
+  "results": [
+    {
+      "label": "first-install-and-durable-replay",
+      "run_id": 6,
+      "status": "succeeded",
+      "environment": {
+        "report_version": 1,
+        "package_hash": "7a76c1379318f488d6a405eafd00376c99eb613a28e8d162645785430ac9d4f4",
+        "requirements_hash": "41ef2f6130c8856782c48ba6341e66ce9fe28f7e5efba6cb345e1dc14d008282",
+        "cache_reused": false,
+        "status": "ready",
+        "stage": "ready",
+        "python": "3.12.10",
+        "bits": 64,
+        "packages": [
+          {
+            "name": "certifi",
+            "version": "2026.7.22"
+          },
+          {
+            "name": "charset-normalizer",
+            "version": "3.5.2"
+          },
+          {
+            "name": "idna",
+            "version": "3.20"
+          },
+          {
+            "name": "pip",
+            "version": "25.0.1"
+          },
+          {
+            "name": "requests",
+            "version": "2.32.5"
+          },
+          {
+            "name": "urllib3",
+            "version": "2.8.0"
+          }
+        ],
+        "pip_check": true,
+        "interpreter_verified": true,
+        "requirements_verified": true,
+        "verified_at": "2026-10-16T05:32:45.301972+00:00",
+        "error": "",
+        "received_at": "2026-10-16T05:32:45+00:00"
+      },
+      "event_kinds": [
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "environment",
+        "started",
+        "stdout",
+        "stdout",
+        "finished"
+      ],
+      "artifact_count": 1,
+      "lost_ack_replayed": true
+    },
+    {
+      "label": "cached-environment-rechecked",
+      "run_id": 7,
+      "status": "succeeded",
+      "environment": {
+        "report_version": 1,
+        "package_hash": "7a76c1379318f488d6a405eafd00376c99eb613a28e8d162645785430ac9d4f4",
+        "requirements_hash": "41ef2f6130c8856782c48ba6341e66ce9fe28f7e5efba6cb345e1dc14d008282",
+        "cache_reused": true,
+        "status": "ready",
+        "stage": "ready",
+        "python": "3.12.10",
+        "bits": 64,
+        "packages": [
+          {
+            "name": "certifi",
+            "version": "2026.7.22"
+          },
+          {
+            "name": "charset-normalizer",
+            "version": "3.5.2"
+          },
+          {
+            "name": "idna",
+            "version": "3.20"
+          },
+          {
+            "name": "pip",
+            "version": "25.0.1"
+          },
+          {
+            "name": "requests",
+            "version": "2.32.5"
+          },
+          {
+            "name": "urllib3",
+            "version": "2.8.0"
+          }
+        ],
+        "pip_check": true,
+        "interpreter_verified": true,
+        "requirements_verified": true,
+        "verified_at": "2026-10-16T05:32:46.297974+00:00",
+        "error": "",
+        "received_at": "2026-10-16T05:32:46+00:00"
+      },
+      "event_kinds": [
+        "stdout",
+        "stdout",
+        "stdout",
+        "environment",
+        "started",
+        "stdout",
+        "stdout",
+        "finished"
+      ],
+      "artifact_count": 1,
+      "lost_ack_replayed": false
+    },
+    {
+      "label": "real-pip-check-conflict",
+      "run_id": 8,
+      "status": "failed",
+      "environment": {
+        "report_version": 1,
+        "package_hash": "7a76c1379318f488d6a405eafd00376c99eb613a28e8d162645785430ac9d4f4",
+        "requirements_hash": "41ef2f6130c8856782c48ba6341e66ce9fe28f7e5efba6cb345e1dc14d008282",
+        "cache_reused": true,
+        "status": "failed",
+        "stage": "pip_check",
+        "python": "3.12.10",
+        "bits": 64,
+        "packages": [
+          {
+            "name": "certifi",
+            "version": "2026.7.22"
+          },
+          {
+            "name": "charset-normalizer",
+            "version": "3.5.2"
+          },
+          {
+            "name": "idna",
+            "version": "3.20"
+          },
+          {
+            "name": "pip",
+            "version": "25.0.1"
+          },
+          {
+            "name": "requests",
+            "version": "2.32.5"
+          },
+          {
+            "name": "synthetic-conflict",
+            "version": "1.0"
+          },
+          {
+            "name": "urllib3",
+            "version": "2.8.0"
+          }
+        ],
+        "pip_check": false,
+        "interpreter_verified": true,
+        "requirements_verified": false,
+        "verified_at": "2026-10-16T05:32:47.277972+00:00",
+        "error": "业务环境依赖一致性检查失败，详见标准错误",
+        "received_at": "2026-10-16T05:32:47+00:00"
+      },
+      "event_kinds": [
+        "stdout",
+        "stdout",
+        "stdout",
+        "environment",
+        "stderr",
+        "finished"
+      ],
+      "artifact_count": 0,
+      "lost_ack_replayed": false
+    },
+    {
+      "label": "unfinished-cache-rebuilt-and-rechecked",
+      "run_id": 9,
+      "status": "succeeded",
+      "environment": {
+        "report_version": 1,
+        "package_hash": "7a76c1379318f488d6a405eafd00376c99eb613a28e8d162645785430ac9d4f4",
+        "requirements_hash": "41ef2f6130c8856782c48ba6341e66ce9fe28f7e5efba6cb345e1dc14d008282",
+        "cache_reused": false,
+        "status": "ready",
+        "stage": "ready",
+        "python": "3.12.10",
+        "bits": 64,
+        "packages": [
+          {
+            "name": "certifi",
+            "version": "2026.7.22"
+          },
+          {
+            "name": "charset-normalizer",
+            "version": "3.5.2"
+          },
+          {
+            "name": "idna",
+            "version": "3.20"
+          },
+          {
+            "name": "pip",
+            "version": "25.0.1"
+          },
+          {
+            "name": "requests",
+            "version": "2.32.5"
+          },
+          {
+            "name": "urllib3",
+            "version": "2.8.0"
+          }
+        ],
+        "pip_check": true,
+        "interpreter_verified": true,
+        "requirements_verified": true,
+        "verified_at": "2026-10-16T05:32:55.460272+00:00",
+        "error": "",
+        "received_at": "2026-10-16T05:32:55+00:00"
+      },
+      "event_kinds": [
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "environment",
+        "started",
+        "stdout",
+        "stdout",
+        "finished"
+      ],
+      "artifact_count": 1,
+      "lost_ack_replayed": false
+    },
+    {
+      "label": "real-unreachable-package-source",
+      "run_id": 10,
+      "status": "failed",
+      "environment": {
+        "report_version": 1,
+        "package_hash": "fec8640836039e683417bb9f17acf3295ac1a96e54752c431f954cb3d183eaa7",
+        "requirements_hash": "41ef2f6130c8856782c48ba6341e66ce9fe28f7e5efba6cb345e1dc14d008282",
+        "cache_reused": false,
+        "status": "failed",
+        "stage": "install",
+        "python": null,
+        "bits": null,
+        "packages": [],
+        "pip_check": false,
+        "interpreter_verified": false,
+        "requirements_verified": false,
+        "verified_at": "2026-10-16T05:33:01.992975+00:00",
+        "error": "安装 Python 依赖失败，详见标准错误",
+        "received_at": "2026-10-16T05:33:02+00:00"
+      },
+      "event_kinds": [
+        "stdout",
+        "stdout",
+        "stdout",
+        "stdout",
+        "stderr",
+        "stderr",
+        "stderr",
+        "stderr",
+        "environment",
+        "stderr",
+        "finished"
+      ],
+      "artifact_count": 0,
+      "lost_ack_replayed": false
+    }
+  ],
+  "active_journal": null,
+  "external_models": 0,
+  "real_notifications": 0
+}

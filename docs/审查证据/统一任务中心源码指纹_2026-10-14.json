@@ -1,0 +1,1111 @@
+{
+  "reviewed_date": "2026-10-14",
+  "timezone": "Asia/Shanghai",
+  "scope": "Source and requirements only. No application import, service, runtime tests, production configuration or business data access.",
+  "hash_format": "SHA256 of actual checked-out file bytes; distinct from fixed Git commit/blob identity.",
+  "requirements": [
+    {
+      "path": "docs/SpiderFly总体需求.md",
+      "sha256": "e4d45a3cae668c686bf3a389954b102ad4e97bd44617a99a424bff7ba59021f1"
+    },
+    {
+      "path": "docs/Cron与串行工作流需求.md",
+      "sha256": "654a06438535875f6671d22046c56fa2b4573948e1e155be4d46fc93d46bda2f"
+    }
+  ],
+  "spiderfly": {
+    "head": "300e27ab8d9c4abc422ea11f05a76319e2293d00",
+    "source_scope": "Current uncommitted M1-M3 worktree, not HEAD alone.",
+    "files": [
+      {
+        "path": "backend/app/api/apps.py",
+        "sha256": "9180f5256670f11fedb919110a51cfb3ac67f52f257f1e89a7afe86d1455b162"
+      },
+      {
+        "path": "backend/app/api/executions.py",
+        "sha256": "13115e2b471af1f8a513a2839c4016cc566cc1234da4a6a14e00e518109e71b4"
+      },
+      {
+        "path": "backend/app/api/schedules.py",
+        "sha256": "6a20dfc0f44600713ae9874f6d8c0e1df4933bafca52b4e5538acb469aa00ff3"
+      },
+      {
+        "path": "backend/app/api/tasks.py",
+        "sha256": "421c33f7301f1fbe37bf112f05c6d48814cd70d266548fe108214783904c3406"
+      },
+      {
+        "path": "backend/app/api/workflows.py",
+        "sha256": "1246d99e58ee7c82b648d4a5b4ba32cb22f901fbd3a70f91b3a1395f274ed5c8"
+      },
+      {
+        "path": "backend/app/config.py",
+        "sha256": "63d33bab83337645ceb2e107c4e8de6de6f19a33d5ba2d46c8364e1d13bdfa55"
+      },
+      {
+        "path": "backend/app/cron_schedule.py",
+        "sha256": "d7630ed19ee89087d2fafc72b1548622b759134c656569748bd765210e1544ff"
+      },
+      {
+        "path": "backend/app/database.py",
+        "sha256": "f685e4583fdeaa4289c86b6c886a19606e71aeb8a166ab74f6c90bc2070f49b6"
+      },
+      {
+        "path": "backend/app/environments.py",
+        "sha256": "7b36d1e62cdff684982153a000eb0459657b659cc81921a0b0dba16069cea9af"
+      },
+      {
+        "path": "backend/app/execution_results.py",
+        "sha256": "cf6ee3417e828fc19fff7f5ec5c26a58983683f3975f4a94f6a0eb4b96d2729c"
+      },
+      {
+        "path": "backend/app/maintenance.py",
+        "sha256": "4d327b979a94075b62e39a5aaf7dcdeb07340caee183918a7f542872c65fc5d6"
+      },
+      {
+        "path": "backend/app/native_process.py",
+        "sha256": "b81bc798ba59e005bf835611da509e99e7af6ab8b1d534cbc474d07894f04821"
+      },
+      {
+        "path": "backend/app/runner.py",
+        "sha256": "7f5f2b8764c5092304843113554c6cb5e66ffbf39060d5630c364b3be6532c34"
+      },
+      {
+        "path": "backend/app/scheduling.py",
+        "sha256": "8e3b131f72497612f2b3ed493bf4f8bf6cf5862d665e05e2e37ae3334c671682"
+      },
+      {
+        "path": "backend/app/services/cron_runs.py",
+        "sha256": "c766b10d411a4c8db76f89d1b731b476a2f11b0752cacdf872adc85da9527c22"
+      },
+      {
+        "path": "backend/app/services/execution_queue.py",
+        "sha256": "d27cfe0c5d0ea482ab8506975d9d5fe7b4d7f4ac47dceb925279e5f2494362ab"
+      },
+      {
+        "path": "backend/app/services/runtime.py",
+        "sha256": "6da071caf03a0412d735ce2997f739775a7335749aa66a0c6eab138a077f0a3e"
+      },
+      {
+        "path": "backend/app/services/task_queries.py",
+        "sha256": "4f62f4b3f15337c8163f6839663e5f06b394abd04154d1a32a9dcf1bbb6be3fb"
+      },
+      {
+        "path": "backend/app/services/workflow_schedules.py",
+        "sha256": "2f3214ea4edf9161af9832dacb9e03725b2a4744a27a1a450d15fad1a91b1278"
+      },
+      {
+        "path": "backend/app/services/workflows.py",
+        "sha256": "1527e072baae77af1cb80463ecc37fd24578eda56b800bb299e1443b1363084c"
+      },
+      {
+        "path": "backend/app/task_versions.py",
+        "sha256": "198b97301d1a814235f95a4228f621471e4e567bf53ea94c66f4cc56a7276a2b"
+      },
+      {
+        "path": "backend/tests/test_cron_integration.py",
+        "sha256": "4af78804c6b82f9afd416bcb0648e45bfccfd3634e587dcb77428de64b7e512b"
+      },
+      {
+        "path": "backend/tests/test_cron_runs.py",
+        "sha256": "641ccc438ecaa524948d9bdbf91a3d9f756ccf1206f21c1db6268bda312ea457"
+      },
+      {
+        "path": "backend/tests/test_cron_schedule.py",
+        "sha256": "6d64297406241ab8bd79b655ee38d18c281d266f06577fdf38b213bce6ec9715"
+      },
+      {
+        "path": "backend/tests/test_execution_results.py",
+        "sha256": "bee60ac4ba513a05ce7cf51a65b65f5b6aac7b563844ef2bb70b415ccf221b33"
+      },
+      {
+        "path": "backend/tests/test_hosts.py",
+        "sha256": "f5b603998b5a6857e55b24679f846a5c99399b11cbf5d8e82343dd9af5a1b229"
+      },
+      {
+        "path": "backend/tests/test_maintenance.py",
+        "sha256": "fd58faf60fc8d2deec2d5d2034fe3c634b7c73925e1b50a8224f5890b6cf300a"
+      },
+      {
+        "path": "backend/tests/test_native_process.py",
+        "sha256": "0226c1be41362f8c33bddcaebd47a788c057be633884a7702312be653c128185"
+      },
+      {
+        "path": "backend/tests/test_scheduling.py",
+        "sha256": "d17d0424c7ab698b6f8e5aca70ce1cdadc21da179e0b465118d2dbc472102d04"
+      },
+      {
+        "path": "backend/tests/test_task_versions.py",
+        "sha256": "7d720e7485226bb0ae7671687be7302b3f1a45f1febdfd771206a723f872204e"
+      },
+      {
+        "path": "backend/tests/test_workers.py",
+        "sha256": "aa2754f8447f9a718fb30fbc7af0aa13178214bdf09a6bf4b5e1eef679b72007"
+      },
+      {
+        "path": "backend/tests/test_workflow_api.py",
+        "sha256": "4066c3ef1514fbb3d7495512537d09348c369034417f52b4fd88a5fe97d9ed41"
+      },
+      {
+        "path": "backend/tests/test_workflow_runtime.py",
+        "sha256": "55e2e21cf642dd2f7095ab9afdfcef1e26e00ea79416b470b17a7ff94790441d"
+      },
+      {
+        "path": "backend/tests/test_workflow_schedule_runtime.py",
+        "sha256": "b9917abebb8cdc375f223a76976faf9d9ee08ced66260bf31050674e5f13806b"
+      },
+      {
+        "path": "backend/tests/test_workflow_schedules.py",
+        "sha256": "ba41beed97f1ea285925c0a73fbd70622031e13434c335501e527b64283734d9"
+      },
+      {
+        "path": "backend/tests/test_workflows.py",
+        "sha256": "9b55ae602d2eb7f8adc46ca2b078e78d8331faba74c2b5a5970865cd081252cf"
+      },
+      {
+        "path": "frontend/src/App.vue",
+        "sha256": "dc9db77dbee2c8cd49836cb9cdbcc544896ce88d538307e91d1d030000bb0536"
+      },
+      {
+        "path": "frontend/src/features/apps/CreateTaskPage.vue",
+        "sha256": "7d01538807c9cac1e9f6032348ca01cb34760613578b29e38fa4ea6cb604392b"
+      },
+      {
+        "path": "frontend/src/features/apps/useApps.js",
+        "sha256": "4b4856c26537071983b6703748ff473d093ff2ddc825e595ec72735f419c4f17"
+      },
+      {
+        "path": "frontend/src/features/executions/ExecutionHistory.vue",
+        "sha256": "df577da1e0c857ff048042b0718400d84d86bf198b796151beb35c98fd3cddb9"
+      },
+      {
+        "path": "frontend/src/features/executions/useExecutions.js",
+        "sha256": "4290427cdbf96a41de1b36133cb1e58b026098dd422f34d64bdec8d96f3ababf"
+      },
+      {
+        "path": "frontend/src/features/schedule/CronEditor.vue",
+        "sha256": "11f66511750f6d587bce1873d5803a6c5c43a75455b16b70464e81b01f0eb9e8"
+      },
+      {
+        "path": "frontend/src/features/schedule/CronEntryDetails.vue",
+        "sha256": "281110368580010cd1829e03bc05d546b9991886066b28f6a54e76ae0168adfa"
+      },
+      {
+        "path": "frontend/src/features/schedule/PlanEditor.vue",
+        "sha256": "635c3d0b3f6412dc9c9a55b31269c327ceff2e01ba023a31de651469c1497b41"
+      },
+      {
+        "path": "frontend/src/features/schedule/WorkflowRunViewer.vue",
+        "sha256": "34861d1b53e4b0c4a8bb1ec1ee4d4405b69d092496ed1fdcf96dfa0642195988"
+      },
+      {
+        "path": "frontend/src/features/schedule/useSchedule.js",
+        "sha256": "246666a8dd3cdb6756d812c9c7f5f453d5cd6f6109c500e156a0a20af3e12dfa"
+      },
+      {
+        "path": "frontend/src/features/tasks/TaskEditor.vue",
+        "sha256": "ec5739e64e280a3c3c07ad12221e454724aa8f692530ff68ac90e57d86640994"
+      },
+      {
+        "path": "frontend/src/features/tasks/TasksPage.vue",
+        "sha256": "6df651873f8d2c799e0aee5af1f5dc058e1dd25794c7ebfb29920acddb188599"
+      },
+      {
+        "path": "frontend/src/features/tasks/useTasks.js",
+        "sha256": "f6437946bd8a0879b57868cc3b1e7cbf9c46647d7ce145dd629313ca05e6d637"
+      },
+      {
+        "path": "frontend/src/features/workflows/WorkflowDialog.vue",
+        "sha256": "9bcf74957595bcdae48916f0c0affd8caffd2a0f4c681f894c0eca16bc15dd05"
+      },
+      {
+        "path": "frontend/src/features/workflows/WorkflowEditor.vue",
+        "sha256": "d08a9cbb6299fd441a96134b560f3f4a2498b4817aabb0cbc979f720c50573de"
+      },
+      {
+        "path": "frontend/src/features/workflows/WorkflowRunDetail.vue",
+        "sha256": "9485f65137e4c905f2040b6aa845432fd63bce91f7337d1483bdc8fc4470be31"
+      },
+      {
+        "path": "frontend/src/features/workflows/WorkflowsPage.vue",
+        "sha256": "6de7fef32ea5e84c446dd0cca019cf8c3b6241f03cd05ce1169eac8d346ecc6c"
+      },
+      {
+        "path": "frontend/src/features/workflows/useWorkflows.js",
+        "sha256": "56db52596dbb87024bcc5105f5e477dd63475ae29a1ce9824a2a243d7dec26bb"
+      },
+      {
+        "path": "frontend/src/lib/constants.js",
+        "sha256": "168fb6b958e295f4b26bba2b1f1bf0f68633d387e4c1f1bcb4c2f067f35b5e6f"
+      },
+      {
+        "path": "frontend/src/lib/format.js",
+        "sha256": "59c99e4507f8815b2b6ec00cb48f38e7ae49e43585f28dbdd99438b21822ee49"
+      },
+      {
+        "path": "frontend/src/pages/OverviewPage.vue",
+        "sha256": "b3dc3b949e19784231ff23a22f13850d7401fc377b3f35fc9b43fb7d50d5cadb"
+      },
+      {
+        "path": "frontend/src/workspace/useWorkspaceData.js",
+        "sha256": "68f0b043a868db83b2e06e3387a2d2026c0011d158a23af2223f644739457f0e"
+      }
+    ]
+  },
+  "rpac": {
+    "git_metadata": null,
+    "files": [
+      {
+        "path": "README.md",
+        "sha256": "04c6c51c11076ca6e69cf8e62b17d1eafb2260a200eea158c947616beb1863d8"
+      },
+      {
+        "path": "backend/app/api/cron.py",
+        "sha256": "d04da4e11d084a436da9d8bfb57df29ddb30faec35fb6c687d787af17cb18c3a"
+      },
+      {
+        "path": "backend/app/api/executions.py",
+        "sha256": "99ac793558aa08de95350c5fb2c02b8c7b5e03585297cfdc388d52734c25aad7"
+      },
+      {
+        "path": "backend/app/api/form.py",
+        "sha256": "a507c7508b31139eac331ec68fa099b40d52abfd60b4f774845275ce38f9c199"
+      },
+      {
+        "path": "backend/app/api/router.py",
+        "sha256": "f51b28de87003b2225ee84eb83506004f042556488fb14d664148c7ff5e597aa"
+      },
+      {
+        "path": "backend/app/api/tasks.py",
+        "sha256": "74620e6cc732b8e19cb07dfe3ee34ee1f9dcf8b6e5bcecded4648e62b2ef1352"
+      },
+      {
+        "path": "backend/app/api/workflows.py",
+        "sha256": "c5a0a982df974a64417b40a3dcec5efe9ef491490dcef88e9512184e3c9dc515"
+      },
+      {
+        "path": "backend/app/deps.py",
+        "sha256": "27526eeca6930f363869c8c7743cc6532802d901866e1c568fab8a0451fe7cd3"
+      },
+      {
+        "path": "backend/app/main.py",
+        "sha256": "d343dfc0624106cc2d60452c9eb10f30f25eff2419e18ee4c7a73040d863679a"
+      },
+      {
+        "path": "backend/app/models/execution.py",
+        "sha256": "c6421060e2303687d733f3c84d37f1c1eca2f363a2d733d8178f19479fc3f95c"
+      },
+      {
+        "path": "backend/app/models/task.py",
+        "sha256": "cf11455824f87545b266ead972185734935825b34ecf34bd04317aedc36f7f12"
+      },
+      {
+        "path": "backend/app/models/task_dependency.py",
+        "sha256": "6b4f5eec29bf78a5f3e33a420909594fdff7a06f009978901bdf2301206335e9"
+      },
+      {
+        "path": "backend/app/models/workflow.py",
+        "sha256": "028c0684aa3739f7cedb9b614def0b62e1be142f5d3146e508f411771698f8e3"
+      },
+      {
+        "path": "backend/app/models/workflow_execution.py",
+        "sha256": "85285beb290cbe5e8bc7c805c36f223935521b2e59d29de523be8525718f7a30"
+      },
+      {
+        "path": "backend/app/schemas/workflow.py",
+        "sha256": "7d5d2dd063ff3c6a599cee86c2ea2a4a2e8dcc2e0178a4bb0bf1818f3eadd306"
+      },
+      {
+        "path": "backend/app/services/dependency_resolver.py",
+        "sha256": "51df6342d06eac5485403ab2dbbf07d72181b92bfc05355f85d89a6b72899ab1"
+      },
+      {
+        "path": "backend/app/services/dispatcher.py",
+        "sha256": "178547df245db0d5b579f2df0c0c99120aa76c48029e062deb6681216375d098"
+      },
+      {
+        "path": "backend/app/services/execution_service.py",
+        "sha256": "4bb86940693e30b160df822a4520fbbc18c41a3c65b6cd9d1d6cd730a9abaafe"
+      },
+      {
+        "path": "backend/app/services/heartbeat_monitor.py",
+        "sha256": "f4e25d0cdc86dd5ab6f3ef6e3427487badfc7746777668138314cd6e690e98bd"
+      },
+      {
+        "path": "backend/app/services/scheduler_service.py",
+        "sha256": "44a77ea1578f1f148a0f3eb0bbcb10c005af20966758f79117f310ccedb2d6d5"
+      },
+      {
+        "path": "backend/app/services/task_service.py",
+        "sha256": "6ed5a18d6ea2cefab26ec8992330080e2fe791fde6f8b2a751dab7ca86b6b84b"
+      },
+      {
+        "path": "frontend/src/App.vue",
+        "sha256": "aa0f622d3e15db2e17b88a703a133a95627a6c528b109e050705fcca47e9061b"
+      },
+      {
+        "path": "frontend/src/api/client.ts",
+        "sha256": "e4312bf6edc6ace1e1197528a03970594cf719ee2224407e593413aaa5b30331"
+      },
+      {
+        "path": "frontend/src/api/workflows.ts",
+        "sha256": "4663178dd71ec5071878f160dd2332d4680e745c89fbb28a6af81af4bae6aada"
+      },
+      {
+        "path": "frontend/src/components/CronPicker.vue",
+        "sha256": "f1b2e501a0a6620e9c78c839fb8bf00e45a0d4b25d28cde363ec144f1d84eb96"
+      },
+      {
+        "path": "frontend/src/components/TaskTypeForm.vue",
+        "sha256": "0ac77ae6c61791525dd6e1a6a81538c87d9f70bb5c0c80815a90350f146f61aa"
+      },
+      {
+        "path": "frontend/src/router/index.ts",
+        "sha256": "77e8a00d0bdfeb203415d41ccfcf65046ff85f50833dea77f691f2597c32218c"
+      },
+      {
+        "path": "frontend/src/stores/auth.ts",
+        "sha256": "03a7771573e86f057291d4c753117cedf996e324312fd6951129161c79179d17"
+      },
+      {
+        "path": "frontend/src/stores/tasks.ts",
+        "sha256": "d909fc1130bbd23f92646b0b13c50a7c47c8caa3123f902ecf46d8a79b1b9838"
+      },
+      {
+        "path": "frontend/src/styles/global.css",
+        "sha256": "ad52525c2adecb2f717c6401b50bff456d8ae0d420b334374a0f2af99150db69"
+      },
+      {
+        "path": "frontend/src/styles/tokens.css",
+        "sha256": "037fb7592a5671174f27cbd93d823b4aa899bc375355475589011307fa90fd08"
+      },
+      {
+        "path": "frontend/src/views/DashboardView.vue",
+        "sha256": "ee86740f3e65a752d5daf6c858734cec00307ff17820743ee5e1afe2c99ca86f"
+      },
+      {
+        "path": "frontend/src/views/ExecutionLogView.vue",
+        "sha256": "51b9d7677db5791a3034e74329580833417693b9f56d57e291779a1d4a58dae5"
+      },
+      {
+        "path": "frontend/src/views/ExecutionsView.vue",
+        "sha256": "2bed81ee6113f6590855412de03bd9bdadbc2dbc6af02cba196f26829312cdb6"
+      },
+      {
+        "path": "frontend/src/views/TaskDetailView.vue",
+        "sha256": "8aff2451a388319d7705ff936fc74d44b04c5569a3f591ead159abaa3be32a42"
+      },
+      {
+        "path": "frontend/src/views/TaskFormView.vue",
+        "sha256": "fa32a5de047bbb3eaec144282824727333ab428d7ac193309b3ef8c3e8aafdb2"
+      },
+      {
+        "path": "frontend/src/views/TasksView.vue",
+        "sha256": "19ab663e3ef7555a009e5c9e295c7130d12c8aa1d2491c39f7f6445ae8023406"
+      },
+      {
+        "path": "frontend/src/views/WorkflowDesignerView.vue",
+        "sha256": "27f050479330f6e9a88cdbb60c02e92d95f2e9803b54af788854fe8dad3270ed"
+      },
+      {
+        "path": "frontend/src/views/WorkflowsView.vue",
+        "sha256": "a4dd80981f1fe8b05936c4185206083b1fedec7de1df0310ca44a2c5f4904852"
+      },
+      {
+        "path": "worker/executors/base.py",
+        "sha256": "1af744966336a13d688ed9dfc2301775671dc97975a416a601c491ad5499435d"
+      },
+      {
+        "path": "worker/executors/python_executor.py",
+        "sha256": "4daa1aeb3877cb67553f05f1a7d0c519299b797a6d29cb60c93a8c03e35f3ac1"
+      },
+      {
+        "path": "worker/main.py",
+        "sha256": "cf0508703ec80fc2e84f1fde467f3701612038cd58121c9a7b7647b7a1de2669"
+      },
+      {
+        "path": "worker/runner.py",
+        "sha256": "5c54a4e79ca4e78fa2bacc060225052bb2ee6ca4878d3ca4d15afbbaf6390a0c"
+      }
+    ]
+  },
+  "historical_test_evidence": {
+    "date": "2026-10-14",
+    "record": "docs/M3实现与验证记录_2026-10-14.md",
+    "log": "m3-full-preview-final.log",
+    "log_sha256": "812394efce065e93600cbc9fcd09b5f0c7fbe0dadff87caa0393a8bbafd4ee68",
+    "total": 588,
+    "passed": 570,
+    "conditionally_skipped": 18,
+    "log_summary": [
+      "Ran 588 tests in 44.065s",
+      "OK (skipped=18)"
+    ],
+    "new_runtime_tests_in_this_audit": false
+  },
+  "kk": {
+    "kk-rpa-dashboard": {
+      "repository": "https://github.com/flyyang12-rgb/kk-rpa-dashboard",
+      "commit": "e33570e47ec671343c485fdd63d69e144c81bab3",
+      "checkout_clean": true,
+      "files": [
+        {
+          "path": "apps/agent/src/tools.ts",
+          "sha256": "513fe68eba37d655eb77355baf05d9b343fee126d5f9525dcf0e356a76d63859"
+        },
+        {
+          "path": "apps/backend/src/rpa_console/api.py",
+          "sha256": "95f9a0a61fd5de58a2810c940709edb32eedfa7f92733bb337cf7cc366c7bed6"
+        },
+        {
+          "path": "apps/backend/src/rpa_console/control.py",
+          "sha256": "20c7849233e5cad7b376096a01f21eb0e98ba7ab538a36e4fa5b120b0cda9496"
+        },
+        {
+          "path": "apps/backend/src/rpa_console/storage.py",
+          "sha256": "6cb7b93bef9946bffc3a07d427a06be8bb2c6294e06ea31c068dc06bc46557b3"
+        },
+        {
+          "path": "apps/backend/src/rpa_console/tasks.py",
+          "sha256": "b3b92abe0c192d9f02f47b388b5ed8fe9a1e4e81a7ba1fd73e4fa3fe4145fd73"
+        },
+        {
+          "path": "apps/web/src/App.tsx",
+          "sha256": "423d86b62d8c8f9156248be4083d63dd05e74b9db3a9265ee7f589357deb29d2"
+        },
+        {
+          "path": "apps/web/src/live/NewTask.tsx",
+          "sha256": "91c8bb029e79fdc829a5b2c1436e6b9971a351be9d48a2d96a1be258dbbc4f6a"
+        },
+        {
+          "path": "apps/web/src/live/PlanSchedule.tsx",
+          "sha256": "5289fda83a387e86b2df1c55e144b3bcabd00fb24dffd540c5b33f746ef9db22"
+        },
+        {
+          "path": "apps/web/src/live/Publishing.tsx",
+          "sha256": "c929a820529ac051c628acaba5c26828bd929ad0e4c40ae98b9703288f5a1369"
+        },
+        {
+          "path": "apps/web/src/live/RunOperations.tsx",
+          "sha256": "a86ab0562ed0b8fa366af0d7e253c49d247836afdf6ab663cbd35243ef3bc1a0"
+        },
+        {
+          "path": "apps/web/src/live/TaskPlans.tsx",
+          "sha256": "5db66ae9cb706846f65d09be13c6a9ed084548104b7c42ed780d536c1c1831d1"
+        },
+        {
+          "path": "apps/web/src/live/WorkspacePages.tsx",
+          "sha256": "03e27a789754f7d4c678280bda3d00626da66e9020016b34acddab25cb9dba6a"
+        },
+        {
+          "path": "apps/web/src/live/useResource.ts",
+          "sha256": "75b4f2228cb9c8e135d367240ea664dd1055639d624087510110b54012e3e116"
+        },
+        {
+          "path": "apps/web/src/pages/TaskEditor.tsx",
+          "sha256": "ffe7f9592ce63255c9ae66253fcee570707a5900b83f437fb6a9f055e54d2ca8"
+        },
+        {
+          "path": "apps/web/src/styles.css",
+          "sha256": "db845b7e4b26c2e018eceebf996b116886cae175628497021f6aea0fc5b0f36a"
+        },
+        {
+          "path": "apps/web/tests/platform.browser.cjs",
+          "sha256": "bdcc5db80d43a63c6de335921c65011284ac6d8bc9b5359f2144c217786d12f6"
+        }
+      ]
+    },
+    "kk-rpa-monorepo": {
+      "repository": "https://github.com/flyyang12-rgb/kk-rpa-monorepo",
+      "commit": "d65b4edfa9859c897fdf445f4860cf723d3e4267",
+      "checkout_clean": true,
+      "files": [
+        {
+          "path": "packages/rpa-core/src/rpa_core/cli.py",
+          "sha256": "b3767dddb9c2ef865cbedfc41f67da878994bc5523bce3780d7e6bc78ff2c9ee"
+        },
+        {
+          "path": "packages/rpa-core/src/rpa_core/runtime.py",
+          "sha256": "38c0328984a1da18fafab9b292ae7a82f7d46eb09cae3c3923bed45a0f4c2a65"
+        },
+        {
+          "path": "packages/rpa-executor/src/rpa_executor/client.py",
+          "sha256": "f46967d98ff231cdb4df93e7c1fe497f22234f07fc0eb51aafa5a11199ed2967"
+        },
+        {
+          "path": "packages/rpa-executor/src/rpa_executor/journal.py",
+          "sha256": "ea841e644a24b213e902a3a16a0571d89ff651048c5810be91b2acba9d193993"
+        },
+        {
+          "path": "packages/rpa-executor/src/rpa_executor/worker.py",
+          "sha256": "3a1a4b5909ac46f4d6892fa4cb55f6903f63035a08a50c457fd9387a97a58a1f"
+        }
+      ]
+    }
+  },
+  "report_source_line_ranges": [
+    {
+      "file": "../frontend/src/lib/constants.js",
+      "lines": "1—23"
+    },
+    {
+      "file": "../frontend/src/App.vue",
+      "lines": "220—238"
+    },
+    {
+      "file": "../frontend/src/features/tasks/TasksPage.vue",
+      "lines": "34—62、86—107"
+    },
+    {
+      "file": "../frontend/src/features/workflows/WorkflowsPage.vue",
+      "lines": "32—94"
+    },
+    {
+      "file": "../backend/app/api/apps.py",
+      "lines": "51—100"
+    },
+    {
+      "file": "../frontend/src/features/apps/CreateTaskPage.vue",
+      "lines": "35—195，其中 L102—156 为旧创建计划区"
+    },
+    {
+      "file": "../frontend/src/features/apps/useApps.js",
+      "lines": "5—28、49—78、87—112、146—197，含默认 manual、AI 草稿文件及保存返回"
+    },
+    {
+      "file": "../backend/app/services/workflows.py",
+      "lines": "42—70、128—177、200—205、226—257、269—283、320—330、615—706、709—784"
+    },
+    {
+      "file": "../frontend/src/features/workflows/WorkflowEditor.vue",
+      "lines": "8—53"
+    },
+    {
+      "file": "../frontend/src/features/workflows/useWorkflows.js",
+      "lines": "119—159、243—249、254—293、301—321"
+    },
+    {
+      "file": "../frontend/src/features/schedule/PlanEditor.vue",
+      "lines": "45—55、84—105"
+    },
+    {
+      "file": "../backend/app/services/workflow_schedules.py",
+      "lines": "52—94"
+    },
+    {
+      "file": "../frontend/src/features/schedule/useSchedule.js",
+      "lines": "36—81"
+    },
+    {
+      "file": "../backend/app/api/tasks.py",
+      "lines": "36—42、139—153、205—225、241—268、283—313、317—386"
+    },
+    {
+      "file": "../frontend/src/features/tasks/TasksPage.vue",
+      "lines": "124—188"
+    },
+    {
+      "file": "../frontend/src/features/tasks/useTasks.js",
+      "lines": "208—263"
+    },
+    {
+      "file": "../backend/app/api/workflows.py",
+      "lines": "54—157"
+    },
+    {
+      "file": "../backend/app/api/executions.py",
+      "lines": "33—100、153—237"
+    },
+    {
+      "file": "../backend/app/api/workflows.py",
+      "lines": "125—147"
+    },
+    {
+      "file": "../frontend/src/features/workflows/WorkflowRunDetail.vue",
+      "lines": "30—48"
+    },
+    {
+      "file": "../frontend/src/features/workflows/WorkflowsPage.vue",
+      "lines": "96"
+    },
+    {
+      "file": "../frontend/src/features/schedule/WorkflowRunViewer.vue",
+      "lines": "29"
+    },
+    {
+      "file": "../frontend/src/features/executions/useExecutions.js",
+      "lines": "113—145"
+    },
+    {
+      "file": "../frontend/src/pages/OverviewPage.vue",
+      "lines": "50—70"
+    },
+    {
+      "file": "../frontend/src/features/tasks/useTasks.js",
+      "lines": "104—109"
+    },
+    {
+      "file": "../frontend/src/features/apps/useApps.js",
+      "lines": "87—112、170—192"
+    },
+    {
+      "file": "../frontend/src/workspace/useWorkspaceData.js",
+      "lines": "72—98、114—142、155—164"
+    },
+    {
+      "file": "../frontend/src/features/workflows/WorkflowDialog.vue",
+      "lines": "9—55"
+    },
+    {
+      "file": "../frontend/src/features/tasks/TaskEditor.vue",
+      "lines": "22—26、133—144"
+    },
+    {
+      "file": "../backend/app/services/workflows.py",
+      "lines": "697—699 写 workflow"
+    },
+    {
+      "file": "../backend/app/api/executions.py",
+      "lines": "171—228 无来源排除并返回 trigger_source"
+    },
+    {
+      "file": "../frontend/src/features/executions/ExecutionHistory.vue",
+      "lines": "137 使用标签"
+    },
+    {
+      "file": "../frontend/src/lib/format.js",
+      "lines": "32—33 默认手动"
+    },
+    {
+      "file": "../backend/app/runner.py",
+      "lines": "538—600"
+    },
+    {
+      "file": "../backend/app/services/execution_queue.py",
+      "lines": "227—243"
+    },
+    {
+      "file": "../backend/app/maintenance.py",
+      "lines": "222—235、400—425"
+    },
+    {
+      "file": "../backend/app/task_versions.py",
+      "lines": "201—207、390—416"
+    },
+    {
+      "file": "../backend/app/cron_schedule.py",
+      "lines": "19—242"
+    },
+    {
+      "file": "../backend/app/scheduling.py",
+      "lines": "51—104、153—205"
+    },
+    {
+      "file": "../backend/app/api/schedules.py",
+      "lines": "58—68、103—151"
+    },
+    {
+      "file": "../backend/app/services/task_queries.py",
+      "lines": "34—61、137—144"
+    },
+    {
+      "file": "../frontend/src/features/schedule/CronEditor.vue",
+      "lines": "18—84"
+    },
+    {
+      "file": "../frontend/src/features/schedule/CronEntryDetails.vue",
+      "lines": "29—39"
+    },
+    {
+      "file": "../backend/app/services/cron_runs.py",
+      "lines": "34—421"
+    },
+    {
+      "file": "../backend/app/database.py",
+      "lines": "53—57"
+    },
+    {
+      "file": "../backend/app/services/execution_queue.py",
+      "lines": "21—89"
+    },
+    {
+      "file": "../backend/app/maintenance.py",
+      "lines": "232—259、365—466、535—541"
+    },
+    {
+      "file": "../backend/app/task_versions.py",
+      "lines": "177—212"
+    },
+    {
+      "file": "../backend/app/native_process.py",
+      "lines": "87—165、280—460"
+    },
+    {
+      "file": "../backend/app/runner.py",
+      "lines": "475—487、507—516、538—600、699—749"
+    },
+    {
+      "file": "../backend/app/services/execution_queue.py",
+      "lines": "153—245"
+    },
+    {
+      "file": "../backend/app/services/runtime.py",
+      "lines": "40—60"
+    },
+    {
+      "file": "../backend/app/database.py",
+      "lines": "139—175"
+    },
+    {
+      "file": "../backend/app/services/workflows.py",
+      "lines": "358—579、589—747、750—811"
+    },
+    {
+      "file": "../backend/app/services/workflow_schedules.py",
+      "lines": "130—206、228—263"
+    },
+    {
+      "file": "../backend/app/environments.py",
+      "lines": "469—552、584—628"
+    },
+    {
+      "file": "../backend/app/config.py",
+      "lines": "50—51"
+    },
+    {
+      "file": "../backend/app/database.py",
+      "lines": "396—403"
+    },
+    {
+      "file": "../backend/tests/test_cron_schedule.py",
+      "lines": "13—179"
+    },
+    {
+      "file": "../backend/tests/test_cron_runs.py",
+      "lines": "57—282"
+    },
+    {
+      "file": "../backend/tests/test_cron_integration.py",
+      "lines": "24—169"
+    },
+    {
+      "file": "../backend/tests/test_native_process.py",
+      "lines": "49—87、207—400"
+    },
+    {
+      "file": "../backend/tests/test_workflows.py",
+      "lines": "101—618"
+    },
+    {
+      "file": "../backend/tests/test_workflow_runtime.py",
+      "lines": "29—348"
+    },
+    {
+      "file": "../backend/tests/test_workflow_api.py",
+      "lines": "39—177"
+    },
+    {
+      "file": "../backend/tests/test_workflow_schedules.py",
+      "lines": "34—182"
+    },
+    {
+      "file": "../backend/tests/test_workflow_schedule_runtime.py",
+      "lines": "32—72"
+    },
+    {
+      "file": "../backend/app/execution_results.py",
+      "lines": "163—253"
+    },
+    {
+      "file": "../backend/tests/test_execution_results.py",
+      "lines": "55—142、184—195"
+    },
+    {
+      "file": "../backend/tests/test_maintenance.py",
+      "lines": "32—77、150—176、280—444"
+    },
+    {
+      "file": "../backend/tests/test_hosts.py",
+      "lines": "996—1078"
+    },
+    {
+      "file": "../backend/tests/test_scheduling.py",
+      "lines": "10—50"
+    },
+    {
+      "file": "../backend/tests/test_workers.py",
+      "lines": "20—84"
+    },
+    {
+      "file": "../backend/tests/test_task_versions.py",
+      "lines": "54—66"
+    },
+    {
+      "file": "../../RPAC-main/frontend/src/App.vue",
+      "lines": "9—26"
+    },
+    {
+      "file": "../../RPAC-main/frontend/src/router/index.ts",
+      "lines": "7—18、27—38"
+    },
+    {
+      "file": "../../RPAC-main/frontend/src/views/TasksView.vue",
+      "lines": "10—44"
+    },
+    {
+      "file": "../../RPAC-main/frontend/src/views/WorkflowsView.vue",
+      "lines": "9—35、64—67"
+    },
+    {
+      "file": "../../RPAC-main/frontend/src/views/TaskFormView.vue",
+      "lines": "7—42、63—105"
+    },
+    {
+      "file": "../../RPAC-main/frontend/src/components/TaskTypeForm.vue",
+      "lines": "4—19、129—143"
+    },
+    {
+      "file": "../../RPAC-main/backend/app/services/task_service.py",
+      "lines": "20—35"
+    },
+    {
+      "file": "../../RPAC-main/frontend/src/views/WorkflowDesignerView.vue",
+      "lines": "18—53、101—145"
+    },
+    {
+      "file": "../../RPAC-main/backend/app/api/workflows.py",
+      "lines": "79—96、99—135、138—185"
+    },
+    {
+      "file": "../../RPAC-main/backend/app/models/workflow.py",
+      "lines": "14—22"
+    },
+    {
+      "file": "../../RPAC-main/backend/app/services/execution_service.py",
+      "lines": "268—277"
+    },
+    {
+      "file": "../../RPAC-main/backend/app/api/tasks.py",
+      "lines": "53—87"
+    },
+    {
+      "file": "../../RPAC-main/backend/app/services/task_service.py",
+      "lines": "45—50"
+    },
+    {
+      "file": "../../RPAC-main/backend/app/api/cron.py",
+      "lines": "21—28"
+    },
+    {
+      "file": "../../RPAC-main/backend/app/services/scheduler_service.py",
+      "lines": "29—40、72—83、112—162"
+    },
+    {
+      "file": "../../RPAC-main/backend/app/api/tasks.py",
+      "lines": "39—55"
+    },
+    {
+      "file": "../../RPAC-main/backend/app/api/workflows.py",
+      "lines": "25—37"
+    },
+    {
+      "file": "../../RPAC-main/backend/app/api/executions.py",
+      "lines": "25—36"
+    },
+    {
+      "file": "../../RPAC-main/backend/app/api/router.py",
+      "lines": "21—31"
+    },
+    {
+      "file": "../../RPAC-main/backend/app/main.py",
+      "lines": "81—97"
+    },
+    {
+      "file": "../../RPAC-main/backend/app/deps.py",
+      "lines": "74—89"
+    },
+    {
+      "file": "../../RPAC-main/worker/executors/python_executor.py",
+      "lines": "34—58、81—104"
+    },
+    {
+      "file": "../../RPAC-main/worker/runner.py",
+      "lines": "100—117、178—202"
+    },
+    {
+      "file": "../../RPAC-main/backend/app/services/dispatcher.py",
+      "lines": "14—48"
+    },
+    {
+      "file": "../../RPAC-main/backend/app/services/execution_service.py",
+      "lines": "99—125、279—328"
+    },
+    {
+      "file": "../../RPAC-main/backend/app/services/dependency_resolver.py",
+      "lines": "71—83"
+    },
+    {
+      "file": "../../RPAC-main/backend/app/api/executions.py",
+      "lines": "28—44"
+    },
+    {
+      "file": "../../RPAC-main/frontend/src/views/ExecutionsView.vue",
+      "lines": "1—31、47"
+    },
+    {
+      "file": "../../RPAC-main/frontend/src/views/ExecutionLogView.vue",
+      "lines": "37、63—65"
+    },
+    {
+      "file": "../../RPAC-main/backend/app/models/execution.py",
+      "lines": "23—34"
+    },
+    {
+      "file": "../../RPAC-main/backend/app/models/task_dependency.py",
+      "lines": "18—35"
+    },
+    {
+      "file": "../../RPAC-main/backend/app/models/workflow_execution.py",
+      "lines": "16—46"
+    },
+    {
+      "file": "../../RPAC-main/backend/app/services/heartbeat_monitor.py",
+      "lines": "77—138"
+    },
+    {
+      "file": "../../RPAC-main/backend/app/services/execution_service.py",
+      "lines": "191—224"
+    },
+    {
+      "file": "../../RPAC-main/README.md",
+      "lines": "21—33、42—52、106"
+    },
+    {
+      "file": "../../RPAC-main/backend/app/api/form.py",
+      "lines": "48—78、94—122"
+    },
+    {
+      "file": "../../RPAC-main/backend/app/services/execution_service.py",
+      "lines": "93—125、191—258"
+    },
+    {
+      "file": "../../RPAC-main/backend/app/services/dependency_resolver.py",
+      "lines": "19—86、96—128"
+    },
+    {
+      "file": "../../RPAC-main/worker/executors/base.py",
+      "lines": "20—38、54—92、129—167"
+    },
+    {
+      "file": "../../RPAC-main/backend/app/models/task.py",
+      "lines": "33—44"
+    },
+    {
+      "file": "../../RPAC-main/frontend/src/components/CronPicker.vue",
+      "lines": "3—28、60—86"
+    },
+    {
+      "file": "https://github.com/flyyang12-rgb/kk-rpa-dashboard/blob/e33570e47ec671343c485fdd63d69e144c81bab3/apps/web/src/App.tsx",
+      "lines": "15—22、39—54"
+    },
+    {
+      "file": "https://github.com/flyyang12-rgb/kk-rpa-dashboard/blob/e33570e47ec671343c485fdd63d69e144c81bab3/apps/web/src/live/TaskPlans.tsx",
+      "lines": "9—38"
+    },
+    {
+      "file": "https://github.com/flyyang12-rgb/kk-rpa-dashboard/blob/e33570e47ec671343c485fdd63d69e144c81bab3/apps/web/src/live/NewTask.tsx",
+      "lines": "13—122"
+    },
+    {
+      "file": "https://github.com/flyyang12-rgb/kk-rpa-dashboard/blob/e33570e47ec671343c485fdd63d69e144c81bab3/apps/backend/src/rpa_console/storage.py",
+      "lines": "93—114"
+    },
+    {
+      "file": "https://github.com/flyyang12-rgb/kk-rpa-dashboard/blob/e33570e47ec671343c485fdd63d69e144c81bab3/apps/backend/src/rpa_console/tasks.py",
+      "lines": "98—158"
+    },
+    {
+      "file": "https://github.com/flyyang12-rgb/kk-rpa-dashboard/blob/e33570e47ec671343c485fdd63d69e144c81bab3/apps/backend/src/rpa_console/tasks.py",
+      "lines": "18—25、165—190"
+    },
+    {
+      "file": "https://github.com/flyyang12-rgb/kk-rpa-dashboard/blob/e33570e47ec671343c485fdd63d69e144c81bab3/apps/web/src/live/PlanSchedule.tsx",
+      "lines": "14—37"
+    },
+    {
+      "file": "https://github.com/flyyang12-rgb/kk-rpa-dashboard/blob/e33570e47ec671343c485fdd63d69e144c81bab3/apps/backend/src/rpa_console/control.py",
+      "lines": "120—166、197—221、234—408、435—459"
+    },
+    {
+      "file": "https://github.com/flyyang12-rgb/kk-rpa-dashboard/blob/e33570e47ec671343c485fdd63d69e144c81bab3/apps/web/src/live/WorkspacePages.tsx",
+      "lines": "10—38、56—72"
+    },
+    {
+      "file": "https://github.com/flyyang12-rgb/kk-rpa-dashboard/blob/e33570e47ec671343c485fdd63d69e144c81bab3/apps/backend/src/rpa_console/api.py",
+      "lines": "561—586"
+    },
+    {
+      "file": "https://github.com/flyyang12-rgb/kk-rpa-dashboard/blob/e33570e47ec671343c485fdd63d69e144c81bab3/apps/web/src/live/RunOperations.tsx",
+      "lines": "10—55"
+    },
+    {
+      "file": "https://github.com/flyyang12-rgb/kk-rpa-dashboard/blob/e33570e47ec671343c485fdd63d69e144c81bab3/apps/backend/src/rpa_console/api.py",
+      "lines": "256—281、379—420"
+    },
+    {
+      "file": "https://github.com/flyyang12-rgb/kk-rpa-monorepo/blob/d65b4edfa9859c897fdf445f4860cf723d3e4267/packages/rpa-core/src/rpa_core/runtime.py",
+      "lines": "48—119、273—340"
+    },
+    {
+      "file": "https://github.com/flyyang12-rgb/kk-rpa-monorepo/blob/d65b4edfa9859c897fdf445f4860cf723d3e4267/packages/rpa-core/src/rpa_core/cli.py",
+      "lines": "480—508、519—529"
+    },
+    {
+      "file": "https://github.com/flyyang12-rgb/kk-rpa-dashboard/blob/e33570e47ec671343c485fdd63d69e144c81bab3/apps/web/src/pages/TaskEditor.tsx",
+      "lines": "5—6、15—24、36—50、80"
+    },
+    {
+      "file": "https://github.com/flyyang12-rgb/kk-rpa-dashboard/blob/e33570e47ec671343c485fdd63d69e144c81bab3/apps/web/src/live/Publishing.tsx",
+      "lines": "16—59"
+    },
+    {
+      "file": "https://github.com/flyyang12-rgb/kk-rpa-monorepo/blob/d65b4edfa9859c897fdf445f4860cf723d3e4267/packages/rpa-core/src/rpa_core/runtime.py",
+      "lines": "151—214"
+    },
+    {
+      "file": "https://github.com/flyyang12-rgb/kk-rpa-dashboard/blob/e33570e47ec671343c485fdd63d69e144c81bab3/apps/backend/src/rpa_console/control.py",
+      "lines": "279—291"
+    },
+    {
+      "file": "https://github.com/flyyang12-rgb/kk-rpa-dashboard/blob/e33570e47ec671343c485fdd63d69e144c81bab3/apps/backend/src/rpa_console/api.py",
+      "lines": "515—524"
+    },
+    {
+      "file": "https://github.com/flyyang12-rgb/kk-rpa-dashboard/blob/e33570e47ec671343c485fdd63d69e144c81bab3/apps/web/src/live/useResource.ts",
+      "lines": "4—20"
+    },
+    {
+      "file": "https://github.com/flyyang12-rgb/kk-rpa-dashboard/blob/e33570e47ec671343c485fdd63d69e144c81bab3/apps/web/src/styles.css",
+      "lines": "37—40、1272—1279"
+    },
+    {
+      "file": "https://github.com/flyyang12-rgb/kk-rpa-dashboard/blob/e33570e47ec671343c485fdd63d69e144c81bab3/apps/web/tests/platform.browser.cjs",
+      "lines": "26—80"
+    },
+    {
+      "file": "https://github.com/flyyang12-rgb/kk-rpa-monorepo/blob/d65b4edfa9859c897fdf445f4860cf723d3e4267/packages/rpa-executor/src/rpa_executor/worker.py",
+      "lines": "52—59、85—108、280—288、337—348"
+    },
+    {
+      "file": "https://github.com/flyyang12-rgb/kk-rpa-monorepo/blob/d65b4edfa9859c897fdf445f4860cf723d3e4267/packages/rpa-executor/src/rpa_executor/journal.py",
+      "lines": "30—69"
+    },
+    {
+      "file": "https://github.com/flyyang12-rgb/kk-rpa-monorepo/blob/d65b4edfa9859c897fdf445f4860cf723d3e4267/packages/rpa-executor/src/rpa_executor/client.py",
+      "lines": "64—113"
+    },
+    {
+      "file": "https://github.com/flyyang12-rgb/kk-rpa-dashboard/blob/e33570e47ec671343c485fdd63d69e144c81bab3/apps/agent/src/tools.ts",
+      "lines": "89—123"
+    }
+  ]
+}

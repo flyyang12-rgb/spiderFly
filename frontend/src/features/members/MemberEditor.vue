@@ -9,7 +9,6 @@ const { closeUserEditor, editingUser, me, saveUser, savingUser, userEditForm } =
     <section class="modal password-modal" role="dialog" aria-modal="true" aria-label="编辑成员">
       <header>
         <div>
-          <span class="eyebrow">MEMBER</span>
           <h2>编辑成员</h2>
         </div>
         <button
@@ -33,7 +32,7 @@ const { closeUserEditor, editingUser, me, saveUser, savingUser, userEditForm } =
               ><span>显示名称</span><input v-model="userEditForm.display_name" required maxlength="100"
             /></label>
             <label class="field"
-              ><span>成员角色</span
+              ><span>角色</span
               ><select v-model="userEditForm.role" :disabled="editingUser.id === me.id">
                 <option v-if="editingUser.role === 'super_admin'" value="super_admin">超级管理员</option>
                 <option value="admin">管理员</option>
@@ -57,8 +56,7 @@ const { closeUserEditor, editingUser, me, saveUser, savingUser, userEditForm } =
                 minlength="6"
                 maxlength="200"
                 autocomplete="new-password"
-                placeholder="留空则保留原密码"
-              /><small>至少 6 个字符</small></label
+              /><small>至少 6 个字符，留空保留原密码</small></label
             >
             <label class="field"
               ><span>确认密码</span
@@ -70,16 +68,20 @@ const { closeUserEditor, editingUser, me, saveUser, savingUser, userEditForm } =
                 placeholder="重置密码时再次输入"
             /></label>
           </template>
-          <p v-else>当前账号不能降权、停用或删除。自己的密码请通过右上角“修改密码”调整。</p>
+          <p v-else class="member-self-hint">当前账号不能降权、停用或删除。请在账户菜单修改自己的密码。</p>
         </div>
         <footer>
           <button type="button" class="button ghost" :disabled="savingUser" @click="closeUserEditor">
             取消</button
           ><button type="submit" class="button primary" :disabled="savingUser">
-            {{ savingUser ? '正在保存…' : '保存成员' }}
+            {{ savingUser ? '正在保存…' : '保存' }}
           </button>
         </footer>
       </form>
     </section>
   </div>
 </template>
+
+<style scoped>
+.member-self-hint { margin: 0; color: var(--muted, #757a75); font-size: 12px; line-height: 1.7; }
+</style>

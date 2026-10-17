@@ -1,0 +1,85 @@
+{
+  "results": [
+    {
+      "name": "仅标准库",
+      "status": "ready",
+      "requirements": "",
+      "first_environment_ready": 1,
+      "next_run_at": "2026-10-17T01:00:00+00:00",
+      "attempts": [
+        {
+          "status": "ready",
+          "evidence": {
+            "python": "3.12.10",
+            "bits": 64,
+            "packages": [
+              {
+                "name": "pip",
+                "version": "25.0.1"
+              }
+            ],
+            "target": "controller",
+            "version_id": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "自动识别 requests",
+      "status": "ready",
+      "requirements": "requests==2.32.5",
+      "first_environment_ready": 1,
+      "next_run_at": "2026-10-17T01:00:00+00:00",
+      "attempts": [
+        {
+          "status": "failed",
+          "evidence": {
+            "error": "安装 requirements.txt 失败",
+            "stages": [
+              "[创建虚拟环境]",
+              "[安装依赖]"
+            ]
+          }
+        },
+        {
+          "status": "ready",
+          "evidence": {
+            "python": "3.12.10",
+            "bits": 64,
+            "packages": [
+              {
+                "name": "certifi",
+                "version": "2026.7.22"
+              },
+              {
+                "name": "charset-normalizer",
+                "version": "3.5.2"
+              },
+              {
+                "name": "idna",
+                "version": "3.20"
+              },
+              {
+                "name": "pip",
+                "version": "25.0.1"
+              },
+              {
+                "name": "requests",
+                "version": "2.32.5"
+              },
+              {
+                "name": "urllib3",
+                "version": "2.8.0"
+              }
+            ],
+            "target": "controller",
+            "version_id": 2
+          }
+        }
+      ]
+    }
+  ],
+  "business_executions": 0,
+  "business_marker_exists": false,
+  "real_pip_failure_and_same_task_retry": true
+}

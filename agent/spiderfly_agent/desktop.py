@@ -5,6 +5,8 @@ from __future__ import annotations
 import queue
 import os
 import threading
+import subprocess
+from pathlib import Path
 import time
 import tkinter as tk
 from tkinter import messagebox
@@ -39,6 +41,8 @@ def tray_label(snapshot: dict) -> str:
         return "接入已撤销"
     if state == "uncertain":
         return "状态待确认"
+    if state == 'upgrading':
+        return '正在升级'
     if snapshot.get("connection") == "error":
         if "升级" in snapshot.get("error", "") or "已过旧" in snapshot.get("error", ""):
             return "需要升级 Agent"
@@ -120,7 +124,19 @@ class DesktopApp:
             pystray.MenuItem("紧急接管", lambda *_: self.commands.put(("takeover", None)),
                              enabled=lambda _item: bool(self.client.snapshot()["run_id"])),
             pystray.MenuItem("退出 Agent", lambda *_: self.commands.put(("exit", None))),
+            pystray.MenuItem('升级 Agent…', lambda *_: self.commands.put(('upgrade', None)),
+                             enabled=lambda _item: not self.client.snapshot().get('run_id')),
         )
+
+    def _upgrade(self):
+        program = Path(__file__).resolve().parents[1]
+        try:
+            subprocess.Popen(['powershell.exe', '-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass',
+                '-STA', '-File', str(program / 'upgrade.ps1'), '-InstallDir', str(program),
+                '-DataDir', str(self.client.root)], cwd=program,
+                creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+        except OSError as error:
+            messagebox.showerror('无法打开升级', str(error), parent=self.root)
 
     def _stop(self):
         if self.client.request_stop():
@@ -194,6 +210,8 @@ class DesktopApp:
                 self._takeover()
             elif action == "exit":
                 self._exit()
+            elif action == 'upgrade':
+                self._upgrade()
         snapshot = self.client.snapshot()
         if snapshot.get("run_id"):
             self.task.set(snapshot.get("task_name") or f"远程运行 #{snapshot['run_id']}")

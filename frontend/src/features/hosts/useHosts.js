@@ -2,6 +2,7 @@ import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { request } from '../../lib/api'
 
 export const hostStateLabels = {
+  upgrading: '升级中',
   pending: '待批准', non_dispatch: '非调度', idle: '调度空闲', running: '运行中',
   stopping: '正在停止', offline: '离线', uncertain: '状态待确认', rejected: '已拒绝', revoked: '已撤销',
 }
@@ -23,6 +24,7 @@ export function useHosts({ onSessionExpired }) {
   const notice = ref('')
   const busy = ref('')
   const enrollment = ref(null)
+  const upgradeRequests = new Map()
   const selectedRunId = ref(null)
   const runDetail = ref(null)
   const detailLoading = ref(false)
@@ -132,6 +134,16 @@ export function useHosts({ onSessionExpired }) {
     return perform(`host:${host.id}`, () => request(`/hosts/${host.id}/${action}`, { method: 'POST', body: '{}' }), `已${verbs[action]}宿主机「${host.name}」`)
   }
 
+  async function upgradeHost(host) {
+    if (['succeeded', 'failed', 'expired', 'cancelled'].includes(host.agent_update?.status)) upgradeRequests.delete(host.id)
+    if (!upgradeRequests.has(host.id)) upgradeRequests.set(host.id, crypto.randomUUID().replaceAll('-', ''))
+    const result = await perform(`upgrade:${host.id}`, () => request(`/hosts/${host.id}/upgrade`, {
+      method: 'POST', body: JSON.stringify({ request_id: upgradeRequests.get(host.id) }),
+    }), '升级请求已提交。')
+    if (result) upgradeRequests.delete(host.id)
+    return result
+  }
+
   async function setMode(host) {
     const enabled = !host.dispatch_enabled
     return perform(`host:${host.id}`, () => request(`/hosts/${host.id}/mode`, {
@@ -168,7 +180,7 @@ export function useHosts({ onSessionExpired }) {
   return {
     hosts, runs, loading, refreshing, loadError, actionError, notice, busy, enrollment,
     selectedRunId, runDetail, detailLoading, detailError,
-    refresh, createEnrollment, hostAction, setMode, stopRun,
+    refresh, createEnrollment, hostAction, upgradeHost, setMode, stopRun,
     activateCandidate, dismissCandidate,
     openRun, closeRun, loadRunDetail,
   }

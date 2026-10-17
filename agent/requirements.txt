@@ -3,3 +3,4 @@ requests>=2.32,<3.0
 psutil>=6.0,<8.0
 Pillow>=11.0,<13.0
 pystray>=0.19,<1.0
+packaging>=24,<27

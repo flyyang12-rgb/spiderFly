@@ -1,82 +1,15 @@
 <script setup>
+import { computed } from 'vue'
 import { useWorkspaceContext } from '../../workspace/context'
-
-const { canChangePassword, changePasswordOpen, logout, me, roleLabel, settings, view } = useWorkspaceContext()
+const { settings } = useWorkspaceContext()
+const timeout = computed(() => {
+  const value = Number(settings.value?.task_timeout_seconds)
+  return value > 0 ? value % 60 === 0 ? `${value / 60} 分钟` : `${value} 秒` : '—'
+})
 </script>
-
 <template>
-  <section class="view-stack settings-grid">
-    <section class="panel">
-      <header class="panel-heading">
-        <div><h2>共享运行方式</h2></div>
-        <span class="mini-badge success-badge">{{
-          settings.scheduler === 'running' ? '运行中' : '已连接'
-        }}</span>
-      </header>
-      <div class="setting-rows">
-        <div><span>执行数量</span><strong>串行执行</strong><small>同时运行 1 个任务</small></div>
-        <div>
-          <span>调度时区</span><strong>{{ settings.scheduler_timezone || 'Asia/Shanghai' }}</strong
-          ><small>北京时间</small>
-        </div>
-        <div><span>任务环境</span><strong>独立环境</strong></div>
-        <div><span>最长运行</span><strong>10 分钟</strong><small>排队时间不计入</small></div>
-        <div>
-          <span>公共文件夹</span><strong>{{ settings.work_directory_name || '共享工作区' }}</strong
-          ><small>运行前后自动清空</small>
-        </div>
-        <div>
-          <span>运行前检查</span><strong>Excel / 端口 {{ settings.managed_browser_port || 9123 }}</strong
-          ><small>专用浏览器退出后执行</small>
-        </div>
-      </div>
-    </section>
-    <section class="panel">
-      <header class="panel-heading">
-        <div><h2>我的账号</h2></div>
-        <span class="mini-badge neutral-badge">{{ roleLabel(me.role) }}</span>
-      </header>
-      <div class="profile-block">
-        <span class="avatar large-avatar">{{ (me.display_name || me.username).slice(0, 1) }}</span>
-        <div>
-          <strong>{{ me.display_name || me.username }}</strong
-          ><small>@{{ me.username }}</small>
-        </div>
-      </div>
-      <div class="profile-actions">
-        <button
-          v-if="canChangePassword"
-          class="button secondary"
-          type="button"
-          @click="changePasswordOpen = true"
-        >
-          修改密码
-        </button>
-        <small v-else>如需修改密码，请联系超级管理员重置。</small>
-        <button class="button ghost" type="button" @click="logout">退出登录</button>
-      </div>
-    </section>
-    <section class="panel">
-      <header class="panel-heading">
-        <div><h2>飞书通知</h2></div>
-        <span class="mini-badge" :class="settings.feishu_configured ? 'success-badge' : 'warning-badge'">{{
-          settings.feishu_configured ? '已配置' : '待配置'
-        }}</span>
-      </header>
-      <div class="policy-list">
-        <div>
-          <span class="policy-index success-bg">01</span>
-          <p><strong>运行成功</strong><small>任务、状态、耗时</small></p>
-        </div>
-        <div>
-          <span class="policy-index danger-bg">02</span>
-          <p><strong>运行失败</strong><small>错误摘要与结果</small></p>
-        </div>
-        <div>
-          <span class="policy-index neutral-bg">03</span>
-          <p><strong>安静通知</strong><small>仅在结束时通知</small></p>
-        </div>
-      </div>
-    </section>
-  </section>
+  <details class="runtime-settings panel"><summary>运行信息</summary><dl><div><dt>执行并发</dt><dd>{{ settings.concurrency || '—' }}</dd></div><div><dt>调度时区</dt><dd>{{ settings.scheduler_timezone || '—' }}</dd></div><div><dt>任务超时</dt><dd>{{ timeout }}</dd></div><div><dt>公共文件夹</dt><dd>{{ settings.work_directory_name || '—' }}</dd></div><div><dt>浏览器端口</dt><dd>{{ settings.managed_browser_port || '—' }}</dd></div><div><dt>调度器</dt><dd>{{ settings.scheduler === 'running' ? '运行中' : settings.scheduler === 'stopped' ? '已停止' : '—' }}</dd></div></dl></details>
 </template>
+<style scoped>
+.runtime-settings{min-width:0}.runtime-settings summary{cursor:pointer;padding:20px 24px;font-size:14px;font-weight:500;line-height:20px;list-style-position:inside}.runtime-settings summary:focus-visible{outline:2px solid #009139;outline-offset:2px}.runtime-settings dl{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px;margin:0;padding:4px 24px 24px}.runtime-settings dl>div{display:grid;gap:6px;min-width:0;font-size:13px;line-height:20px}.runtime-settings dt{color:var(--muted,#757a75)}.runtime-settings dd{margin:0;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}@media(max-width:720px){.runtime-settings dl{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:480px){.runtime-settings summary{padding:18px}.runtime-settings dl{padding:0 18px 18px;gap:20px}}
+</style>

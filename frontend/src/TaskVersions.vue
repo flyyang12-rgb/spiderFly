@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 import { updateContext, repairFor } from './lib/versionUpdates'
+import DependencyFields from './features/apps/DependencyFields.vue'
 const props=defineProps({taskId:{type:Number,required:true}})
 const state=ref(null), error=ref(''), busy=ref(false), uploadFile=ref(null), requirements=ref(''), evidence=ref(''), showUpload=ref(false), detail=ref(null)
 const names={request:'原始要求',summary:'用途',input:'输入',urls:'站点',scope:'范围',quantity:'数量',fields:'字段',filters:'筛选',sort:'排序',concurrency:'并发',output:'输出',acceptance:'验收'}
@@ -9,6 +10,7 @@ const labels={candidate:'未运行，等待确认',pending:'等待验证',testin
 const latestUpdate=computed(()=>state.value?.updates?.[0])
 const updateNotice=computed(()=>state.value ? updateContext(state.value,latestUpdate.value) : null)
 const uploadNotice=ref(''), loadError=ref('')
+const dependencyDecisions=ref([]), dependencyStatus=ref('idle')
 let timer,alive=true
 async function api(path,options={}) {
  const r=await fetch('/api/task-versions'+path,{credentials:'include',...options});const value=await r.json()
@@ -18,9 +20,9 @@ async function api(path,options={}) {
 async function load(){try{const value=await api('/tasks/'+props.taskId);if(alive){state.value=value;loadError.value=''}}catch(e){if(alive)loadError.value=e.message}}
 function openUpload(){requirements.value=state.value?.versions.find(v=>v.id===state.value.active_version_id)?.requirements||'';showUpload.value=!showUpload.value}
 async function upload(){
- if(!uploadFile.value)return
+ if(!uploadFile.value||dependencyStatus.value!=='ready')return
  busy.value=true;error.value=''
- try{const form=new FormData();form.append('script',uploadFile.value);form.append('requirements',requirements.value);form.append('evidence',evidence.value);form.append('base_version_id',state.value.active_version_id)
+ try{const form=new FormData();form.append('script',uploadFile.value);form.append('requirements',requirements.value);form.append('dependency_decisions',JSON.stringify(dependencyDecisions.value));form.append('evidence',evidence.value);form.append('base_version_id',state.value.active_version_id)
  const result=await api('/tasks/'+props.taskId+'/upload',{method:'POST',body:form});uploadNotice.value=`v${result.version} 已保存为未运行候选，确认后才会启用。`;showUpload.value=false;await load()
  }catch(e){error.value=e.message}finally{busy.value=false}
 }
@@ -82,9 +84,9 @@ onBeforeUnmount(()=>{alive=false;clearInterval(timer)})
        <b>{{uploadFile?'更换':'选择文件'}}</b>
       </label>
       <label>修改说明（可选）<input v-model="evidence" placeholder="例如：修正翻页逻辑"></label>
-      <label class="upload-requirements">Python 依赖<textarea v-model="requirements" rows="2" placeholder="沿用原依赖或填写新依赖"></textarea></label>
+      <DependencyFields class="upload-requirements" :script="uploadFile" v-model:requirements="requirements" v-model="dependencyDecisions" :task-id="taskId" :target="state.target_host_id" :disabled="busy" @state="dependencyStatus=$event.status" />
      </div>
-     <div class="version-upload-actions"><button type="button" class="button ghost" @click="showUpload=false">取消</button><button class="button" :disabled="busy">{{busy?'正在保存…':'保存候选版本'}}</button></div>
+     <div class="version-upload-actions"><button type="button" class="button ghost" @click="showUpload=false">取消</button><button class="button" :disabled="busy||dependencyStatus!=='ready'">{{busy?'正在保存…':'保存候选版本'}}</button></div>
     </form>
     <div class="version-list">
      <article class="version-card" :class="`is-${versionState(v).tone}`" v-for="v in state.versions" :key="v.id">

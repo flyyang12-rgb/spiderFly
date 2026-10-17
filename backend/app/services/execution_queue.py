@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import sqlite3
+import json
 from fastapi import HTTPException
 from .. import maintenance, task_versions
 from ..config import HOST_CHECK_INTERVAL_SECONDS, WORK_DIR
@@ -18,89 +19,83 @@ logger = logging.getLogger(__name__)
 
 
 def _enqueue_task_sync(
-    task_id: int, source: str = "manual", requested_by: int | None = None
+    task_id: int, source: str = "manual", requested_by: int | None = None,
+    request_id: str | None = None,
 ) -> int:
-    now = utc_now()
     try:
         with transaction() as conn:
-            task = conn.execute(
-                """
-                SELECT
-                    t.id, t.enabled, t.archived, t.app_id, t.target_host_id,
-                    a.id AS current_app_id, a.name AS app_name,
-                    a.script_path, a.env_path, a.environment_status,
-                    a.archived AS app_archived
-                FROM tasks t
-                LEFT JOIN rpa_apps a ON a.id = t.app_id
-                WHERE t.id = ?
-                """,
-                (task_id,),
-            ).fetchone()
-            if not task or task["archived"]:
-                raise HTTPException(status_code=404, detail="任务不存在")
-            if not task["enabled"]:
-                raise HTTPException(status_code=409, detail="任务已停用")
-            if source == "manual" and task["target_host_id"] is not None:
-                raise HTTPException(status_code=409, detail="任务已绑定远程电脑，不能在主控本机运行；请刷新后重试")
-            if not task["current_app_id"] or task["app_archived"]:
-                raise HTTPException(
-                    status_code=409, detail="自动化程序不存在或已经移除"
-                )
-            app_item = dict(task)
-            try:
-                script, python_path = managed_runtime_paths(app_item)
-            except (ValueError, FileNotFoundError, RuntimeError, OSError) as exc:
-                if task["environment_status"] != "ready":
-                    detail = "Python 环境尚未准备好"
-                else:
-                    detail = str(exc)
-                raise HTTPException(status_code=409, detail=detail) from exc
-            running = conn.execute(
-                """
-                SELECT id FROM executions
-                WHERE task_id = ? AND status IN ('pending', 'running')
-                LIMIT 1
-                """,
-                (task_id,),
-            ).fetchone()
-            if running and source != "schedule":
-                raise HTTPException(status_code=409, detail="任务已经在排队或运行")
-            cursor = conn.execute(
-                """
-                INSERT INTO executions (
-                    task_id, status, trigger_source, requested_by,
-                    script_path_snapshot, python_path_snapshot, created_at
-                ) VALUES (?, 'pending', ?, ?, ?, ?, ?)
-                """,
-                (
-                    task_id,
-                    source,
-                    requested_by,
-                    str(script),
-                    str(python_path),
-                    now,
-                ),
-            )
-            conn.execute('UPDATE executions SET maintenance_snapshot=? WHERE id=?',
-                         (maintenance.capture_snapshot(conn, task_id), cursor.lastrowid))
-            conn.execute(
-                f"""
-                UPDATE tasks
-                SET last_status = {TASK_EXECUTION_STATUS_SQL}, app_name = ?, script_path = ?,
-                    python_path = ?, updated_at = ?
-                WHERE id = ? AND archived = 0 AND enabled = 1
-                """,
-                ("pending", app_item["app_name"], str(script), str(python_path), now, task_id),
-            )
-            return int(cursor.lastrowid)
+            from . import cron_runs
+            previous = cron_runs.find_manual(conn, task_id, requested_by, request_id) if request_id else None
+            if previous and previous['execution_id'] is not None:
+                return int(previous['execution_id'])
+            task = conn.execute('SELECT * FROM tasks WHERE id=?', (task_id,)).fetchone()
+            owned = cron_runs.active_round(conn, task_id)
+            round_id = None
+            if source == 'manual' and task and task['trigger_type'] == 'cron':
+                record = cron_runs.register_manual(conn, dict(task), requested_by, request_id)
+                round_id = record['id']
+            elif owned:
+                raise HTTPException(status_code=409, detail="上一轮 Cron 或维护尚未结束")
+            return _enqueue_task_in_transaction(task_id, source, requested_by, conn, round_id)
     except sqlite3.IntegrityError as exc:
         raise HTTPException(status_code=409, detail="任务已经在排队或运行") from exc
 
 
+def _enqueue_task_in_transaction(task_id, source, requested_by, conn, round_id=None) -> int:
+    """Create the execution and its accepted Cron association atomically."""
+    from . import cron_runs, workflows
+    workflow_reason = workflows.task_busy_reason(conn, task_id, workflow_only=True)
+    if workflow_reason:
+        raise HTTPException(409, workflow_reason)
+    task = conn.execute('''SELECT t.*, a.id AS current_app_id,
+        a.script_path AS current_script_path, a.env_path, a.environment_status,
+        a.archived AS app_archived FROM tasks t
+        LEFT JOIN rpa_apps a ON a.id=t.app_id WHERE t.id=?''', (task_id,)).fetchone()
+    if not task or task['archived']:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    if not task['enabled']:
+        raise HTTPException(status_code=409, detail="任务已停用")
+    if not task['first_environment_ready']:
+        raise HTTPException(409, '依赖准备尚未完成，请等待或重试安装')
+    if (source == 'manual' or round_id is not None) and task['target_host_id'] is not None:
+        raise HTTPException(status_code=409, detail="任务已绑定远程电脑，不能在主控本机运行")
+    if not task['current_app_id'] or task['app_archived']:
+        raise HTTPException(status_code=409, detail="自动化程序不存在或已经移除")
+    app_item = dict(task)
+    app_item['script_path'] = task['current_script_path']
+    try:
+        script, python_path = managed_runtime_paths(app_item)
+    except (ValueError, FileNotFoundError, RuntimeError, OSError) as exc:
+        detail = "Python 环境尚未准备好" if task['environment_status'] != 'ready' else str(exc)
+        raise HTTPException(status_code=409, detail=detail) from exc
+    active = conn.execute("SELECT id FROM executions WHERE task_id=? AND status IN ('pending','running') LIMIT 1", (task_id,)).fetchone()
+    if active and (source != 'schedule' or round_id is not None):
+        raise HTTPException(status_code=409, detail="任务已经在排队或运行")
+    now = utc_now()
+    execution_id = int(conn.execute('''INSERT INTO executions(
+        task_id,status,trigger_source,requested_by,script_path_snapshot,python_path_snapshot,created_at)
+        VALUES(?,'pending',?,?,?,?,?)''', (task_id,source,requested_by,str(script),str(python_path),now)).lastrowid)
+    snapshot = maintenance.capture_snapshot(conn, task_id)
+    if round_id is not None:
+        from .task_queries import validate_cron_runtime
+        try:
+            validate_cron_runtime(conn, runtime=json.loads(snapshot)['policy']['runtime'])
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
+    conn.execute('UPDATE executions SET maintenance_snapshot=? WHERE id=?', (snapshot, execution_id))
+    if round_id is not None:
+        cron_runs.attach_execution(conn, round_id, execution_id)
+    conn.execute(f'''UPDATE tasks SET last_status={TASK_EXECUTION_STATUS_SQL},
+        script_path=?,python_path=?,updated_at=? WHERE id=?''',
+        ('pending',str(script),str(python_path),now,task_id))
+    return execution_id
+
+
 async def _enqueue_task(
-    task_id: int, source: str = "manual", requested_by: int | None = None
+    task_id: int, source: str = "manual", requested_by: int | None = None,
+    request_id: str | None = None,
 ) -> int:
-    return await asyncio.to_thread(_enqueue_task_sync, task_id, source, requested_by)
+    return await asyncio.to_thread(_enqueue_task_sync, task_id, source, requested_by, request_id)
 
 
 def _next_pending_execution_id() -> int | None:
@@ -159,6 +154,32 @@ def _claim_next_execution() -> int | None:
 
 async def _queue_worker_loop() -> None:
     while True:
+        # Do not start any code until the prior process/resource check succeeds.
+        try:
+            from . import cron_runs, workflows
+            from ..native_process import recover_settlements
+            unconfirmed = await asyncio.to_thread(recover_settlements, clean_workspace=True)
+            if unconfirmed:
+                pending_id = await asyncio.to_thread(_next_pending_execution_id)
+                if pending_id is not None:
+                    await asyncio.to_thread(_set_execution_waiting, pending_id, '等待此前运行的进程和资源收尾确认')
+                await asyncio.sleep(HOST_CHECK_INTERVAL_SECONDS)
+                continue
+            await asyncio.to_thread(cron_runs.reconcile)
+            stop_ids = await asyncio.to_thread(workflows.reconcile)
+            _request_workflow_stops(stop_ids)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception('此前运行的收尾核对失败，暂停派发')
+            try:
+                pending_id = await asyncio.to_thread(_next_pending_execution_id)
+                if pending_id is not None:
+                    await asyncio.to_thread(_set_execution_waiting, pending_id, '收尾核对失败，等待确认此前运行的进程和资源已释放')
+            except Exception:
+                logger.exception('写入收尾等待原因失败')
+            await asyncio.sleep(HOST_CHECK_INTERVAL_SECONDS)
+            continue
         # Finish a ready repair at the serial boundary before starting queued code.
         try:
             await asyncio.to_thread(maintenance.reconcile_reruns)
@@ -206,9 +227,35 @@ async def _queue_worker_loop() -> None:
             await asyncio.sleep(0.1)
 
         try:
-            await asyncio.to_thread(maintenance.record_failure, execution_id)
+            from ..native_process import is_workflow_execution
+            if not await asyncio.to_thread(is_workflow_execution, execution_id):
+                await asyncio.to_thread(maintenance.record_failure, execution_id)
         except Exception:
             logger.exception('执行记录 %s 的自动维护入队失败', execution_id)
+        finally:
+            try:
+                from . import cron_runs
+                await asyncio.to_thread(cron_runs.decide_maintenance, execution_id)
+                await asyncio.to_thread(cron_runs.reconcile)
+            except Exception:
+                logger.exception('执行记录 %s 的 Cron 维护决定尚未确认，保留轮次占用', execution_id)
+            try:
+                from . import workflows
+                stop_ids = await asyncio.to_thread(workflows.reconcile)
+                _request_workflow_stops(stop_ids)
+            except Exception:
+                logger.exception('执行记录 %s 的流程收尾协调失败，保留本轮等待状态', execution_id)
+
+
+def _request_workflow_stops(execution_ids: list[int]) -> None:
+    from ..runner import request_execution_stop
+    for execution_id in execution_ids:
+        try:
+            request_execution_stop(execution_id, '流程停止')
+        except ValueError:
+            # The durable stop flag still prevents the next step when the
+            # current execution is finishing or the service has restarted.
+            continue
 
 
 def _mark_execution_worker_failure(execution_id: int, message: str) -> None:

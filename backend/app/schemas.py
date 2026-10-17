@@ -46,7 +46,7 @@ class TaskPayload(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     description: str = Field(default="", max_length=500)
     app_id: int = Field(ge=1)
-    trigger_type: Literal["manual", "daily", "weekly"] = "manual"
+    trigger_type: Literal["manual", "daily", "weekly", "cron"] = "manual"
     trigger_config: dict[str, Any] = Field(default_factory=dict)
     target_host_id: int | None = Field(default=None, ge=1)
     enabled: bool = True
@@ -79,7 +79,7 @@ class TaskPatch(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=100)
     description: str | None = Field(default=None, max_length=500)
     app_id: int | None = Field(default=None, ge=1)
-    trigger_type: Literal["manual", "daily", "weekly"] | None = None
+    trigger_type: Literal["manual", "daily", "weekly", "cron"] | None = None
     trigger_config: dict[str, Any] | None = None
     target_host_id: int | None = Field(default=None, ge=1)
     enabled: bool | None = None
@@ -119,3 +119,63 @@ class RunResponse(BaseModel):
     execution_id: int
     status: str
     message: str
+
+
+class WorkflowPlan(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    trigger_type: Literal['manual', 'daily', 'weekly', 'cron']
+    trigger_config: dict[str, Any] = Field(default_factory=dict)
+    schedule_enabled: bool
+
+
+class WorkflowDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field(min_length=1, max_length=100)
+    description: str = Field(default="", max_length=500)
+    task_ids: list[int] = Field(min_length=1, max_length=100)
+    schedule: WorkflowPlan | None = None
+
+    @field_validator("name")
+    @classmethod
+    def clean_name(cls, value: str) -> str:
+        return TaskPayload.strip_required(value)
+
+    @field_validator("description")
+    @classmethod
+    def clean_description(cls, value: str) -> str:
+        return value.strip()
+
+    @field_validator("task_ids")
+    @classmethod
+    def valid_members(cls, value: list[int]) -> list[int]:
+        if any(item < 1 for item in value):
+            raise ValueError("任务编号无效")
+        if len(set(value)) != len(value):
+            raise ValueError("流程不能重复使用同一任务")
+        return value
+
+
+class WorkflowPayload(WorkflowDefinition):
+    request_id: str | None = Field(default=None, min_length=16, max_length=100, pattern=r'^[a-zA-Z0-9_-]+$')
+
+
+class WorkflowPatch(WorkflowDefinition):
+    revision: int = Field(ge=1)
+
+
+class WorkflowSchedulePatch(WorkflowPlan):
+    revision: int = Field(ge=1)
+
+
+class WorkflowRunPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    request_id: str = Field(min_length=8, max_length=128)
+    rerun_of: int | None = Field(default=None, ge=1)
+
+    @field_validator("request_id")
+    @classmethod
+    def clean_request(cls, value: str) -> str:
+        value = value.strip()
+        if len(value) < 8:
+            raise ValueError("运行请求编号无效")
+        return value
