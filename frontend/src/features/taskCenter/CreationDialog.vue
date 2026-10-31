@@ -151,32 +151,33 @@ onBeforeUnmount(() => { disposed = true; generation += 1; controllers.forEach(co
 </script>
 
 <template>
-  <WorkflowDialog title="新建" :close-disabled="busy" @close="close">
-      <fieldset class="creation-kind" :disabled="busy"><legend>类型</legend>
+  <WorkflowDialog :title="createObjectKind === 'task' ? '新建任务' : '新建工作流'" wide :close-disabled="busy" @close="close">
+      <template #actions><fieldset class="creation-kind" :disabled="busy"><legend class="sr-only">类型</legend>
         <button type="button" :class="{ active: createObjectKind === 'task' }" :aria-pressed="createObjectKind === 'task'" @click="switchKind('task')">单任务</button>
         <button type="button" :class="{ active: createObjectKind === 'workflow' }" :aria-pressed="createObjectKind === 'workflow'" @click="switchKind('workflow')">工作流</button>
-      </fieldset>
+      </fieldset></template>
       <CreateTaskPage v-show="createObjectKind === 'task'" embedded form-id="unified-create-task" :disabled="busy" @submit="submit()" />
       <form v-show="createObjectKind === 'workflow'" id="unified-create-workflow" class="creation-flow" @submit.prevent="submit()">
         <fieldset :disabled="busy || flowUncertain">
           <legend class="sr-only">工作流设置</legend>
           <div v-if="flowError" class="creation-feedback error" role="alert">{{ flowError }}</div>
-          <div class="creation-flow-basics"><label class="field"><span>流程名称</span><input v-model="flow.name" type="text" maxlength="100" required placeholder="例如：报表下载与入库" /></label>
-          <label class="field"><span>流程说明 <small>可选</small></span><textarea v-model="flow.description" maxlength="500" rows="2" placeholder="说明流程用途"></textarea></label>
+          <div class="editor-layout"><section class="editor-main" aria-label="流程内容"><div class="editor-section-heading"><h3>流程内容</h3></div><div class="creation-flow-basics"><label class="field"><span>流程名称</span><input v-model="flow.name" type="text" maxlength="100" required placeholder="例如：报表下载与入库" /></label>
+          <label class="field"><span>流程说明 <small>可选</small></span><textarea v-model="flow.description" maxlength="500" rows="2" placeholder="简要说明用途"></textarea></label>
           </div>
-          <p class="creation-help">主控本机。多个脚本先分别创建单任务，再按顺序添加。</p>
           <section class="creation-step-editor" aria-label="工作流步骤">
             <div class="creation-step-heading"><strong>执行顺序</strong><span>{{ flow.task_ids.length }} 个任务</span></div>
-            <p class="creation-help">前一步成功并完成收尾后继续；最多 100 步。</p>
+            <p class="creation-help">任务按顺序执行，失败后停止。</p>
             <div v-if="candidatesError" class="creation-feedback error" role="alert">{{ candidatesError }}<button class="text-button" type="button" @click="loadCandidates">重试读取</button></div>
             <div class="creation-add-step"><label class="field"><span>已有任务</span>
               <select v-model="selectedTask" :disabled="candidatesLoading || Boolean(candidatesError)"><option value="">{{ candidatesLoading ? '正在读取任务…' : '选择已有任务' }}</option><option v-for="task in candidates" :key="task.id" :value="String(task.id)" :disabled="!task.eligible || flow.task_ids.includes(Number(task.id))">{{ task.name }}{{ flow.task_ids.includes(Number(task.id)) ? '（已添加）' : task.eligible ? '' : '（' + task.unavailable_reason + '）' }}</option></select>
             </label><button class="button secondary" type="button" :disabled="!selectedTask || flow.task_ids.length >= 100 || Boolean(candidatesError)" @click="addStep">添加步骤</button></div>
-            <details class="creation-rules"><summary>可用任务要求</summary><p class="creation-help">仅支持已启用、环境就绪的本机普通 Python 任务。</p></details>
+            <details class="creation-rules"><summary>可用任务要求</summary><p class="creation-help">先创建单任务，再添加步骤。支持已启用、环境就绪的本机普通 Python 任务，最多 100 步。</p></details>
             <ol v-if="selectedSteps.length" class="creation-steps"><li v-for="(task, index) in selectedSteps" :key="task.id"><span class="creation-step-number">{{ index + 1 }}</span><div class="creation-step-copy"><strong>{{ task.name }}</strong><small v-if="!task.eligible" class="danger-text">{{ task.unavailable_reason }}</small></div><div class="creation-step-actions"><button class="icon-button" type="button" :aria-label="'上移 ' + task.name" :disabled="index === 0" @click="moveStep(index, -1)">↑</button><button class="icon-button" type="button" :aria-label="'下移 ' + task.name" :disabled="index === flow.task_ids.length - 1" @click="moveStep(index, 1)">↓</button><button class="icon-button" type="button" :aria-label="'移除 ' + task.name" @click="flow.task_ids.splice(index, 1)">×</button></div></li></ol>
             <p v-else class="creation-empty">尚未添加步骤</p>
           </section>
+          </section><section class="editor-aside" aria-label="运行设置"><div class="editor-section-heading"><h3>运行设置</h3></div><div class="editor-target"><span>运行电脑</span><strong>主控本机</strong></div>
           <PlanFields :form="flow" :disabled="busy || flowUncertain" @unauthorized="handleSessionExpired" />
+          <p class="editor-footnote">整轮共用一个计划。</p></section></div>
         </fieldset>
       </form>
       <div v-if="createObjectKind === 'task' ? uploadUncertain : flowUncertain" class="creation-recovery"><button type="button" class="button secondary" :disabled="busy" @click="recover">核对创建结果</button><button type="button" class="text-button" :disabled="busy" @click="submit(true)">原请求重试</button></div>
@@ -188,14 +189,14 @@ onBeforeUnmount(() => { disposed = true; generation += 1; controllers.forEach(co
 </template>
 
 <style scoped>
-.creation-kind { margin: 0 0 16px; padding: 0; border: 0; display: flex; gap: 8px; flex-wrap: wrap; }
+.creation-kind { justify-self: start; margin: 0; padding: 4px; border: 1px solid var(--border); border-radius: 11px; background: var(--surface-subtle); display: flex; gap: 4px; flex-wrap: wrap; }
 .creation-kind legend { margin-bottom: 8px; font-size: 12px; }
-.creation-kind button { padding: 8px 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); font-size: 13px; cursor: pointer; }
-.creation-kind button.active { color: var(--brand-strong); background: var(--brand-soft); border-color: var(--brand); }
+.creation-kind button { min-height: 34px; padding: 6px 20px; border: 0; border-radius: 7px; background: transparent; color: var(--muted); font-size: 13px; cursor: pointer; }
+.creation-kind button.active { color: var(--brand-strong); background: var(--surface); font-weight: 600; box-shadow: 0 1px 4px rgba(30,60,38,.1); }
 .creation-flow, .creation-flow > fieldset { display: grid; gap: 16px; min-width: 0; grid-template-columns: minmax(0, 1fr); }
 .creation-flow > fieldset { margin: 0; padding: 0; border: 0; width: 100%; }
-.creation-flow-basics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
-.creation-flow textarea { width: 100%; min-width: 0; resize: vertical; border: 1px solid var(--border); border-radius: 8px; padding: 10px 11px; color: var(--text); font: inherit; font-size: 13px; }
+.creation-flow-basics { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+.creation-flow textarea { width: 100%; min-width: 0; resize: vertical; min-height: 64px; border: 1px solid var(--border); border-radius: 8px; padding: 10px 11px; color: var(--text); font: inherit; font-size: 13px; }
 .creation-kind button:focus-visible, .creation-flow textarea:focus-visible { outline: 2px solid rgba(0,145,57,.3); outline-offset: 2px; }
 .creation-help { margin: 0; color: var(--muted); font-size: 12px; line-height: 20px; overflow-wrap: anywhere; }
 .creation-step-editor { display: grid; min-width: 0; grid-template-columns: minmax(0, 1fr); gap: 12px; padding: 16px 0 0; border: 0; border-top: 1px solid var(--border-soft); border-radius: 0; }
@@ -216,5 +217,5 @@ onBeforeUnmount(() => { disposed = true; generation += 1; controllers.forEach(co
 .creation-feedback.error { padding: 12px; border: 1px solid #f0c2b7; border-radius: 8px; background: var(--coral-soft); color: #ad4935; font-size: 12px; overflow-wrap: anywhere; }
 .creation-recovery { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 12px; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
-@media (max-width: 520px) { .creation-flow-basics, .creation-add-step { grid-template-columns: minmax(0, 1fr); } .creation-steps > li { flex-wrap: wrap; gap: 8px; } .creation-step-actions { margin-left: auto; } }
+@media (max-width: 520px) { .creation-kind { order: 3; flex-basis: 100%; } .creation-kind button { flex: 1; } .creation-flow-basics, .creation-add-step { grid-template-columns: minmax(0, 1fr); } .creation-steps > li { flex-wrap: wrap; gap: 8px; } .creation-step-actions { margin-left: auto; } }
 </style>

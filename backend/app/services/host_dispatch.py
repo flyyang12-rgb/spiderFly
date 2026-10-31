@@ -24,7 +24,7 @@ from ..collection_progress import feed_progress, progress_view
 from ..config import DATA_DIR, SERVER_URL
 
 PROTOCOL_VERSION = 1
-CURRENT_AGENT_VERSION = "0.5.0"
+CURRENT_AGENT_VERSION = "0.5.2"
 MINIMUM_AGENT_VERSION = "0.3.0"
 ENVIRONMENT_AGENT_VERSION = "0.4.0"
 HEARTBEAT_TIMEOUT = 15
@@ -129,6 +129,8 @@ def init_tables() -> None:
         for statement in statements:
             conn.execute(statement)
         host_columns = {row['name'] for row in conn.execute('PRAGMA table_info(agent_hosts)')}
+        if 'deleted_at' not in host_columns:
+            conn.execute('ALTER TABLE agent_hosts ADD COLUMN deleted_at TEXT')
         if 'upgrade_token' not in host_columns:
             conn.execute("ALTER TABLE agent_hosts ADD COLUMN upgrade_token TEXT NOT NULL DEFAULT ''")
             conn.execute('ALTER TABLE agent_hosts ADD COLUMN upgrade_expires_at REAL NOT NULL DEFAULT 0')
@@ -188,9 +190,9 @@ def _audit(conn, actor: dict | None, action: str, target: int | None, summary: s
     )
 
 
-def host_row(conn, host_id: int) -> dict:
+def host_row(conn, host_id: int, *, include_deleted: bool = False) -> dict:
     row = conn.execute("SELECT * FROM agent_hosts WHERE id=?", (host_id,)).fetchone()
-    if row is None:
+    if row is None or (row['deleted_at'] and not include_deleted):
         raise HTTPException(404, "宿主机不存在")
     return dict(row)
 
@@ -271,7 +273,7 @@ def public_host(conn, host: dict) -> dict:
 def list_hosts() -> list[dict]:
     with database.transaction() as conn:
         _expire_leases(conn)
-        return [public_host(conn, dict(row)) for row in conn.execute("SELECT * FROM agent_hosts ORDER BY id DESC")]
+        return [public_host(conn, dict(row)) for row in conn.execute("SELECT * FROM agent_hosts WHERE deleted_at IS NULL ORDER BY id DESC")]
 
 
 def create_code(actor: dict) -> dict:
@@ -301,14 +303,33 @@ def register(payload: dict) -> dict:
             if (code and code["consumed_by"] == current["id"]
                     and current["public_key"] == payload["public_key"]
                     and current["approval_status"] in {"pending", "approved"}):
-                return {"host_id": current["id"], "approval_status": current["approval_status"],
+                return {"host_id": current["id"], "approval_status": current["approval_status"], "name": current['name'],
                         "protocol_version": PROTOCOL_VERSION,
                         "minimum_agent_version": MINIMUM_AGENT_VERSION,
                         "current_agent_version": CURRENT_AGENT_VERSION}
-            raise HTTPException(409, "该机器身份已存在；重新安装请生成新的机器身份并申请")
+            if current['public_key'] != payload['public_key'] or not payload.get('reenrollment_signature'):
+                raise HTTPException(409, '该机器身份已存在；请使用新版 Agent 和新接入码重新申请')
         if not code or code["expires_at"] <= time.time() or code["consumed_by"] is not None:
             raise HTTPException(400, "接入码无效、已使用或已过期，请重新生成")
         now = database.utc_now()
+        if current:
+            message = json.dumps({key: payload[key] for key in ('enrollment_code','machine_id','name','public_key','agent_version','protocol_version')},
+                                 sort_keys=True, ensure_ascii=False, separators=(',', ':')).encode('utf-8')
+            try:
+                proof = base64.b64decode(payload['reenrollment_signature'], validate=True)
+                Ed25519PublicKey.from_public_bytes(key).verify(proof, message)
+            except (ValueError, TypeError, InvalidSignature) as exc:
+                raise HTTPException(401, '重新申请的机器签名无效') from exc
+            if _upgrading(dict(current)) or conn.execute("SELECT 1 FROM remote_runs WHERE host_id=? AND status IN ('queued','preparing','running','stopping','uncertain')", (current['id'],)).fetchone():
+                raise HTTPException(409, '这台电脑仍有未结束运行或升级，请结束后再申请')
+            host_id = current['id']
+            conn.execute("""UPDATE agent_hosts SET name=?,agent_version=?,approval_status='pending',
+                dispatch_enabled=0,agent_dispatch_enabled=0,interactive_session=0,last_seen_at=NULL,updated_at=? WHERE id=?""",
+                (payload['name'], payload['agent_version'], now, host_id))
+            conn.execute('UPDATE agent_enrollment_codes SET consumed_by=? WHERE code_hash=?', (host_id, code_hash))
+            _audit(conn, None, 'agent_register', host_id, '宿主机重新申请接入，等待管理员批准')
+            return {'host_id': host_id, 'approval_status': 'pending', 'name': payload['name'], 'protocol_version': PROTOCOL_VERSION,
+                    'minimum_agent_version': MINIMUM_AGENT_VERSION, 'current_agent_version': CURRENT_AGENT_VERSION}
         cursor = conn.execute(
             "INSERT INTO agent_hosts(machine_id,name,public_key,agent_version,created_at,updated_at) VALUES(?,?,?,?,?,?)",
             (payload["machine_id"], payload["name"], payload["public_key"], payload["agent_version"], now, now),
@@ -316,13 +337,13 @@ def register(payload: dict) -> dict:
         host_id = cursor.lastrowid
         conn.execute("UPDATE agent_enrollment_codes SET consumed_by=? WHERE code_hash=?", (host_id, code_hash))
         _audit(conn, None, "agent_register", host_id, "宿主机申请接入，等待管理员批准")
-    return {"host_id": host_id, "approval_status": "pending",
+    return {"host_id": host_id, "approval_status": "pending", "name": payload['name'],
             "protocol_version": PROTOCOL_VERSION,
             "minimum_agent_version": MINIMUM_AGENT_VERSION,
             "current_agent_version": CURRENT_AGENT_VERSION}
 
 
-def authenticate(headers, method: str, path: str, body: bytes) -> int:
+def authenticate(headers, method: str, path: str, body: bytes, *, allow_inactive: bool = False) -> int:
     try:
         host_id = int(headers.get("X-SpiderFly-Host", ""))
         timestamp = headers.get("X-SpiderFly-Time", "")
@@ -333,7 +354,7 @@ def authenticate(headers, method: str, path: str, body: bytes) -> int:
         message = "\n".join((timestamp, nonce, method.upper(), path, hashlib.sha256(body).hexdigest())).encode()
         with database.transaction() as conn:
             host = host_row(conn, host_id)
-            if host["approval_status"] in {"rejected", "revoked"}:
+            if not allow_inactive and host["approval_status"] in {"rejected", "revoked"}:
                 raise HTTPException(403, "宿主机接入已被拒绝或撤销")
             Ed25519PublicKey.from_public_bytes(base64.b64decode(host["public_key"])).verify(signature, message)
             conn.execute("DELETE FROM agent_nonces WHERE expires_at < ?", (time.time(),))
@@ -343,6 +364,13 @@ def authenticate(headers, method: str, path: str, body: bytes) -> int:
         return host_id
     except (ValueError, TypeError, InvalidSignature) as exc:
         raise HTTPException(401, "机器请求签名无效或时间偏差过大") from exc
+
+
+def registration_status(host_id: int) -> dict:
+    with database.transaction() as conn:
+        host = host_row(conn, host_id)
+        busy = _upgrading(dict(host)) or bool(conn.execute("SELECT 1 FROM remote_runs WHERE host_id=? AND status IN ('queued','preparing','running','stopping','uncertain')", (host_id,)).fetchone())
+        return {'host_id': host['id'], 'name': host['name'], 'approval_status': host['approval_status'], 'can_reapply': not busy}
 
 
 def change_approval(host_id: int, action: str, actor: dict) -> dict:
@@ -368,6 +396,43 @@ def change_approval(host_id: int, action: str, actor: dict) -> dict:
         return public_host(conn, host_row(conn, host_id))
 
 
+def delete_host(host_id: int, actor: dict) -> dict:
+    """Remove a revoked registration; keep a tombstone for existing run history.
+
+    There is no restore path. Identity, authentication and enrollment material
+    are removed atomically while historical foreign keys remain valid.
+    """
+    from . import agent_updates
+    with database.transaction() as conn:
+        host = host_row(conn, host_id, include_deleted=True)
+        if host['deleted_at']:
+            return {'deleted': True, 'id': host_id}
+        if host['approval_status'] != 'revoked':
+            raise HTTPException(409, '只能永久删除已撤销的电脑')
+        if host['active_run_id'] is not None or conn.execute(
+            "SELECT 1 FROM remote_runs WHERE host_id=? AND status NOT IN ('succeeded','failed','cancelled','timed_out') LIMIT 1", (host_id,),
+        ).fetchone():
+            raise HTTPException(409, '这台电脑仍有未结束运行，请先处理运行记录')
+        if _upgrading(host) or conn.execute(
+            f"SELECT 1 FROM agent_update_jobs WHERE host_id=? AND status IN ({','.join('?' for _ in agent_updates.ACTIVE)}) LIMIT 1",
+            (host_id, *sorted(agent_updates.ACTIVE)),
+        ).fetchone():
+            raise HTTPException(409, '这台电脑仍有升级未结束，请先确认升级结果')
+        bound = conn.execute('SELECT COUNT(*) AS n FROM tasks WHERE target_host_id=? AND archived=0', (host_id,)).fetchone()['n']
+        if bound:
+            raise HTTPException(409, f'仍有 {bound} 个任务绑定这台电脑，请先修改运行电脑或删除任务')
+        # Never make consumed enrollment codes usable again.
+        conn.execute('DELETE FROM agent_nonces WHERE host_id=?', (host_id,))
+        conn.execute('DELETE FROM agent_enrollment_codes WHERE consumed_by=?', (host_id,))
+        now = database.utc_now()
+        conn.execute('''UPDATE agent_hosts SET deleted_at=?,updated_at=?,machine_id=?,public_key='',
+            dispatch_enabled=0,agent_dispatch_enabled=0,interactive_session=0,last_seen_at=NULL,
+            upgrade_token='',upgrade_expires_at=0,remote_upgrade_id='',remote_upgrade_ready=0 WHERE id=?''',
+            (now, now, f'deleted:{host_id}', host_id))
+        _audit(conn, actor, 'agent_delete', host_id, f'永久删除电脑「{host["name"]}」，保留运行历史')
+        return {'deleted': True, 'id': host_id}
+
+
 def set_mode(host_id: int, enabled: bool, actor: dict) -> dict:
     with database.transaction() as conn:
         host = host_row(conn, host_id)
@@ -390,7 +455,7 @@ def _run_row(conn, run_id: int, host_id: int | None = None) -> dict:
 def public_run(conn, run: dict) -> dict:
     item = {key: value for key, value in run.items() if key not in {"script", "requirements", "request_id"}}
     item["collection_progress"] = progress_view(item.get("collection_progress"))
-    host = host_row(conn, run["host_id"])
+    host = host_row(conn, run["host_id"], include_deleted=True)
     item["host_name"] = host["name"]
     record = conn.execute('SELECT report_json FROM remote_environment_records WHERE run_id=?', (run['id'],)).fetchone()
     capable = (_version_tuple(host['agent_version']) or (0, 0, 0)) >= _version_tuple(ENVIRONMENT_AGENT_VERSION)
@@ -461,6 +526,10 @@ def create_run_in_transaction(conn, host_id: int, task_id: int, request_id: str,
     if len(requirements.encode()) > MAX_REQUIREMENTS_BYTES:
         raise HTTPException(413, "依赖清单超过 128 KiB 限制")
     digest = hashlib.sha256(script.encode() + b"\0" + requirements.encode()).hexdigest()
+    if task['trigger_type'] == 'interval':
+        from .interval_schedules import ensure_schema, refresh
+        ensure_schema(conn)
+        refresh(conn, 'task', task, database.utc_now())
     cursor = conn.execute(
             """INSERT INTO remote_runs(host_id,task_id,task_name,requested_by,request_id,
                trigger_source,scheduled_for,
@@ -490,37 +559,45 @@ def create_run(host_id: int, task_id: int, request_id: str, actor: dict,
 def dispatch_scheduled_task(task_id: int, source: str = "schedule") -> int:
     """Freeze one due occurrence for its configured host, or use the legacy local queue."""
     with database.transaction() as conn:
-        task = conn.execute(
-            """SELECT t.target_host_id,t.last_triggered_at,t.created_by,u.username
-               FROM tasks t LEFT JOIN users u ON u.id=t.created_by
-               WHERE t.id=? AND t.archived=0 AND t.enabled=1""",
-            (task_id,),
+        return dispatch_scheduled_in_transaction(conn, task_id, source)
+
+
+def dispatch_scheduled_in_transaction(conn, task_id: int, source: str = 'schedule') -> int:
+    """Accept a due interval and its execution in the same caller transaction."""
+    task = conn.execute(
+        """SELECT t.target_host_id,t.last_triggered_at,t.created_by,u.username
+           FROM tasks t LEFT JOIN users u ON u.id=t.created_by
+           WHERE t.id=? AND t.archived=0 AND t.enabled=1""",
+        (task_id,),
+    ).fetchone()
+    if not task:
+        raise HTTPException(404, "任务不存在或已停用")
+    if task["target_host_id"] is not None:
+        scheduled_for = task["last_triggered_at"] or database.utc_now()
+        request_id = f"schedule:{task_id}:{scheduled_for}"
+        actor = {"id": task["created_by"], "username": task["username"] or "scheduler"}
+        previous = conn.execute(
+            """SELECT controller_url FROM remote_runs
+               WHERE host_id=? AND controller_url!='' ORDER BY id DESC LIMIT 1""",
+            (task["target_host_id"],),
         ).fetchone()
-        if not task:
-            raise HTTPException(404, "任务不存在或已停用")
-        if task["target_host_id"] is not None:
-            scheduled_for = task["last_triggered_at"] or database.utc_now()
-            request_id = f"schedule:{task_id}:{scheduled_for}"
-            actor = {"id": task["created_by"], "username": task["username"] or "scheduler"}
-            previous = conn.execute(
-                """SELECT controller_url FROM remote_runs
-                   WHERE host_id=? AND controller_url!='' ORDER BY id DESC LIMIT 1""",
-                (task["target_host_id"],),
-            ).fetchone()
-            controller_url = SERVER_URL or (previous["controller_url"] if previous else "")
-            run = create_run_in_transaction(
-                conn,
-                int(task["target_host_id"]),
-                task_id,
-                request_id,
-                actor,
-                controller_url=controller_url,
-                trigger_source=source,
-                scheduled_for=scheduled_for,
-            )
-            return int(run["id"])
-    from .execution_queue import _enqueue_task_sync
-    return _enqueue_task_sync(task_id, source)
+        controller_url = SERVER_URL or (previous["controller_url"] if previous else "")
+        run = create_run_in_transaction(
+            conn,
+            int(task["target_host_id"]),
+            task_id,
+            request_id,
+            actor,
+            controller_url=controller_url,
+            trigger_source=source,
+            scheduled_for=scheduled_for,
+        )
+        return int(run["id"])
+    from .execution_queue import _enqueue_task_in_transaction
+    from . import cron_runs
+    if cron_runs.active_round(conn, task_id):
+        raise HTTPException(409, '上一轮 Cron 或维护尚未结束')
+    return _enqueue_task_in_transaction(task_id, source, None, conn)
 
 
 def heartbeat(host_id: int, payload: dict) -> dict:

@@ -1,6 +1,7 @@
 """Exercise the real PowerShell launcher with isolated fake pip/Agent modules."""
 
 import hashlib
+import base64
 import json
 import os
 from pathlib import Path
@@ -19,7 +20,10 @@ with (root / "calls.jsonl").open("a", encoding="utf-8") as stream:
     stream.write(json.dumps(sys.argv[1]) + "\\n")
 if sys.argv[1] == os.environ.get("FAKE_PIP_FAIL_MODE") and not (root / "failure_seen").exists():
     (root / "failure_seen").write_text("1")
+    print("ERROR: synthetic dependency download failed", file=sys.stderr)
     raise SystemExit(7)
+if os.environ.get("FAKE_PIP_NOTICE"):
+    print("[notice] A new release of pip is available", file=sys.stderr)
 '''
 
 _FAKE_AGENT = '''
@@ -32,6 +36,10 @@ with (Path.cwd() / "calls.jsonl").open("a", encoding="utf-8") as stream:
 
 @unittest.skipUnless(os.name == "nt", "PowerShell launcher targets Windows")
 class LauncherTests(unittest.TestCase):
+    def test_batch_entry_starts_with_cmd_directive_without_bom(self):
+        entry = Path(__file__).resolve().parents[1] / '安装并接入Agent.bat'
+        self.assertTrue(entry.read_bytes().startswith(b'@echo off'), 'cmd.exe cannot parse a UTF-8 BOM')
+
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory(prefix="sf-launcher-")
         self.root = Path(self.temporary.name)
@@ -49,14 +57,23 @@ class LauncherTests(unittest.TestCase):
     def tearDown(self):
         self.temporary.cleanup()
 
-    def launch(self, failure=""):
+    def launch(self, failure="", *, notice=False, wizard=False):
         env = {key: value for key, value in os.environ.items()
                if not key.startswith(("SPIDERFLY_", "FEISHU_", "DEEPSEEK_"))
                and key not in {"PYTHONPATH", "PYTHONHOME", "PSModulePath"}}
         env["FAKE_PIP_FAIL_MODE"] = failure
+        env["FAKE_PIP_NOTICE"] = "1" if notice else ""
+        args = ["-File", str(self.root / "start.ps1"), "-DataDir", str(self.root / "synthetic-state")]
+        if wizard:
+            quote = lambda value: "'" + str(value).replace("'", "''") + "'"
+            # The nested powershell + merged output is the real installer topology.
+            command = ("$ErrorActionPreference='Stop'; & powershell.exe -NoProfile -ExecutionPolicy Bypass -File "
+                       + quote(self.root/'start.ps1') + " -DataDir " + quote(self.root/'synthetic-state')
+                       + " -PrepareOnly *>&1 | Out-File -Encoding utf8 -LiteralPath "
+                       + quote(self.root/'wizard.log') + "; exit $LASTEXITCODE")
+            args = ["-EncodedCommand", base64.b64encode(command.encode('utf-16le')).decode()]
         return subprocess.run([str(self.powershell), "-NoLogo", "-NoProfile", "-NonInteractive",
-                               "-ExecutionPolicy", "Bypass", "-File", str(self.root / "start.ps1"),
-                               "-DataDir", str(self.root / "synthetic-state")],
+                               "-ExecutionPolicy", "Bypass", *args],
                               cwd=self.root, env=env, capture_output=True, timeout=30)
 
     def calls(self):
@@ -93,6 +110,21 @@ class LauncherTests(unittest.TestCase):
         expected = hashlib.sha256((self.root / "requirements.txt").read_bytes()).hexdigest().upper()
         self.assertEqual(self.marker.read_text(encoding="ascii"), expected)
         self.assertNotEqual(first_hash, expected)
+
+    def test_wizard_redirected_stderr_notice_is_not_an_install_failure(self):
+        result = self.launch(notice=True, wizard=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(self.marker.is_file())
+        self.assertEqual(self.calls(), ["install", "check"])
+
+    def test_wizard_real_failure_keeps_reason_and_retries_without_cleaning(self):
+        result = self.launch("install", notice=True, wizard=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse(self.marker.exists())
+        self.assertIn("synthetic dependency download failed", (self.root/'wizard.log').read_text(encoding='utf-8-sig'))
+        result = self.launch("install", notice=True, wizard=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(self.marker.exists())
 
 
 if __name__ == "__main__":

@@ -604,7 +604,7 @@ async def run_managed_execution(execution_id, task, control):
     from . import native_process
     from uuid import uuid4
     from .execution_results import create_execution_workspace, ResolvedOutcome
-    owned = native_process.is_cron_execution(execution_id)
+    owned = native_process.is_coordinated_execution(execution_id)
     if owned:
         native_process.begin_settlement(execution_id)
         control.settlement_id = execution_id

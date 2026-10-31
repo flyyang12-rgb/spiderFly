@@ -51,6 +51,56 @@ class SchedulingTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "至少选择一个星期"):
             normalize_trigger("weekly", {"weekdays": [], "time": "09:00"})
 
+    def test_monthly_requires_an_integer_calendar_day_and_valid_time(self):
+        for day in (None, 0, 32, True, False, 1.5, '1', 'LAST', 'last ', 'first', [], {}):
+            with self.subTest(day=day), self.assertRaisesRegex(ValueError, '1 到 31'):
+                normalize_trigger('monthly', {'day': day, 'time': '09:00'})
+        for value in (None, '', '25:00', '09:70'):
+            with self.subTest(time=value), self.assertRaises(ValueError):
+                normalize_trigger('monthly', {'day': 1, 'time': value})
+        self.assertEqual(normalize_trigger('monthly', {'day': 31, 'time': '09:05'}),
+                         {'day': 31, 'time': '09:05'})
+        self.assertEqual(normalize_trigger('monthly', {'day': 'last', 'time': '09:05'}),
+                         {'day': 'last', 'time': '09:05'})
+
+    def test_month_end_uses_actual_calendar_and_strictly_future_beijing_time(self):
+        cases = [
+            ('2027-01-31T01:00:00+00:00', '2027-02-28T01:00:00+00:00'),
+            ('2028-01-31T01:00:00+00:00', '2028-02-29T01:00:00+00:00'),
+            ('2027-02-28T01:00:00+00:00', '2027-03-31T01:00:00+00:00'),
+            ('2027-03-31T01:00:00+00:00', '2027-04-30T01:00:00+00:00'),
+            ('2026-12-31T01:00:00+00:00', '2027-01-31T01:00:00+00:00'),
+            ('2027-02-28T08:59:59+08:00', '2027-02-28T01:00:00+00:00'),
+            ('2027-02-27T20:00:00-05:00', '2027-03-31T01:00:00+00:00'),
+        ]
+        for after, expected in cases:
+            with self.subTest(after=after):
+                self.assertEqual(compute_next_run('monthly', {'day': 'last', 'time': '09:00'}, after), expected)
+        self.assertEqual(compute_next_run('monthly', {'day': 'last', 'time': '00:00'},
+            '2027-02-27T15:59:59+00:00'), '2027-02-27T16:00:00+00:00')
+
+    def test_monthly_follows_beijing_calendar_and_is_strictly_future(self):
+        cases = [
+            (1, '2026-10-31T23:30:00+08:00', '2026-11-01T01:00:00+00:00'),
+            (21, '2026-10-21T00:59:59+00:00', '2026-10-21T01:00:00+00:00'),
+            (21, '2026-10-21T01:00:00+00:00', '2026-11-21T01:00:00+00:00'),
+            (1, '2026-12-31T16:00:00+00:00', '2027-01-01T01:00:00+00:00'),
+        ]
+        for day, after, expected in cases:
+            with self.subTest(after=after):
+                self.assertEqual(compute_next_run('monthly', {'day': day, 'time': '09:00'}, after), expected)
+
+    def test_monthly_skips_absent_dates_and_handles_leap_february(self):
+        cases = [
+            (31, '2027-01-31T01:00:00+00:00', '2027-03-31T01:00:00+00:00'),
+            (31, '2027-03-31T01:00:00+00:00', '2027-05-31T01:00:00+00:00'),
+            (29, '2028-02-01T00:00:00+00:00', '2028-02-29T01:00:00+00:00'),
+            (29, '2027-02-01T00:00:00+00:00', '2027-03-29T01:00:00+00:00'),
+        ]
+        for day, after, expected in cases:
+            with self.subTest(after=after):
+                self.assertEqual(compute_next_run('monthly', {'day': day, 'time': '09:00'}, after), expected)
+
 
 if __name__ == "__main__":
     unittest.main()

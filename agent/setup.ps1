@@ -1,4 +1,4 @@
-﻿param()
+﻿param([string]$DataDir = (Join-Path $env:LOCALAPPDATA 'SpiderFlyAgent'))
 
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Windows.Forms
@@ -7,9 +7,10 @@ Add-Type -AssemblyName System.Drawing
 
 $agentRoot = $PSScriptRoot
 $managePath = Join-Path $agentRoot 'manage.ps1'
-$dataRoot = Join-Path $env:LOCALAPPDATA 'SpiderFlyAgent'
+$dataRoot = [IO.Path]::GetFullPath($DataDir)
 $configPath = Join-Path $dataRoot 'config.json'
-$setupLog = Join-Path $env:TEMP 'SpiderFlyAgent-setup.log'
+$setupLog = Join-Path $dataRoot ('logs\setup-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + [Guid]::NewGuid().ToString('N').Substring(0,8) + '.log')
+$setupResult = Join-Path $env:TEMP ('SpiderFlyAgent-setup-' + [Guid]::NewGuid().ToString('N') + '.json')
 $agentErrorLog = Join-Path $dataRoot 'logs\agent.error.log'
 $pythonInstallLog = Join-Path $env:TEMP 'SpiderFlyAgent-python-install.log'
 $pythonInstallPath = Join-Path $agentRoot 'install-python.ps1'
@@ -47,7 +48,7 @@ function Set-StartupShortcut([bool]$Enabled, [bool]$Dispatch) {
     $shortcut.Save()
 }
 
-$form = [System.Windows.Forms.Form]::new(); $form.Text = '安装并接入 SpiderFly Agent'; $form.ClientSize = [System.Drawing.Size]::new(600, 570); $form.StartPosition = 'CenterScreen'; $form.FormBorderStyle = 'FixedDialog'; $form.MaximizeBox = $false; $form.BackColor = [System.Drawing.Color]::White; $form.Font = [System.Drawing.Font]::new('Microsoft YaHei UI', 9)
+$form = [System.Windows.Forms.Form]::new(); $form.Text = '安装并接入 SpiderFly Agent'; $form.ClientSize = [System.Drawing.Size]::new(600, 620); $form.StartPosition = 'CenterScreen'; $form.FormBorderStyle = 'FixedDialog'; $form.MaximizeBox = $false; $form.BackColor = [System.Drawing.Color]::White; $form.Font = [System.Drawing.Font]::new('Microsoft YaHei UI', 9)
 $title = [System.Windows.Forms.Label]::new(); $title.Text = '接入这台电脑'; $title.Font = [System.Drawing.Font]::new('Microsoft YaHei UI', 17, [System.Drawing.FontStyle]::Bold); $title.ForeColor = [System.Drawing.ColorTranslator]::FromHtml('#221814'); $title.SetBounds(30,22,540,36)
 $intro = [System.Windows.Forms.Label]::new(); $intro.Text = '从主控页面“宿主机”中复制主控地址和一次性接入码。安装完成后，需要管理员在网页中批准。'; $intro.ForeColor = [System.Drawing.ColorTranslator]::FromHtml('#656d65'); $intro.SetBounds(30,64,540,44)
 $pythonState = [System.Windows.Forms.Label]::new(); $pythonState.SetBounds(30,112,540,24)
@@ -58,24 +59,27 @@ function New-Field([string]$labelText,[int]$top,[bool]$secret=$false) {
     $form.Controls.Add($label); $form.Controls.Add($box); return $box
 }
 $server = New-Field '主控地址，例如 http://192.168.1.50:8000' 146
-$code = New-Field '一次性接入码（只在首次接入时需要）' 218 $true
+$code = New-Field '接入码（首次接入或重新申请时填写）' 218 $true
 $machineName = New-Field '这台电脑的名称' 290
 $machineName.Text = $env:COMPUTERNAME
 $autoStart = [System.Windows.Forms.CheckBox]::new(); $autoStart.Text='登录 Windows 后自动启动 Agent'; $autoStart.Checked=$true; $autoStart.SetBounds(30,366,540,26)
 $dispatch = [System.Windows.Forms.CheckBox]::new(); $dispatch.Text='启动后允许接收任务（主控页面也必须开启调度）'; $dispatch.Checked=$true; $dispatch.SetBounds(30,396,540,26)
-$status = [System.Windows.Forms.Label]::new(); $status.Text='先检查主控连接，再安装。'; $status.ForeColor=[System.Drawing.ColorTranslator]::FromHtml('#656d65'); $status.SetBounds(30,438,540,46)
-$check = [System.Windows.Forms.Button]::new(); $check.Text='检查连接'; $check.SetBounds(30,506,130,38); $check.FlatStyle='Flat'; $check.FlatAppearance.BorderColor=[System.Drawing.ColorTranslator]::FromHtml('#dfe3df'); $check.BackColor=[System.Drawing.Color]::White
-$installPython = [System.Windows.Forms.Button]::new(); $installPython.Text='自动安装 Python 3.12'; $installPython.SetBounds(174,506,205,38); $installPython.FlatStyle='Flat'; $installPython.FlatAppearance.BorderColor=[System.Drawing.ColorTranslator]::FromHtml('#dfe3df'); $installPython.BackColor=[System.Drawing.Color]::White
-$install = [System.Windows.Forms.Button]::new(); $install.Text=$(if($configured){'启动现有 Agent'}else{'安装并申请接入'}); $install.SetBounds(402,506,168,38); $install.FlatStyle='Flat'; $install.FlatAppearance.BorderSize=0; $install.BackColor=[System.Drawing.ColorTranslator]::FromHtml('#009139'); $install.ForeColor=[System.Drawing.Color]::White
+$status = [System.Windows.Forms.Label]::new(); $status.Text='先检查主控连接，再安装。'; $status.ForeColor=[System.Drawing.ColorTranslator]::FromHtml('#656d65'); $status.SetBounds(30,438,540,80)
+$status.AutoEllipsis=$true
+$detailsLink = [System.Windows.Forms.LinkLabel]::new(); $detailsLink.Text='查看安装详情'; $detailsLink.SetBounds(30,522,170,24); $detailsLink.Visible=$false
+$detailsLink.Add_LinkClicked({ if(Test-Path -LiteralPath $setupLog){ Start-Process notepad.exe -ArgumentList ('"'+$setupLog+'"') } })
+$check = [System.Windows.Forms.Button]::new(); $check.Text='检查连接'; $check.SetBounds(30,558,130,38); $check.FlatStyle='Flat'; $check.FlatAppearance.BorderColor=[System.Drawing.ColorTranslator]::FromHtml('#dfe3df'); $check.BackColor=[System.Drawing.Color]::White
+$installPython = [System.Windows.Forms.Button]::new(); $installPython.Text='自动安装 Python 3.12'; $installPython.SetBounds(174,558,205,38); $installPython.FlatStyle='Flat'; $installPython.FlatAppearance.BorderColor=[System.Drawing.ColorTranslator]::FromHtml('#dfe3df'); $installPython.BackColor=[System.Drawing.Color]::White
+$install = [System.Windows.Forms.Button]::new(); $install.Text='接入并启动'; $install.SetBounds(402,558,168,38); $install.FlatStyle='Flat'; $install.FlatAppearance.BorderSize=0; $install.BackColor=[System.Drawing.ColorTranslator]::FromHtml('#009139'); $install.ForeColor=[System.Drawing.Color]::White
 $timer = [System.Windows.Forms.Timer]::new(); $timer.Interval=500
 $script:process = $null
 $script:pythonProcess = $null
 $script:installStartedAt = $null
 
 if ($configured) {
-    try { $saved = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json; $server.Text=[string]$saved.server; $machineName.Text=[string]$saved.name } catch {}
-    $server.Enabled=$false; $code.Enabled=$false; $machineName.Enabled=$false
-    $intro.Text='这台电脑已经接入。可以重新启动 Agent，并更新登录 Windows 后的自动启动设置。'
+    try { $saved = Get-Content -LiteralPath $configPath -Raw -Encoding UTF8 | ConvertFrom-Json; $server.Text=[string]$saved.server; $machineName.Text=[string]$saved.name } catch {}
+    $server.Enabled=$false
+    $intro.Text='已保留原配置。登记被删除或撤销时，填写新接入码即可重新申请；名称可以修改。'
 }
 
 $refresh = { if(Test-Python312){$pythonState.Text='✓ 已检测到 64 位 Python 3.12';$pythonState.ForeColor=[System.Drawing.ColorTranslator]::FromHtml('#007a31');$installPython.Enabled=$false;$install.Enabled=$true}else{$pythonState.Text='× 未检测到 64 位 Python 3.12，可点击下方按钮自动安装';$pythonState.ForeColor=[System.Drawing.ColorTranslator]::FromHtml('#c34f3a');$installPython.Enabled=$true;$install.Enabled=$false} }
@@ -102,6 +106,12 @@ $check.Add_Click({
     try { $status.Text='正在连接主控…';[System.Windows.Forms.Application]::DoEvents(); Invoke-WebRequest -UseBasicParsing -Uri ($server.Text.TrimEnd('/')+'/health') -TimeoutSec 5 | Out-Null; $status.Text='✓ 主控连接正常，可以继续安装。';$status.ForeColor=[System.Drawing.ColorTranslator]::FromHtml('#007a31') } catch { $status.Text='无法连接主控。请检查地址、两台电脑的网络以及主控防火墙。';$status.ForeColor=[System.Drawing.ColorTranslator]::FromHtml('#c34f3a') }
 })
 $timer.Add_Tick({
+    if ($script:process -and -not $script:process.HasExited -and (Test-Path -LiteralPath $setupResult)) {
+        try {
+            $progress = Get-Content -LiteralPath $setupResult -Raw -Encoding UTF8 | ConvertFrom-Json
+            if ($progress.state -eq 'working') { $status.Text=[string]$progress.message }
+        } catch { }
+    }
     if($script:pythonProcess -and $script:pythonProcess.HasExited){
         $exitCode=$script:pythonProcess.ExitCode
         $script:pythonProcess.Dispose(); $script:pythonProcess=$null
@@ -119,10 +129,13 @@ $timer.Add_Tick({
         return
     }
     if($script:process -and $script:process.HasExited){
-        $timer.Stop(); $output=if(Test-Path -LiteralPath $setupLog){Get-Content -LiteralPath $setupLog -Raw -ErrorAction SilentlyContinue}else{''}
-        if($script:process.ExitCode -eq 0){
+        $timer.Stop(); $output=if(Test-Path -LiteralPath $setupLog){Get-Content -LiteralPath $setupLog -Raw -Encoding UTF8 -ErrorAction SilentlyContinue}else{''}
+        $result = if (Test-Path -LiteralPath $setupResult) { try { Get-Content -LiteralPath $setupResult -Raw -Encoding UTF8 | ConvertFrom-Json } catch { $null } } else { $null }
+        $code.Enabled=$true; $machineName.Enabled=$true
+        if($script:process.ExitCode -eq 0 -and $result.state -in @('pending','approved')){
             try { Set-StartupShortcut $autoStart.Checked $dispatch.Checked } catch { $output += "`r`n自动启动设置失败：$($_.Exception.Message)" }
-            $status.Text=$(if($configured){'✓ Agent 已启动，可以在右下角托盘查看状态。'}else{'✓ 接入申请已提交，请让管理员在主控页面批准这台电脑。'});$status.ForeColor=[System.Drawing.ColorTranslator]::FromHtml('#007a31');$install.Text='完成';$install.Enabled=$false
+            $status.Text=$(if($result.state -eq 'pending'){'✓ 接入申请已提交，请让管理员在主控“宿主机”页面批准。'}else{'✓ 主控已确认接入，Agent 正在运行。'});$status.ForeColor=[System.Drawing.ColorTranslator]::FromHtml('#007a31');$install.Text='完成';$install.Enabled=$false
+            $machineName.Text=[string]$result.name; $code.Clear()
         } else {
             $details=@($output -split "`r?`n" | Where-Object { $_ -match 'Agent 启动失败：|Agent 启动或运行失败:|接入码无效' })
             if ((Test-Path -LiteralPath $agentErrorLog) -and
@@ -133,34 +146,40 @@ $timer.Add_Tick({
             $detail=$details | Select-Object -Last 1
             if ($detail -match '接入码无效、已使用或已过期') {
                 $status.Text='接入码不可用：请重新生成，并在此处清空后只粘贴一次。'
+            } elseif ($result.message) {
+                $status.Text=[string]$result.message
             } elseif ($detail) {
                 $status.Text='未完成：'+([string]$detail).Trim()
             } else {
-                $status.Text='未完成：请查看 '+$agentErrorLog
+                $status.Text='接入未完成，请点击“查看安装详情”查看本次原因，然后重试。'
             }
             $status.ForeColor=[System.Drawing.ColorTranslator]::FromHtml('#c34f3a');$install.Enabled=$true
         }
+        $detailsLink.Visible=Test-Path -LiteralPath $setupLog
+        $script:process.Dispose(); $script:process=$null
         $check.Enabled=$true
     }
 })
 $install.Add_Click({
-    if(-not $configured){
-        if(-not (Test-ServerUrl $server.Text.Trim())){[System.Windows.Forms.MessageBox]::Show('请填写完整的主控地址。','检查主控地址')|Out-Null;return}
-        if([string]::IsNullOrWhiteSpace($code.Text)){[System.Windows.Forms.MessageBox]::Show('请填写主控页面生成的一次性接入码。','检查接入码')|Out-Null;return}
-        if([string]::IsNullOrWhiteSpace($machineName.Text)){[System.Windows.Forms.MessageBox]::Show('请填写这台电脑的名称。','检查电脑名称')|Out-Null;return}
-    }
-    if(Test-Path -LiteralPath $setupLog){Remove-Item -LiteralPath $setupLog -Force}
+    if(-not (Test-ServerUrl $server.Text.Trim())){[System.Windows.Forms.MessageBox]::Show('请填写完整的主控地址。','检查主控地址')|Out-Null;return}
+    if(-not $configured -and [string]::IsNullOrWhiteSpace($code.Text)){[System.Windows.Forms.MessageBox]::Show('请填写主控页面生成的一次性接入码。','检查接入码')|Out-Null;return}
+    if([string]::IsNullOrWhiteSpace($machineName.Text)){[System.Windows.Forms.MessageBox]::Show('请填写这台电脑的名称。','检查电脑名称')|Out-Null;return}
+    New-Item -ItemType Directory -Force -Path (Split-Path $setupLog -Parent) | Out-Null
+    [IO.File]::WriteAllText($setupLog, '', [Text.UTF8Encoding]::new($false))
+    if(Test-Path -LiteralPath $setupResult){Remove-Item -LiteralPath $setupResult -Force}
     $script:installStartedAt=Get-Date
     $install.Enabled=$false;$check.Enabled=$false;$status.Text='正在准备 Agent 环境，首次安装可能需要几分钟…';$status.ForeColor=[System.Drawing.ColorTranslator]::FromHtml('#656d65')
-    $command="& "+(Quote-Ps $managePath)+" Start"
-    if(-not $configured){$command+=' -Server '+(Quote-Ps $server.Text.Trim())+' -Code '+(Quote-Ps $code.Text)+' -Name '+(Quote-Ps $machineName.Text.Trim())}
+    $code.Enabled=$false; $machineName.Enabled=$false
+    $command="& "+(Quote-Ps $managePath)+" Connect -DataDir "+(Quote-Ps $dataRoot)+" -ResultPath "+(Quote-Ps $setupResult)
+    $command+=' -Server '+(Quote-Ps $server.Text.Trim())+' -Name '+(Quote-Ps $machineName.Text.Trim())
+    if(-not [string]::IsNullOrWhiteSpace($code.Text)){$command+=' -Code '+(Quote-Ps $code.Text.Trim())}
     if($dispatch.Checked){$command+=' -Dispatch'}
-    $command+=" *>&1 | Out-File -LiteralPath "+(Quote-Ps $setupLog)+" -Encoding utf8"
+    $command+=" *>&1 | Out-File -LiteralPath "+(Quote-Ps $setupLog)+" -Encoding utf8; exit `$LASTEXITCODE"
     $encoded=[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
     $info=[Diagnostics.ProcessStartInfo]::new();$info.FileName='powershell.exe';$info.Arguments="-NoLogo -NoProfile -ExecutionPolicy Bypass -EncodedCommand $encoded";$info.UseShellExecute=$false;$info.CreateNoWindow=$true
     $script:process=[Diagnostics.Process]::Start($info);$timer.Start()
 })
 
-$form.Controls.AddRange(@($title,$intro,$pythonState,$autoStart,$dispatch,$status,$check,$installPython,$install))
+$form.Controls.AddRange(@($title,$intro,$pythonState,$autoStart,$dispatch,$status,$detailsLink,$check,$installPython,$install))
 & $refresh
 [void]$form.ShowDialog()

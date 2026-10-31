@@ -1,6 +1,7 @@
 import { computed, reactive, ref } from 'vue'
 import { triggerConfig, taskOwnerKey } from '../../lib/format'
 import { triggerOptions } from '../../lib/constants'
+import { emptyPlan, validatePlan } from '../../lib/plans'
 import { request } from '../../lib/api'
 
 function manualRequestId() {
@@ -26,11 +27,15 @@ export function createTasksState() {
     notify_on_failure: true,
     failure_screenshot: false,
     trigger_type: 'manual',
+    interval_value: 30,
+    interval_unit: 'minutes',
     target_host_id: '',
     daily_time: '09:00',
     weekly_days: [1],
     weekly_time: '09:00',
     cron_expression: '0 9 * * *',
+    monthly_day: 1,
+    monthly_time: '09:00',
   })
   return { tasks, taskModalOpen, editingTask, deletingTask, targetHosts, targetHostsLoading, filters, taskForm }
 }
@@ -91,7 +96,7 @@ export function useTasks({
     editingTask.value = null
     deletingTask.value = null
     resetFilters()
-    Object.assign(taskForm, { name: '', description: '', app_id: '', target_host_id: '', trigger_type: 'manual', daily_time: '09:00', weekly_time: '09:00', weekly_days: [1], cron_expression: '0 9 * * *' })
+    Object.assign(taskForm, { name: '', description: '', app_id: '', target_host_id: '', ...emptyPlan() })
   }
   const manualTasks = computed(() =>
     tasks.value.filter((task) => task.enabled && task.trigger_type === 'manual'),
@@ -168,9 +173,14 @@ export function useTasks({
         ? task.trigger_type
         : 'manual',
       target_host_id: task.target_host_id ? String(task.target_host_id) : '',
+      interval_value: config.value ?? 30,
+      interval_unit: config.unit || 'minutes',
       daily_time: config.time || '09:00',
       weekly_days: [...(config.weekdays || [1])],
       weekly_time: config.time || '09:00',
+      monthly_day: config.day || 1,
+      monthly_time: config.time || '09:00',
+      saved_trigger_type: task.trigger_type === 'manual' ? 'daily' : task.trigger_type,
       cron_expression: task.trigger_type === 'cron' ? config.expression || '' : '0 9 * * *',
     })
     taskModalOpen.value = true
@@ -214,16 +224,9 @@ export function useTasks({
       showToast('error', '请填写任务名称')
       return
     }
-    if (taskForm.trigger_type === 'weekly' && !taskForm.weekly_days.length) {
-      showToast('error', '请至少选择一个星期')
-      return
-    }
-    if (taskForm.trigger_type === 'cron' && taskForm.target_host_id) {
-      showToast('error', 'Cron 首版仅支持主控本机', '请将默认运行电脑设为主控本机后重试')
-      return
-    }
-    if (taskForm.trigger_type === 'cron' && !taskForm.cron_expression.trim()) {
-      showToast('error', '请填写 Cron 表达式')
+    const planError = validatePlan(taskForm, Boolean(taskForm.target_host_id))
+    if (planError) {
+      showToast('error', planError)
       return
     }
     saving.value = true

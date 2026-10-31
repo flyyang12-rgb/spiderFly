@@ -1,0 +1,45 @@
+{
+  "date": "2026-10-27",
+  "backend": {
+    "total": 827,
+    "passed": 808,
+    "skipped": 19
+  },
+  "agent": {
+    "total": 83,
+    "passed": 82,
+    "skipped": 1
+  },
+  "frontend": {
+    "new_interval_checks": 7,
+    "monthly_regression_checks": 11,
+    "build_modules": 122
+  },
+  "actual_local_run": {
+    "completed": 2,
+    "interval_seconds": 2,
+    "end_to_next_start_seconds": 3.0
+  },
+  "browser": {
+    "edit_roundtrip": true,
+    "save_roundtrip": true,
+    "narrow_viewport_no_horizontal_overflow": true
+  },
+  "deployment": {
+    "listening": "0.0.0.0:8383",
+    "workers": 1,
+    "health": "ok",
+    "lan_health": "ok",
+    "remaining_tasks": 0,
+    "deleted_requested_tasks": 1,
+    "served_assets_verified": 2
+  },
+  "backup": {
+    "file": "SpiderFly-before-interval-20261027-n6crh45m.zip",
+    "verified_files": 21
+  },
+  "git": {
+    "committed": false,
+    "pushed": false
+  }
+}

@@ -1,6 +1,6 @@
 ﻿param(
     [Parameter(Mandatory = $true, Position = 0)]
-    [ValidateSet('Start', 'Stop', 'Status', 'Logs', 'SetServer', 'Backup', 'Restore', 'Upgrade')]
+    [ValidateSet('Start', 'Stop', 'Status', 'Logs', 'Connect', 'SetServer', 'Backup', 'Restore', 'Upgrade')]
     [string]$Action,
     [string]$Server,
     [string]$Code,
@@ -14,7 +14,8 @@
     [switch]$IncludeCaches,
     [switch]$ConfirmRestore,
     [string]$InstallDir,
-    [string]$ProgramBackupPath
+    [string]$ProgramBackupPath,
+    [string]$ResultPath
 )
 
 $ErrorActionPreference = 'Stop'
@@ -40,6 +41,13 @@ function Get-AgentProcess {
         if (-not $process) { return $null }
         $expectedPython = [System.IO.Path]::GetFullPath((Join-Path $agentRoot '.venv\Scripts\python.exe'))
         $allowedExecutables = @($expectedPython)
+        # A newly extracted program has no venv yet. The existing Agent may
+        # still be running under the installed base Python from the old folder.
+        # Keep the exact module and data-directory checks below for PID reuse.
+        if ($env:LOCALAPPDATA) { $allowedExecutables += Join-Path $env:LOCALAPPDATA 'Programs\Python\Python312\python.exe' }
+        if ($env:ProgramFiles) { $allowedExecutables += Join-Path $env:ProgramFiles 'Python312\python.exe' }
+        $pathPython = Get-Command python -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($pathPython) { $allowedExecutables += [IO.Path]::GetFullPath($pathPython.Source) }
         $venvConfig = Join-Path $agentRoot '.venv\pyvenv.cfg'
         if (Test-Path -LiteralPath $venvConfig -PathType Leaf) {
             $venvLines = Get-Content -LiteralPath $venvConfig -Encoding UTF8
@@ -88,22 +96,21 @@ function Show-Status {
     Write-Host "日志：$stdoutLog"
 }
 
-switch ($Action) {
-    'Start' {
+function Start-Agent([switch]$SkipEnrollment) {
         if (Get-AgentProcess) { throw 'Agent 已在运行，不会重复启动' }
         New-Item -ItemType Directory -Force -Path $logRoot | Out-Null
         if ($Console) {
             $arguments = @('-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $agentRoot 'start.ps1'), '-DataDir', $dataRoot)
             if ($Server) { $arguments += @('-Server', $Server) }
-            if ($Code) { $arguments += @('-Code', $Code) }
+            if ($Code -and -not $SkipEnrollment) { $arguments += @('-Code', $Code) }
             if ($Name) { $arguments += @('-Name', $Name) }
             if ($Dispatch) { $arguments += '-Dispatch' }
             & powershell.exe @arguments -Console
-            exit $LASTEXITCODE
+            if ($LASTEXITCODE -ne 0) { throw 'Agent 启动失败' }; return
         }
         $command = '& ' + (Quote-Ps (Join-Path $agentRoot 'start.ps1')) + ' -DataDir ' + (Quote-Ps $dataRoot)
         if ($Server) { $command += ' -Server ' + (Quote-Ps $Server) }
-        if ($Code) { $command += ' -Code ' + (Quote-Ps $Code) }
+        if ($Code -and -not $SkipEnrollment) { $command += ' -Code ' + (Quote-Ps $Code) }
         if ($Name) { $command += ' -Name ' + (Quote-Ps $Name) }
         if ($Dispatch) { $command += ' -Dispatch' }
         $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
@@ -113,7 +120,7 @@ switch ($Action) {
         do {
             Start-Sleep -Milliseconds 250
             $state = Get-AgentProcess
-            if ($state) { Show-Status; exit 0 }
+            if ($state) { Show-Status; return }
             if ($child.HasExited) {
                 $lastError = if (Test-Path -LiteralPath $stderrLog) {
                     Get-Content -LiteralPath $stderrLog -ErrorAction SilentlyContinue |
@@ -124,10 +131,11 @@ switch ($Action) {
             }
         } while ((Get-Date) -lt $deadline)
         throw "Agent 未在等待时间内就绪，请查看 $stderrLog 和 $stdoutLog"
-    }
-    'Stop' {
+}
+
+function Stop-Agent {
         $state = Get-AgentProcess
-        if (-not $state) { Write-Host 'Agent 已停止。'; exit 0 }
+        if (-not $state) { Write-Host 'Agent 已停止。'; return }
         New-Item -ItemType Directory -Force -Path $dataRoot | Out-Null
         [System.IO.File]::WriteAllText($shutdownPath, [DateTimeOffset]::UtcNow.ToString('O'))
         $deadline = (Get-Date).AddSeconds(90)
@@ -135,10 +143,90 @@ switch ($Action) {
             Start-Sleep -Milliseconds 500
             if (-not (Get-AgentProcess)) {
                 Write-Host 'Agent 已安全停止；未强制结束未知进程。' -ForegroundColor Green
-                exit 0
+                return
             }
         }
         throw 'Agent 未在 90 秒内安全退出；请从托盘停止/紧急接管并检查任务状态，脚本不会强杀进程'
+}
+
+function Save-ConnectResult($Value) {
+    if ($ResultPath) {
+        $temporary = $ResultPath + '.tmp'
+        [IO.File]::WriteAllText($temporary, ($Value | ConvertTo-Json -Compress), [Text.UTF8Encoding]::new($false))
+        Move-Item -LiteralPath $temporary -Destination $ResultPath -Force
+    }
+}
+
+function Get-RegistrationStatus {
+    $agentPython = Join-Path $agentRoot '.venv/Scripts/python.exe'
+    Push-Location $agentRoot
+    try {
+        $output = & $agentPython -m spiderfly_agent --data-dir $dataRoot registration-status
+        if ($LASTEXITCODE -ne 0) { throw '无法核对原登记，请检查 Agent 日志。' }
+        return ($output | ConvertFrom-Json)
+    } finally { Pop-Location }
+}
+
+switch ($Action) {
+    'Start' { Start-Agent }
+    'Stop' { Stop-Agent }
+    'Connect' {
+        try {
+            # An interrupted install may already have python.exe but no imports.
+            # Only a running Agent needs a preflight before preparing dependencies.
+            $runtimeReady = (Test-Path -LiteralPath (Join-Path $agentRoot '.venv/Scripts/python.exe')) -and
+                (Test-Path -LiteralPath (Join-Path $agentRoot '.venv/.dependencies.sha256'))
+            if ($Code -and $runtimeReady -and (Get-AgentProcess)) {
+                $before = Get-RegistrationStatus
+                if ($before.can_reapply -eq $false) { throw '这台电脑仍有未结束任务或升级，请结束后再申请；原 Agent 保持运行。' }
+                Stop-Agent
+            }
+            $prepareArguments = @('-NoLogo','-NoProfile','-ExecutionPolicy','Bypass','-File',(Join-Path $agentRoot 'start.ps1'),'-DataDir',$dataRoot,'-PrepareOnly')
+            if ($ResultPath) { $prepareArguments += @('-ResultPath',$ResultPath) }
+            & powershell.exe @prepareArguments
+            if ($LASTEXITCODE -ne 0) {
+                $preparation = if ($ResultPath -and (Test-Path -LiteralPath $ResultPath)) { Get-Content -LiteralPath $ResultPath -Raw -Encoding UTF8 | ConvertFrom-Json }
+                throw $(if ($preparation.message) { [string]$preparation.message } else { '准备 Agent 环境失败，请点击“查看安装详情”查看原因，然后重试。' })
+            }
+            if ($Code) {
+                # Fresh download/partial install: prepare this program first,
+                # then inspect the old Agent before asking it to stop.
+                if (Get-AgentProcess) {
+                    $before = Get-RegistrationStatus
+                    if ($before.can_reapply -eq $false) { throw '这台电脑仍有未结束任务或升级，请结束后再申请；原 Agent 保持运行。' }
+                    Stop-Agent
+                }
+                Save-ConnectResult @{ state='working'; message='正在向主控提交接入申请…' }
+                $agentPython = Join-Path $agentRoot '.venv/Scripts/python.exe'
+                Push-Location $agentRoot
+                try {
+                    & $agentPython -m spiderfly_agent --data-dir $dataRoot setup "--server=$Server" "--code=$Code" "--name=$Name"
+                    if ($LASTEXITCODE -ne 0) { throw '接入申请未完成，请检查接入码和上方具体错误。' }
+                } finally { Pop-Location }
+            } else {
+                $registration = Get-RegistrationStatus
+                if ($registration.state -notin @('pending','approved')) {
+                    $message = if ($registration.message) { [string]$registration.message } else { '原登记已撤销或拒绝，请填写新接入码重新申请。' }
+                    Save-ConnectResult @{ state='requires_enrollment'; message=$message }
+                    Write-Host $message
+                    exit 2
+                }
+                if ($Name -and $Name -ne $registration.name) {
+                    Save-ConnectResult @{ state='requires_enrollment'; message='修改电脑名称时，请填写新接入码重新申请。' }
+                    exit 2
+                }
+            }
+            Save-ConnectResult @{ state='working'; message='正在启动 Agent 并核对接入状态…' }
+            if (-not (Get-AgentProcess)) { Start-Agent -SkipEnrollment }
+            $registration = Get-RegistrationStatus
+            if ($registration.state -notin @('pending','approved')) {
+                throw $(if ($registration.message) { [string]$registration.message } else { '主控尚未确认本次接入，请填写新接入码重试。' })
+            }
+            Save-ConnectResult @{ state=$registration.state; host_id=$registration.host_id; name=$registration.name }
+        } catch {
+            Save-ConnectResult @{ state='error'; message=$_.Exception.Message }
+            throw
+        }
     }
     'Status' { Show-Status }
     'Logs' {
@@ -169,7 +257,7 @@ switch ($Action) {
             & $python -c 'import base64,sys;code=base64.b64decode(sys.argv.pop(1));exec(code)' $encodedProbe $journalPath
             if ($LASTEXITCODE -ne 0) { throw '仍有未回传或状态待确认运行，不能更改主控地址' }
         }
-        $config = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
+        $config = Get-Content -LiteralPath $configPath -Raw -Encoding UTF8 | ConvertFrom-Json
         $backup = $configPath + '.before-server-change-' + (Get-Date -Format 'yyyyMMdd-HHmmss')
         Copy-Item -LiteralPath $configPath -Destination $backup
         $config.server = $Server.TrimEnd('/')

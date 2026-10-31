@@ -134,6 +134,12 @@ export function useHosts({ onSessionExpired }) {
     return perform(`host:${host.id}`, () => request(`/hosts/${host.id}/${action}`, { method: 'POST', body: '{}' }), `已${verbs[action]}宿主机「${host.name}」`)
   }
 
+  async function deleteHost(host) {
+    const result = await perform(`delete:${host.id}`, () => request(`/hosts/${host.id}`, { method: 'DELETE', body: '{}' }), `已永久删除「${host.name}」`)
+    if (result) hosts.value = hosts.value.filter(item => item.id !== host.id)
+    return result
+  }
+
   async function upgradeHost(host) {
     if (['succeeded', 'failed', 'expired', 'cancelled'].includes(host.agent_update?.status)) upgradeRequests.delete(host.id)
     if (!upgradeRequests.has(host.id)) upgradeRequests.set(host.id, crypto.randomUUID().replaceAll('-', ''))
@@ -180,7 +186,7 @@ export function useHosts({ onSessionExpired }) {
   return {
     hosts, runs, loading, refreshing, loadError, actionError, notice, busy, enrollment,
     selectedRunId, runDetail, detailLoading, detailError,
-    refresh, createEnrollment, hostAction, upgradeHost, setMode, stopRun,
+    refresh, createEnrollment, hostAction, deleteHost, upgradeHost, setMode, stopRun,
     activateCandidate, dismissCandidate,
     openRun, closeRun, loadRunDetail,
   }

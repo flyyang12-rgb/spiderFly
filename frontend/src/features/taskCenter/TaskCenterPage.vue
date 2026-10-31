@@ -129,11 +129,11 @@ watch(me, (user, previous) => { if (!user || user.id !== previous?.id) { planTar
               <span v-else class="status-badge"><i class="status-dot" :class="row.object.last_run?.status"></i>最近：{{ workflowStatusLabel(row.object.last_run?.status) }}</span>
             </div>
             <template v-if="row.kind === 'task'">
-              <div class="center-object-facts"><span :class="'env-' + row.object.environment_status">{{ row.object.target_host_id ? '运行时准备环境' : envStatusLabel(row.object.environment_status) }}</span><span>归属人：{{ row.object.created_by_name || '系统迁移' }}</span><span v-if="row.object.trigger_type !== 'manual'">下次运行：{{ !row.object.enabled ? '停用后不调度' : row.object.first_environment_ready === 0 && !row.object.target_host_id ? '依赖准备中' : row.object.next_run_at ? formatTime(row.object.next_run_at) : '未知' }}</span></div>
+              <div class="center-object-facts"><span :class="'env-' + row.object.environment_status">{{ row.object.target_host_id ? '运行时准备环境' : envStatusLabel(row.object.environment_status) }}</span><span>归属人：{{ row.object.created_by_name || '系统迁移' }}</span><span v-if="row.object.trigger_type !== 'manual'">下次运行：{{ !row.object.enabled ? '停用后不调度' : row.object.first_environment_ready === 0 && !row.object.target_host_id ? '依赖准备中' : row.object.next_run_at ? formatTime(row.object.next_run_at) : row.object.trigger_type === 'interval' ? '本次结束后计算' : '未知' }}</span></div>
               <p v-if="row.object.environment_status === 'failed' && row.object.environment_error" class="center-description danger-text">{{ row.object.environment_error }}</p>
             </template>
             <template v-else>
-              <div class="center-object-facts"><span>{{ row.object.archived ? '已归档' : row.object.steps?.some(step => step.available === false) ? '成员不可用' : '成员可用' }}</span><span v-if="row.object.schedule_enabled">下次运行：{{ row.object.next_run_at ? formatTime(row.object.next_run_at) : '未知' }}</span></div>
+              <div class="center-object-facts"><span>{{ row.object.archived ? '已归档' : row.object.steps?.some(step => step.available === false) ? '成员不可用' : '成员可用' }}</span><span v-if="row.object.schedule_enabled">下次运行：{{ row.object.next_run_at ? formatTime(row.object.next_run_at) : row.object.trigger_type === 'interval' ? '本次结束后计算' : '未知' }}</span></div>
               <ol class="center-flow-steps" aria-label="执行顺序"><li v-for="step in row.object.steps" :key="step.position" :class="{ 'danger-text': step.available === false }"><span>{{ step.position }}</span>{{ step.task_name }}{{ step.available === false ? '（不可用）' : '' }}</li></ol>
             </template>
           </div>

@@ -72,10 +72,18 @@ def _enqueue_task_in_transaction(task_id, source, requested_by, conn, round_id=N
     if active and (source != 'schedule' or round_id is not None):
         raise HTTPException(status_code=409, detail="任务已经在排队或运行")
     now = utc_now()
+    if task['trigger_type'] == 'interval':
+        from .interval_schedules import ensure_schema, refresh
+        ensure_schema(conn)
+        refresh(conn, 'task', task, now)
     execution_id = int(conn.execute('''INSERT INTO executions(
         task_id,status,trigger_source,requested_by,script_path_snapshot,python_path_snapshot,created_at)
         VALUES(?,'pending',?,?,?,?,?)''', (task_id,source,requested_by,str(script),str(python_path),now)).lastrowid)
     snapshot = maintenance.capture_snapshot(conn, task_id)
+    if task['trigger_type'] == 'interval' and json.loads(snapshot)['policy']['runtime'] in {'native', 'readonly-v1'}:
+        from .interval_schedules import ensure_schema
+        ensure_schema(conn)
+        conn.execute('INSERT INTO interval_executions(execution_id) VALUES(?)', (execution_id,))
     if round_id is not None:
         from .task_queries import validate_cron_runtime
         try:

@@ -4,6 +4,7 @@ import { formatFileSize, formatTime } from '../../lib/format'
 import { useWorkspaceContext } from '../../workspace/context'
 import { activeRunStates, hostStateLabels, runStatusLabels, useHosts } from './useHosts'
 import EnvironmentDetails from './EnvironmentDetails.vue'
+import WorkflowDialog from '../workflows/WorkflowDialog.vue'
 
 const { handleSessionExpired, isSuperAdmin } = useWorkspaceContext()
 const props = defineProps({ openRunId: { type: Number, default: null } })
@@ -11,12 +12,22 @@ const emit = defineEmits(['run-opened'])
 const {
   hosts, runs, loading, refreshing, loadError, actionError, notice, busy, enrollment,
   selectedRunId, runDetail, detailLoading, detailError,
-  refresh, createEnrollment, hostAction, upgradeHost, setMode, stopRun,
+  refresh, createEnrollment, hostAction, deleteHost, upgradeHost, setMode, stopRun,
   activateCandidate, dismissCandidate,
   openRun, closeRun, loadRunDetail,
 } = useHosts({ onSessionExpired: handleSessionExpired })
 
 const confirmation = ref(null)
+const deletingHost = ref(null)
+
+async function confirmDeleteHost() {
+  if (!deletingHost.value || busy.value) return
+  const host = deletingHost.value
+  if (await deleteHost(host)) {
+    expandedHosts.value.delete(host.id)
+    deletingHost.value = null
+  }
+}
 const codeInput = ref(null)
 const detailHeading = ref(null)
 const connectOpen = ref(false)
@@ -188,6 +199,7 @@ async function copyCode() {
                   <button v-if="host.active_run_id" class="host-button" type="button" @click="showRun(host.active_run_id, $event)">查看运行 #{{ host.active_run_id }}</button>
                   <button class="host-button" type="button" :disabled="Boolean(busy) || Boolean(host.active_run_id)" @click="setMode(host)">{{ busy === `host:${host.id}` ? '处理中…' : host.dispatch_enabled ? '关闭主控调度' : '开启主控调度' }}</button>
                 </template>
+                <button v-if="host.approval_status === 'revoked'" class="host-button danger" type="button" :disabled="Boolean(busy)" @click="actionError = ''; deletingHost = host">永久删除</button>
                 <button class="host-button quiet" type="button" :aria-expanded="expandedHosts.has(host.id)" :aria-controls="`host-machine-${host.id}`" :aria-label="`${host.name}：${expandedHosts.has(host.id) ? '收起' : '查看'}详情`" @click="toggleHostDetails(host.id)">{{ expandedHosts.has(host.id) ? '收起' : '详情' }}</button>
               </div>
             </div>
@@ -259,11 +271,16 @@ async function copyCode() {
         </template>
       </section>
     </template>
+    <WorkflowDialog v-if="deletingHost" title="永久删除电脑" :close-disabled="Boolean(busy)" @close="deletingHost = null">
+      <p>删除「{{ deletingHost.name }}」的登记和接入凭据，保留运行记录。再次使用需重新接入。</p>
+      <p v-if="actionError" class="danger-text" role="alert">{{ actionError }}</p>
+      <template #footer><button class="button secondary" type="button" :disabled="Boolean(busy)" @click="deletingHost = null">取消</button><button class="button danger" type="button" :disabled="Boolean(busy)" @click="confirmDeleteHost">{{ busy ? '删除中…' : '确认永久删除' }}</button></template>
+    </WorkflowDialog>
   </section>
 </template>
 
 <style scoped>
-.hosts-page { --host-green: #009139; --host-ink: #221814; --host-text: #292b28; --host-muted: #656d65; --host-border: #dfe3df; --host-soft: #f7f8f6; display: grid; width: min(1180px, 100%); min-width: 0; margin: 0 auto; gap: 16px; color: var(--host-text); font: 13px/1.55 Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif; }
+.hosts-page { --host-green: #009139; --host-ink: var(--ink); --host-text: #292b28; --host-muted: var(--muted); --host-border: #dfe3df; --host-soft: #f7f8f6; display: grid; width: min(var(--content-width), 100%); min-width: 0; margin: 0 auto; gap: 16px; color: var(--host-text); font: 13px/1.55 Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif; }
 .hosts-page *, .hosts-page *::before, .hosts-page *::after { box-sizing: border-box; }
 .hosts-page h2, .hosts-page h3, .hosts-page h4, .hosts-page p, .hosts-page dl { margin: 0; }
 .hosts-page h2 { color: var(--host-ink); font-size: 20px; line-height: 28px; }

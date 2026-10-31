@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from concurrent.futures import ThreadPoolExecutor
 import unittest
 from unittest.mock import patch
@@ -63,11 +64,12 @@ class InlinePlanTests(unittest.TestCase):
 
     def test_task_all_modes_and_disabled_plan_do_not_enable_task(self):
         for index, (kind, config) in enumerate([('manual', '{}'), ('daily', '{"time":"10:00"}'),
-                ('weekly', '{"time":"10:00","weekdays":[2]}'), ('cron', '{"expression":"0 10 * * *"}')]):
+                ('weekly', '{"time":"10:00","weekdays":[2]}'), ('monthly', '{"time":"10:00","day":31}'), ('monthly', '{"time":"10:00","day":"last"}'), ('cron', '{"expression":"0 10 * * *"}')]):
             code, item = self.upload(name=f'upload-{index}', request_id=f'inline-mode-request-{index:03}',
                                      trigger_type=kind, trigger_config=config, enabled='false')
             self.assertEqual(code, 201, item)
             self.assertEqual(item['task']['trigger_type'], kind)
+            self.assertEqual(item['task']['trigger_config'], json.loads(config))
             self.assertFalse(item['task']['enabled'])
             self.assertIsNone(item['task']['next_run_at'])
 
@@ -149,12 +151,13 @@ class InlinePlanTests(unittest.TestCase):
 
     def test_flow_all_modes_and_disabling_plan_keeps_accepted_round(self):
         for index, (kind, config) in enumerate([('manual', {}), ('daily', {'time': '08:30'}),
-                ('weekly', {'time': '08:30', 'weekdays': [2]}), ('cron', {'expression': '0 8 * * *'})]):
+                ('weekly', {'time': '08:30', 'weekdays': [2]}), ('monthly', {'time': '08:30', 'day': 31}), ('monthly', {'time': '08:30', 'day': 'last'}), ('cron', {'expression': '0 8 * * *'})]):
             body = self.flow(name=f'flow-mode-{index}', request_id=f'inline-flow-mode-{index:03}',
                 schedule={'trigger_type': kind, 'trigger_config': config, 'schedule_enabled': kind != 'manual'})
             code, item = self.request('POST', '/api/workflows', body, self.token)
             self.assertEqual(code, 201, item)
             self.assertEqual(item['trigger_type'], kind)
+            self.assertEqual(item['trigger_config'], config)
             self.assertEqual(item['schedule_enabled'], kind != 'manual')
         code, run = self.request('POST', f"/api/workflows/{item['id']}/runs", {'request_id': 'inline-active-round-001'}, self.token)
         self.assertEqual(code, 202, run)

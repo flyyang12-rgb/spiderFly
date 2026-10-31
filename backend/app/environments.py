@@ -494,6 +494,9 @@ def delete_task_bundle(task_id: int) -> dict:
             ).fetchone()
             if running:
                 raise RuntimeError("任务正在运行，请运行结束后再删除")
+            if workflows._table(conn, 'remote_runs') and conn.execute("""SELECT 1 FROM remote_runs
+                WHERE task_id=? AND status IN ('queued','preparing','running','stopping','uncertain') LIMIT 1""", (task_id,)).fetchone():
+                raise RuntimeError('任务仍有远程排队、运行或待确认记录，请取消或等待结束后再删除')
             execution_ids = tuple(
                 int(item["id"])
                 for item in conn.execute(
@@ -514,7 +517,8 @@ def delete_task_bundle(task_id: int) -> dict:
                 ).fetchone()
                 if other_task:
                     raise RuntimeError("这个旧程序仍被其他任务使用，暂时不能整项删除")
-                if app["environment_status"] in {"pending", "building"}:
+                remote_preparation = task['target_host_id'] is not None and not task['first_environment_ready']
+                if app['environment_status'] == 'building' or (app['environment_status'] == 'pending' and not remote_preparation):
                     raise RuntimeError("程序正在准备运行环境，请完成后再删除")
                 app_name = str(app["name"])
                 conn.execute(
@@ -546,6 +550,8 @@ def delete_task_bundle(task_id: int) -> dict:
             )
             if cursor.rowcount != 1:
                 raise RuntimeError("任务状态已经变化，请刷新后重试")
+            from .services.interval_schedules import reset
+            reset(conn, 'task', task_id)
             if app_id:
                 app_cursor = conn.execute(
                     "DELETE FROM rpa_apps WHERE id = ? AND archived = 0 AND environment_status = 'removing'",

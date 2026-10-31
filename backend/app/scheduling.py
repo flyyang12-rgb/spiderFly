@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from calendar import monthrange
 import json
 import logging
 from datetime import datetime, time, timedelta, timezone
@@ -12,7 +13,7 @@ from .cron_schedule import cron_times, normalize_cron
 
 CHINA_TZ = timezone(timedelta(hours=8), name="Asia/Shanghai")
 logger = logging.getLogger(__name__)
-TRIGGER_TYPES = {"manual", "once", "interval", "daily", "weekly", "cron"}
+TRIGGER_TYPES = {"manual", "once", "interval", "daily", "weekly", "monthly", "cron"}
 INTERVAL_SECONDS = {
     "seconds": 1,
     "minutes": 60,
@@ -65,10 +66,9 @@ def normalize_trigger(trigger_type: str, config: dict[str, Any] | None) -> dict[
         _aware(run_at)
         return {"run_at": run_at}
     if trigger_type == "interval":
-        try:
-            value = int(source.get("value", 0))
-        except (TypeError, ValueError) as exc:
-            raise ValueError("间隔数值必须是整数") from exc
+        value = source.get("value")
+        if type(value) is not int:
+            raise ValueError("间隔数值必须是整数")
         unit = str(source.get("unit") or "minutes")
         if value < 1 or value > 100000:
             raise ValueError("间隔数值必须在 1 到 100000 之间")
@@ -78,6 +78,12 @@ def normalize_trigger(trigger_type: str, config: dict[str, Any] | None) -> dict[
     if trigger_type == "daily":
         clock = _clock(source.get("time"))
         return {"time": clock.strftime("%H:%M")}
+    if trigger_type == "monthly":
+        day = source.get("day")
+        if day != 'last' and (type(day) is not int or not 1 <= day <= 31):
+            raise ValueError("每月执行日期须为最后一天或 1 到 31 号")
+        clock = _clock(source.get("time"))
+        return {"day": day, "time": clock.strftime("%H:%M")}
 
     clock = _clock(source.get("time"))
     try:
@@ -87,6 +93,28 @@ def normalize_trigger(trigger_type: str, config: dict[str, Any] | None) -> dict[
     if not weekdays or any(day < 1 or day > 7 for day in weekdays):
         raise ValueError("请至少选择一个星期")
     return {"weekdays": weekdays, "time": clock.strftime("%H:%M")}
+
+
+def monthly_occurrence(config: dict[str, Any], point: datetime, *, previous: bool = False) -> datetime:
+    """Next (exclusive) or previous (inclusive) slot on the Beijing calendar.
+
+    Numeric dates are retained for existing plans; absent numeric dates skip a month.
+    """
+    config = normalize_trigger('monthly', config)
+    local = _aware(point).astimezone(CHINA_TZ)
+    clock = _clock(config['time'])
+    direction = -1 if previous else 1
+    for offset in range(13):
+        year, month_index = divmod(local.year * 12 + local.month - 1 + direction * offset, 12)
+        month = month_index + 1
+        last_day = monthrange(year, month)[1]
+        day = last_day if config['day'] == 'last' else config['day']
+        if day > last_day:
+            continue
+        candidate = datetime(year, month, day, clock.hour, clock.minute, tzinfo=CHINA_TZ)
+        if (candidate <= local) if previous else (candidate > local):
+            return candidate.astimezone(timezone.utc)
+    raise ValueError('无法计算每月执行时间')
 
 
 def compute_next_run(
@@ -110,6 +138,8 @@ def compute_next_run(
         return (after_utc + timedelta(seconds=seconds)).isoformat(timespec="seconds")
 
     clock = _clock(config["time"])
+    if trigger_type == "monthly":
+        return monthly_occurrence(config, after_utc).isoformat(timespec="seconds")
     if trigger_type == "daily":
         candidate = datetime.combine(local_after.date(), clock, CHINA_TZ)
         if candidate <= local_after:
@@ -155,12 +185,13 @@ def reconcile_schedules() -> None:
 async def scheduler_loop(enqueue: Callable[[int, str], Awaitable[int]]) -> None:
     while True:
         now = utc_now()
-        from .services import cron_runs, execution_queue, workflow_schedules
+        from .services import cron_runs, execution_queue, workflow_schedules, interval_schedules
         # Restore accepted occurrences before accepting later schedule points.
         try:
             await asyncio.to_thread(cron_runs.reconcile, now=now)
             await asyncio.to_thread(cron_runs.dispatch_pending, execution_queue._enqueue_task_in_transaction)
             await asyncio.to_thread(workflow_schedules.scan_due, now=now)
+            await asyncio.to_thread(interval_schedules.scan_tasks, now=now)
         except asyncio.CancelledError:
             raise
         except Exception:
@@ -172,7 +203,7 @@ async def scheduler_loop(enqueue: Callable[[int, str], Awaitable[int]]) -> None:
             """
             SELECT * FROM tasks
             WHERE enabled = 1
-              AND trigger_type != 'manual'
+              AND trigger_type NOT IN ('manual','interval')
               AND next_run_at IS NOT NULL
               AND next_run_at <= ?
               AND (target_host_id IS NOT NULL OR first_environment_ready = 1)

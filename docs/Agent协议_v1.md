@@ -1,5 +1,9 @@
 # Agent 协议 v1（首个实施增量）
 
+2026-10-30 接入核对增加 `GET /api/agent/registration`：使用原机器签名，仅返回自身编号、名称、批准状态及是否允许重新申请，不领取任务。已撤销/拒绝可签名核对自身状态，其他业务接口仍拒绝；已删除编号返回 404。
+
+`POST /api/agent/register` 可附加 `reenrollment_signature`。已有身份用新接入码重新申请时，使用原 Ed25519 私钥签署由 `enrollment_code`、`machine_id`、`name`、`public_key`、`agent_version`、`protocol_version` 六字段组成的对象，按键排序、UTF-8、无多余空格序列化，签名 Base64 编码。主控核对新接入码、原公钥及未结束运行后，将同一登记设为待批准，不自动放行。已永久删除的身份按新申请生成新编号。原已消费接入码的成功重试仍幂等返回原记录。[行为和验证](已有配置重新接入_2026-10-30.md)。
+
 本协议用于局域网宿主机接入和指定机器手动执行。主控沿用 SQLite，Agent 使用独立本地 SQLite 日志；只有主控访问中心数据库。现有单机队列暂保留，远程运行不进入旧本机执行或自动修复队列。完成迁移前，网页分别显示本机与远程运行。
 
 ## 身份与通信
@@ -50,6 +54,7 @@ Agent 默认非调度。服务器管理员可设置主控侧 `dispatch_enabled`�
 - `GET /api/hosts/agent-download` → 仅含固定源码清单的 Agent ZIP（管理员下载，不包含机器身份或本地数据）。
 - `POST /api/hosts/enrollment-codes` → `{code,expires_at,server_url}`。
 - `POST /api/hosts/{id}/approve`、`reject`、`revoke` → Host。
+- `DELETE /api/hosts/{id}` → `{deleted:true,id}`。仅管理员同源 JSON 请求；只接受已撤销且无未归档任务绑定、未结束运行、升级占用的电脑。重复删除幂等。清除机器身份、公钥、nonce 和已消费接入码；内部保留带 `deleted_at` 的历史关联占位，不支持恢复，列表不再返回。旧 Host ID 的机器请求返回 404；重新接入使用新的接入码、Host ID 和批准流程，协议版本保持 v1。
 - `PATCH /api/hosts/{id}/mode`，`{dispatch_enabled:bool}` → Host。
 - Host：`id,name,machine_id,approval_status(pending/approved/rejected/revoked),dispatch_enabled,agent_dispatch_enabled,interactive_session,online,state(pending/non_dispatch/idle/running/stopping/offline/uncertain/rejected/revoked),last_seen_at,agent_version,active_run_id,created_at`。
 - `POST /api/hosts/{id}/runs`，`{task_id:int,request_id:UUID-string}` → Run。请求 ID 重复必须返回同一运行；更换目标/任务时冲突。

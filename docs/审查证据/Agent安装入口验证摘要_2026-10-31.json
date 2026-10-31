@@ -1,0 +1,62 @@
+{
+  "date": "2026-10-31",
+  "backend": {
+    "total": 833,
+    "passed": 814,
+    "skipped": 19
+  },
+  "agent": {
+    "total": 103,
+    "passed": 102,
+    "skipped": 1
+  },
+  "windows_powershell": "5.1",
+  "regressions": [
+    "pip stderr notice with exit 0",
+    "real pip failure and retry",
+    "pip check failure",
+    "incomplete environment recovery",
+    "WinForms error and retry",
+    "BAT without BOM",
+    "safe tray shutdown",
+    "Chinese config and registration response",
+    "fresh download folder safely replaces previous running Agent after occupancy check"
+  ],
+  "integration": {
+    "package_version": "0.5.2",
+    "package_manifest_verified": true,
+    "fresh_venv": true,
+    "real_pip_install_and_check": true,
+    "original_bat_entry": true,
+    "native_wizard_handlers": true,
+    "new_registration_pending": true,
+    "deleted_registration_reapplied": true,
+    "identity_preserved": true,
+    "task_status": "succeeded",
+    "artifact_download_verified": true,
+    "production_data_used": false,
+    "scope": "localhost isolated controller; test-only physical lock; no bot2 field access",
+    "desktop_safe_stop_seconds": 2.2,
+    "chinese_name_round_trip_verified": true
+  },
+  "production": {
+    "health_local": 200,
+    "health_lan": 200,
+    "package_version": "0.5.2",
+    "files_verified": 26,
+    "all_program_bytes_match_workspace": true,
+    "host_count": 1,
+    "full_package_path": "D:\\AI_Project\\Workspace\\Project_01_Py任务分发管理项目\\SpiderFlyAgent-完整安装包.zip",
+    "package_sha256": "631f31014df8298cf11c3dad1d47aa7c3d594cc879aeddf6a098d2994a1e7878"
+  },
+  "backup": {
+    "file": "SpiderFly-before-installer-20261031-d61cf566.zip",
+    "verified_files": 881
+  },
+  "limitations": [
+    "Bot2 itself was not accessible for installation in this turn.",
+    "UI automation only replaced the modal loop in the isolated test copy and skipped real Startup shortcut changes.",
+    "A test-only machine lock was used; production lock unchanged."
+  ],
+  "cleanup": "Isolated Agent processes and controller stopped; no production test registrations or tasks."
+}

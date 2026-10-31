@@ -19,5 +19,5 @@ watch(me, (next, previous) => { if (next !== previous) instanceGeneration.value 
   </section>
 </template>
 <style scoped>
-.service-settings-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start;gap:24px}.service-settings-page{max-width:1200px}@media(max-width:920px){.service-settings-grid{grid-template-columns:minmax(0,1fr);gap:20px}}
+.service-settings-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start;gap:20px}.service-settings-page{max-width:var(--content-width)}@media(max-width:920px){.service-settings-grid{grid-template-columns:minmax(0,1fr);gap:20px}}
 </style>

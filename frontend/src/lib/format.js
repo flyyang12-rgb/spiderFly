@@ -1,8 +1,10 @@
 import { triggerOptions, weekdayOptions } from './constants'
 
 export function triggerConfig(form) {
+  if (form.trigger_type === 'interval') return { value: Number(form.interval_value), unit: form.interval_unit }
   if (form.trigger_type === 'daily') return { time: form.daily_time }
   if (form.trigger_type === 'weekly') return { weekdays: form.weekly_days, time: form.weekly_time }
+  if (form.trigger_type === 'monthly') return { day: form.monthly_day === 'last' ? 'last' : Number(form.monthly_day), time: form.monthly_time }
   if (form.trigger_type === 'cron') return { expression: String(form.cron_expression || '').trim() }
   return {}
 }
@@ -18,8 +20,10 @@ export function triggerLabel(type) {
 
 export function triggerDetail(task) {
   const config = task.trigger_config || {}
-  if (task.trigger_type === 'cron') return (config.expression || '尚未设置表达式') + ' · 北京时间'
+  if (task.trigger_type === 'interval') return `结束后间隔 ${config.value} ${{ seconds: '秒', minutes: '分钟', hours: '小时', days: '天' }[config.unit] || config.unit}`
+  if (task.trigger_type === 'cron') return '保留原计划 · 北京时间'
   if (task.trigger_type === 'daily') return '每天 ' + config.time
+  if (task.trigger_type === 'monthly') return `${config.day === 'last' ? '每月最后一天' : Number(config.day) === 1 ? '每月一号' : `每月 ${config.day} 号`} ${config.time}`
   if (task.trigger_type === 'weekly') {
     const days = (config.weekdays || [])
       .map((day) => weekdayOptions.find((item) => item.value === day)?.label)
@@ -95,6 +99,7 @@ export function roleLabel(role) {
 
 export function auditActionLabel(action) {
   const map = {
+    agent_delete: '永久删除电脑',
     login: '登录系统',
     login_failed: '登录失败',
     logout: '退出登录',

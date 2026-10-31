@@ -6,17 +6,16 @@ const props = defineProps({ state: { type: Object, required: true } })
 </script>
 
 <template>
-  <WorkflowDialog :title="state.editor.value.id ? '编辑流程' : '新建流程'" :close-disabled="state.busy.value === 'save'" @close="state.closeEditor">
+  <WorkflowDialog :title="state.editor.value.id ? '编辑流程' : '新建流程'" wide :close-disabled="state.busy.value === 'save'" @close="state.closeEditor">
     <form id="workflow-form" class="workflow-form" @submit.prevent="state.saveWorkflow()">
       <div v-if="state.formError.value" class="workflow-feedback error" role="alert">{{ state.formError.value }}</div>
       <fieldset class="workflow-fields" :disabled="state.busy.value === 'save' || state.formUncertain.value"><legend class="sr-only">工作流设置</legend>
-      <div class="workflow-basics"><label class="field"><span>流程名称</span><input v-model="state.form.name" type="text" maxlength="100" required :disabled="state.busy.value === 'save'" placeholder="例如：报表下载与入库" /></label>
+      <div class="editor-layout"><section class="editor-main" aria-label="流程内容"><div class="editor-section-heading"><h3>流程内容</h3></div><div class="workflow-basics"><label class="field"><span>流程名称</span><input v-model="state.form.name" type="text" maxlength="100" required :disabled="state.busy.value === 'save'" placeholder="例如：报表下载与入库" /></label>
       <label class="field"><span>流程说明 <small>可选</small></span><textarea v-model="state.form.description" maxlength="500" rows="2" :disabled="state.busy.value === 'save'" placeholder="说明流程用途" /></label>
       </div>
-      <div class="workflow-mode"><span>运行电脑：主控本机</span></div>
       <section class="workflow-step-editor" aria-label="流程步骤">
         <div class="workflow-section-heading"><strong>执行顺序</strong><span>{{ state.form.task_ids.length }} 个任务</span></div>
-        <p class="workflow-help">前一步成功并完成收尾后继续；最多 100 步。</p>
+        <p class="workflow-help">任务按顺序执行，失败后停止。</p>
         <div v-if="state.candidatesError.value" class="workflow-feedback error" role="alert">
           {{ state.candidatesError.value }}
           <button class="text-button" type="button" @click="state.loadCandidates">重试读取任务</button>
@@ -32,7 +31,7 @@ const props = defineProps({ state: { type: Object, required: true } })
           </label>
           <button class="button secondary" type="button" :disabled="!state.selectedTask.value || state.form.task_ids.length >= 100 || state.busy.value === 'save'" @click="state.addStep">添加步骤</button>
         </div>
-        <details class="workflow-rules"><summary>可用任务要求</summary><p class="workflow-help">仅支持已启用、环境就绪的本机普通 Python 任务。</p></details>
+        <details class="workflow-rules"><summary>可用任务要求</summary><p class="workflow-help">支持已启用、环境就绪的本机普通 Python 任务，最多 100 步。</p></details>
         <ol v-if="state.selectedSteps.value.length" class="workflow-edit-steps">
           <li v-for="(task, index) in state.selectedSteps.value" :key="task.id">
             <span class="workflow-step-index">{{ index + 1 }}</span>
@@ -47,7 +46,9 @@ const props = defineProps({ state: { type: Object, required: true } })
         <div v-else class="workflow-empty-steps">尚未添加步骤</div>
       </section>
       <p v-if="state.editor.value.active_run_id" class="workflow-help">当前运行沿用原步骤与版本。</p>
+      </section><section class="editor-aside" aria-label="运行设置"><div class="editor-section-heading"><h3>运行设置</h3></div><div class="editor-target"><span>运行电脑</span><strong>主控本机</strong></div>
       <PlanFields :form="state.form" :disabled="state.busy.value === 'save'" :identity="state.editor.value.id || 'new'" />
+      <p class="editor-footnote">整轮共用一个计划。</p></section></div>
       </fieldset>
       <div v-if="state.formUncertain.value"><button class="button secondary" type="button" :disabled="Boolean(state.busy.value)" @click="state.resolveCreation">核对创建结果</button><button class="text-button" type="button" :disabled="Boolean(state.busy.value)" @click="state.saveWorkflow({ retryUncertain: true })">原请求重试</button></div>
     </form>
@@ -61,10 +62,10 @@ const props = defineProps({ state: { type: Object, required: true } })
 <style scoped>
 .workflow-form { display: grid; min-width: 0; grid-template-columns: minmax(0, 1fr); gap: 16px; }
 .workflow-fields { display: grid; gap: 16px; margin: 0; padding: 0; border: 0; min-width: 0; }
-.workflow-basics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.workflow-basics { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
 .workflow-form .field { min-width: 0; }
-.field textarea { width: 100%; resize: vertical; min-height: 58px; border: 1px solid var(--border); border-radius: 8px; padding: 10px 11px; color: var(--text); font: inherit; font-size: 13px; }
+.field textarea { width: 100%; resize: vertical; min-height: 64px; border: 1px solid var(--border); border-radius: 8px; padding: 10px 11px; color: var(--text); font: inherit; font-size: 13px; }
 .field textarea:focus { outline: 2px solid rgba(0,145,57,.25); outline-offset: 2px; }
 .workflow-mode { display: flex; gap: 20px; flex-wrap: wrap; color: var(--muted); font-size: 12px; }
 .workflow-step-editor { display: grid; min-width: 0; grid-template-columns: minmax(0, 1fr); gap: 12px; padding: 16px 0 0; border: 0; border-top: 1px solid var(--border-soft); border-radius: 0; }

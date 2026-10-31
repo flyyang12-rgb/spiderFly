@@ -72,8 +72,8 @@ onBeforeUnmount(() => { alive = false; sequence++; fileSequence++; controller?.a
 </script>
 <template>
   <section class="dependency-fields" aria-label="Python 依赖">
-    <p v-if="status === 'loading'" role="status">正在识别依赖…</p>
-    <p v-else-if="result" role="status">{{ result.ready ? `已识别 ${result.requirements.split('\n').filter(Boolean).length} 项依赖` : `${result.unresolved.length} 项依赖待补充` }}</p>
+    <p v-if="status === 'loading'" class="dependency-status" role="status">正在识别依赖…</p>
+    <p v-else-if="result" class="dependency-status" :class="{ ready: result.ready }" role="status">{{ result.ready ? result.requirements.trim() ? `已识别 ${result.requirements.split('\n').filter(Boolean).length} 项依赖` : '无需安装额外依赖' : `${result.unresolved.length} 项依赖待补充` }}</p>
     <div v-if="error" class="dependency-error" role="alert">{{ error }} <button type="button" class="text-button" :disabled="disabled" @click="invalidate(); analyze()">重新分析</button></div>
     <div v-if="pending.length" class="dependency-pending">
       <article v-for="item in pending" :key="item.id">
@@ -88,12 +88,23 @@ onBeforeUnmount(() => { alive = false; sequence++; fileSequence++; controller?.a
       <small>单文件上传不包含其他业务模块；排除后需自行准备相应文件。</small>
     </div>
     <details v-if="result"><summary>识别明细</summary><ul><li v-for="item in result.items" :key="item.id">{{ item.module }} · {{ item.kind === 'stdlib' ? '标准库' : item.kind === 'type_only' ? '仅类型检查' : item.requirement || item.package || item.exclusion_reason || '待补充' }} · 第 {{ item.lines.join('、') }} 行</li></ul><pre v-if="result.requirements">{{ result.requirements }}</pre><small>{{ result.target?.kind === 'agent' ? '目标 Python 待实际准备时核验' : `Python ${result.target?.version || '3.12'}` }}</small></details>
-    <details><summary>补充依赖 <small>可选</small></summary>
-      <label class="field"><span>requirements.txt</span><input type="file" accept=".txt,text/plain" :disabled="disabled || reading" @change="readFile"></label>
+    <details class="dependency-manual"><summary>补充依赖 <small>{{ requirements.trim() ? '已填写' : '可选' }}</small></summary>
+      <label class="dependency-import"><span>{{ reading ? '正在读取…' : '导入 requirements.txt' }}</span><input class="sr-only" type="file" accept=".txt,text/plain" :disabled="disabled || reading" @change="readFile"></label>
       <label class="field"><span>包名和版本约束</span><textarea :value="requirements" maxlength="20000" rows="3" :disabled="disabled || reading" placeholder="每行一个，例如：openpyxl>=3.1" @input="emit('update:requirements', $event.target.value)"></textarea></label>
     </details>
   </section>
 </template>
 <style scoped>
 .dependency-fields{display:grid;gap:8px;min-width:0;font-size:13px}.dependency-fields p{margin:0}.dependency-fields summary{cursor:pointer;color:var(--muted);font-size:12px}.dependency-fields details[open]{display:grid;gap:8px}.dependency-fields details .field{margin-top:8px}.dependency-fields ul{padding-left:18px;font-size:12px;line-height:1.8}.dependency-fields pre{white-space:pre-wrap;overflow-wrap:anywhere;color:var(--text);background:var(--surface-subtle);border:1px solid var(--border-soft);padding:8px;border-radius:6px;font-size:12px;line-height:1.7}.dependency-fields small{color:var(--muted);font-weight:400;font-size:11px}.dependency-pending{display:grid;gap:8px}.dependency-pending article{display:grid;gap:8px;border:1px solid var(--border);padding:12px;border-radius:8px}.dependency-pending p,.dependency-error{font-size:12px;overflow-wrap:anywhere}.dependency-error{color:#ad4935}.dependency-pending strong{overflow-wrap:anywhere}.dependency-pending strong small{margin-left:8px}.dependency-fields input,.dependency-fields select,.dependency-fields textarea{max-width:100%;min-width:0;box-sizing:border-box}
+
+.dependency-fields { gap: 12px; padding-top: 2px; }
+.dependency-status { padding: 10px 12px; border-radius: 8px; background: var(--surface-subtle); color: var(--muted); font-size: 12px; }
+.dependency-status.ready { background: var(--brand-soft); color: var(--brand-strong); }
+.dependency-fields details { padding: 12px 0; border-top: 1px solid var(--border-soft); }
+.dependency-fields summary { font-size: 13px; color: var(--text); }
+.dependency-fields summary small { margin-left: 6px; }
+.dependency-import { position: relative; display: inline-flex; width: fit-content; align-items: center; margin: 10px 0 0; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--brand-strong); font-size: 12px; cursor: pointer; }
+.dependency-import:focus-within { outline: 2px solid var(--brand); outline-offset: 2px; }
+.dependency-import:has(input:disabled) { opacity: .5; cursor: not-allowed; }
+.dependency-fields textarea { min-height: 88px; font-size: 12px; }
 </style>

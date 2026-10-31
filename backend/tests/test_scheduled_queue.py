@@ -60,6 +60,30 @@ class ScheduledQueueTests(unittest.TestCase):
                 self.assertEqual(caught.exception.status_code, 409)
                 self.assertEqual(database.fetch_one("SELECT COUNT(*) AS n FROM executions")["n"], 1)
 
+    def test_monthly_due_point_queues_once_and_skips_missing_next_month(self):
+        with self.helper.fixture() as item:
+            task = self.helper.create_task(item['app_id'], item['user'])
+            database.execute('''UPDATE tasks SET trigger_type='monthly',trigger_config='{"day":31,"time":"09:00"}',
+                next_run_at='2027-01-31T01:00:00+00:00' WHERE id=?''', (task['id'],))
+            self.tick('2027-01-31T01:00:00+00:00')
+            self.tick('2027-01-31T01:00:01+00:00')
+            rows = database.fetch_all('SELECT trigger_source,status FROM executions')
+            self.assertEqual(rows, [{'trigger_source':'schedule','status':'pending'}])
+            stored = database.fetch_one('SELECT next_run_at,last_triggered_at FROM tasks WHERE id=?',(task['id'],))
+            self.assertEqual(stored, {'next_run_at':'2027-03-31T01:00:00+00:00','last_triggered_at':'2027-01-31T01:00:00+00:00'})
+
+    def test_month_end_queues_once_and_advances_to_february(self):
+        with self.helper.fixture() as item:
+            task = self.helper.create_task(item['app_id'], item['user'])
+            database.execute('''UPDATE tasks SET trigger_type='monthly',trigger_config='{"day":"last","time":"09:00"}',
+                next_run_at='2027-01-31T01:00:00+00:00' WHERE id=?''', (task['id'],))
+            self.tick('2027-01-31T01:00:00+00:00')
+            self.tick('2027-01-31T01:00:01+00:00')
+            self.assertEqual(database.fetch_all('SELECT trigger_source,status FROM executions'),
+                [{'trigger_source': 'schedule', 'status': 'pending'}])
+            self.assertEqual(database.fetch_one('SELECT next_run_at FROM tasks WHERE id=?', (task['id'],))['next_run_at'],
+                '2027-02-28T01:00:00+00:00')
+
     def test_scheduled_occurrences_follow_manual_execution_in_fifo_order(self):
         with self.helper.fixture() as item:
             task = self.helper.create_task(item["app_id"], item["user"])

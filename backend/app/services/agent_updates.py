@@ -28,7 +28,7 @@ TOP_FILES = ('README.md', 'requirements.txt', 'start.ps1', 'manage.ps1', 'setup.
              'install-python.ps1', '安装并接入Agent.bat', 'upgrade.ps1', 'upgrade-core.ps1',
              'upgrade-ui.ps1', 'upgrade-transport.py', '升级Agent.bat', 'remote-upgrade.ps1')
 MODULES = ('__init__', '__main__', 'api', 'client', 'desktop', 'identity', 'journal',
-           'windows', 'worker', 'environment', 'updater')
+           'windows', 'worker', 'environment', 'updater', 'enrollment')
 
 
 def canonical(value: dict) -> bytes:

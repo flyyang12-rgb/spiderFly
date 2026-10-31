@@ -1,0 +1,46 @@
+{
+  "date": "2026-10-30",
+  "backend": {
+    "total": 833,
+    "passed": 814,
+    "skipped": 19
+  },
+  "agent": {
+    "total": 93,
+    "passed": 92,
+    "skipped": 1
+  },
+  "installer": {
+    "existing_config_name_editable": true,
+    "existing_config_code_editable": true,
+    "powershell_syntax": "passed",
+    "render": "isolated WinForms"
+  },
+  "flow": {
+    "pending_after_reapplication": true,
+    "identity_preserved": true,
+    "run_status": "succeeded",
+    "artifact_created": true,
+    "returned_artifact_verified": true
+  },
+  "deployment": {
+    "health": "ok",
+    "lan_health": "ok",
+    "workers": 1,
+    "package_version": "0.5.1",
+    "package_hashes_verified": true,
+    "registration_status_unsigned": 401
+  },
+  "backup": {
+    "file": "SpiderFly-before-reenroll-20261030-dx3bcddk.zip",
+    "files_verified": 881
+  },
+  "limitations": [
+    "bot2 must load the repaired installer files before its real reapplication",
+    "localhost synthetic host verification does not replace a two-computer field run"
+  ],
+  "git": {
+    "committed": false,
+    "pushed": false
+  }
+}

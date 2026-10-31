@@ -65,11 +65,59 @@ class WorkflowScheduleTests(unittest.TestCase):
         self.assertEqual(workflows.get_definition(self.conn, self.flow['id'])['next_run_at'], '2026-10-14T01:11:00+00:00')
 
     def test_daily_weekly_and_cron_share_preview_and_latest_semantics(self):
-        for kind, config in [('daily', {'time':'09:00'}), ('weekly', {'time':'09:00','weekdays':[3]}), ('cron', {'expression':'0 9 * * WED'})]:
+        for kind, config in [('daily', {'time':'09:00'}), ('weekly', {'time':'09:00','weekdays':[3]}), ('monthly', {'time':'09:00','day':14}), ('cron', {'expression':'0 9 * * WED'})]:
             result = plans.preview(kind, config, '2026-10-14T00:59:00+00:00')
             self.assertEqual(result['times'][0], self.clock)
             self.assertEqual(len(result['times']), 5)
             self.assertEqual(plans.latest_slot(kind, config, datetime(2026,10,14,1,0,tzinfo=timezone.utc)), self.clock)
+
+    def test_month_end_preview_and_latest_slot_share_calendar_boundaries(self):
+        config = {'day': 'last', 'time': '09:00'}
+        preview = plans.preview('monthly', config, '2027-01-31T01:00:00+00:00')
+        self.assertEqual(preview['trigger_config'], config)
+        self.assertEqual(preview['times'], [f'2027-{date}T01:00:00+00:00'
+            for date in ('02-28', '03-31', '04-30', '05-31', '06-30')])
+        cases = [
+            ('2027-03-01T00:00:00+00:00', '2027-02-28T01:00:00+00:00'),
+            ('2028-03-01T00:00:00+00:00', '2028-02-29T01:00:00+00:00'),
+            ('2027-02-28T01:00:00+00:00', '2027-02-28T01:00:00+00:00'),
+            ('2027-02-28T00:59:59+00:00', '2027-01-31T01:00:00+00:00'),
+            ('2027-01-01T00:00:00+00:00', '2026-12-31T01:00:00+00:00'),
+        ]
+        for now, expected in cases:
+            with self.subTest(now=now):
+                self.assertEqual(plans.latest_slot('monthly', config, now), expected)
+
+    def test_month_end_workflow_offline_coalescing_idempotency_and_busy_skip(self):
+        saved = self.enable('monthly', {'day': 'last', 'time': '09:00'}, now='2027-01-01T00:00:00+00:00')
+        self.assertEqual(saved['next_run_at'], '2027-01-31T01:00:00+00:00')
+        first = self.due('2027-03-01T01:00:00+00:00')
+        self.assertEqual(first['scheduled_for'], '2027-02-28T01:00:00+00:00')
+        self.assertEqual(first['coalesced_from'], '2027-01-31T01:00:00+00:00')
+        self.assertIsNone(self.due('2027-03-01T01:00:01+00:00'))
+        self.assertEqual(workflows.get_definition(self.conn, self.flow['id'])['next_run_at'], '2027-03-31T01:00:00+00:00')
+        skipped = self.due('2027-03-31T01:00:01+00:00')
+        self.assertEqual(skipped['state'], 'skipped')
+        self.assertIsNone(skipped['run_id'])
+        self.assertEqual(self.conn.execute('SELECT COUNT(*) FROM workflow_runs').fetchone()[0], 1)
+
+    def test_monthly_previous_point_crosses_missing_month_and_year(self):
+        self.assertEqual(plans.latest_slot('monthly', {'day':31,'time':'09:00'},
+            '2027-03-01T00:00:00+00:00'), '2027-01-31T01:00:00+00:00')
+        self.assertEqual(plans.latest_slot('monthly', {'day':1,'time':'09:00'},
+            '2027-01-01T00:00:00+00:00'), '2026-12-01T01:00:00+00:00')
+
+    def test_monthly_workflow_coalesces_offline_points_and_skips_busy_round(self):
+        saved = self.enable('monthly', {'day':14,'time':'09:00'})
+        self.assertEqual(saved['next_run_at'], self.clock)
+        first = self.due('2026-12-14T01:00:01+00:00')
+        self.assertEqual(first['scheduled_for'], '2026-12-14T01:00:00+00:00')
+        self.assertEqual(first['coalesced_from'], self.clock)
+        self.assertEqual(workflows.get_definition(self.conn, self.flow['id'])['next_run_at'], '2027-01-14T01:00:00+00:00')
+        skipped = self.due('2027-01-14T01:00:01+00:00')
+        self.assertEqual(skipped['state'], 'skipped')
+        self.assertIsNone(skipped['run_id'])
+        self.assertEqual(self.conn.execute('SELECT COUNT(*) FROM workflow_runs').fetchone()[0], 1)
 
     def test_preview_captures_one_clock_baseline_when_after_is_omitted(self):
         with patch.object(plans, '_time', wraps=plans._time) as clock:

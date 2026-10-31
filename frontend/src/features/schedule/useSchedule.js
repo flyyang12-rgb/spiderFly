@@ -106,10 +106,20 @@ export function useSchedule({ executions, me, runtimeTab, scheduleScope, tasks, 
     const weekday = isoWeekday(dateKey)
     const entries = tasks.value
       .flatMap((task) => {
-        if (!task.enabled || !['daily', 'weekly'].includes(task.trigger_type)) return []
+        if (task.enabled && task.trigger_type === 'interval') {
+          const plannedTimestamp = timestampOf(task.next_run_at)
+          if (!plannedTimestamp || shanghaiDateKey(task.next_run_at) !== dateKey) return []
+          return [{ task, dateKey, plannedTimestamp, plannedAt: task.next_run_at, execution: null }]
+        }
+        if (!task.enabled || !['daily', 'weekly', 'monthly'].includes(task.trigger_type)) return []
         const config = task.trigger_config || {}
         if (task.trigger_type === 'weekly' && !(config.weekdays || []).map(Number).includes(weekday))
           return []
+        if (task.trigger_type === 'monthly') {
+          const { year, month, day } = dateKeyParts(dateKey)
+          const plannedDay = config.day === 'last' ? new Date(Date.UTC(year, month, 0)).getUTCDate() : Number(config.day)
+          if (plannedDay !== day) return []
+        }
         if (!/^\d{2}:\d{2}$/.test(config.time || '')) return []
         const plannedTimestamp = scheduleTimestamp(dateKey, config.time)
         if (!plannedTimestamp) return []

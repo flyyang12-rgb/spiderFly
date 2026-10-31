@@ -1,12 +1,12 @@
 import { reactive, ref, watch } from 'vue'
 import { request } from '../../lib/api'
-import { planBody, validatePlan, creationRequestId } from '../../lib/plans'
+import { emptyPlan, planBody, validatePlan, creationRequestId } from '../../lib/plans'
 
 function emptyForm() {
   return { name: '', description: '', requirements_text: '', requirements_filename: '', script: null,
     dependency_decisions: [], dependency_status: '',
     enabled: true, notify_on_success: true, notify_on_failure: true, failure_screenshot: false,
-    trigger_type: 'manual', target_host_id: '', daily_time: '09:00', weekly_days: [1], weekly_time: '09:00', cron_expression: '0 9 * * *' }
+    ...emptyPlan(), target_host_id: '' }
 }
 
 export function createAppsState() {

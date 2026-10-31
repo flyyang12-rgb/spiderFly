@@ -160,7 +160,7 @@ def _create_task_schedule_values(
     if len(clean_description) > 500:
         raise ValueError("任务说明不能超过 500 个字符")
     trigger_type = (trigger_type or "manual").strip().lower()
-    if trigger_type not in {"manual", "daily", "weekly", "cron"}:
+    if trigger_type not in {"manual", "interval", "daily", "weekly", "monthly", "cron"}:
         raise ValueError("不支持的触发方式")
     try:
         config = json.loads((trigger_config or "{}").strip() or "{}")

@@ -224,7 +224,10 @@ class DesktopApp:
                 self.root.withdraw()
                 self.visible = False
         self.icon.title = f"SpiderFly · {tray_label(snapshot)}"[:63]
-        if self.closing and not self.thread.is_alive():
+        # manage.ps1 stops via shutdown.request, which sets the Client event
+        # without clicking the tray's Exit action. Wait for worker cleanup, then
+        # close the desktop too so the PID/lock are released for reapplication.
+        if (self.closing or self.client.shutdown.is_set()) and not self.thread.is_alive():
             self.icon.stop()
             self.root.destroy()
             return

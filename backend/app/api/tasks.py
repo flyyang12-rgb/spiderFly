@@ -206,6 +206,16 @@ def update_task(
                 raise HTTPException(status_code=409, detail="任务已被其他伙伴修改，请刷新后重试")
             from ..services.workflow_schedules import assert_task_plan_allowed
             assert_task_plan_allowed(conn, task_id, final_trigger_type)
+            if fresh['trigger_type'] == 'interval' or final_trigger_type == 'interval':
+                from ..services import interval_schedules
+                schedule_changed = (fresh['trigger_type'] != final_trigger_type
+                    or decode_trigger_config(fresh['trigger_config']) != decode_trigger_config(encoded_config)
+                    or bool(fresh['enabled']) != final_enabled
+                    or fresh['target_host_id'] != values.get('target_host_id', fresh['target_host_id']))
+                if schedule_changed:
+                    interval_schedules.reset(conn, 'task', task_id)
+                else:
+                    params[columns.index('next_run_at = ?')] = fresh['next_run_at']
             from ..services import cron_runs
             round_item = cron_runs.active_round(conn, task_id)
             if config_edit and round_item and round_item['state'] == 'pending':
@@ -236,6 +246,8 @@ def update_task(
             )
             if cursor.rowcount != 1:
                 raise HTTPException(status_code=409, detail="任务已被其他伙伴修改，请刷新后重试")
+            if final_trigger_type == 'interval' and final_enabled and (fresh['first_environment_ready'] or values.get('target_host_id', fresh['target_host_id']) is not None):
+                interval_schedules.refresh(conn, 'task', conn.execute('SELECT * FROM tasks WHERE id=?', (task_id,)).fetchone(), utc_now())
             if values.get("enabled") == 0:
                 now = utc_now()
                 pending_ids = [row['id'] for row in conn.execute("SELECT id FROM executions WHERE task_id=? AND status='pending'", (task_id,))]

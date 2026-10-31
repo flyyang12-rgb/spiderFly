@@ -212,7 +212,7 @@ class HostApiTests(unittest.TestCase):
         payload["agent_version"] = "0.3.0"
         result = self.success(self.request("POST", "/api/agent/register", payload, user=None))
         self.assertEqual(result["minimum_agent_version"], "0.3.0")
-        self.assertEqual(result["current_agent_version"], "0.5.0")
+        self.assertEqual(result["current_agent_version"], host_dispatch.CURRENT_AGENT_VERSION)
 
     def test_incompatible_heartbeat_never_receives_queued_run(self):
         host_id = self.register()
@@ -344,13 +344,13 @@ class HostApiTests(unittest.TestCase):
 
     def make_agent_sources(self, missing=None):
         root = self.root / ("agent-source-" + uuid.uuid4().hex)
-        modules = ("__init__", "__main__", "api", "client", "desktop", "identity", "journal", "windows", "worker", "environment", "updater")
+        modules = ("__init__", "__main__", "api", "client", "desktop", "identity", "journal", "windows", "worker", "environment", "updater", "enrollment")
         sources = {"README.md": "Synthetic Agent instructions\n", "requirements.txt": "cryptography\n",
                    "start.ps1": "# synthetic launcher\n", "manage.ps1": "# synthetic operations\n",
                    "setup.ps1": "# synthetic setup wizard\n", "install-python.ps1": "# synthetic Python installer\n",
                    "安装并接入Agent.bat": "@echo off\n"}
         sources.update({f"spiderfly_agent/{name}.py": f"# synthetic {name}\n" for name in modules})
-        sources['spiderfly_agent/__init__.py']='__version__ = "0.5.0"\n'
+        sources['spiderfly_agent/__init__.py']='__version__ = "'+host_dispatch.CURRENT_AGENT_VERSION+'"\n'
         sources.update({name:'# synthetic updater\n' for name in ('upgrade.ps1','upgrade-core.ps1','upgrade-ui.ps1','upgrade-transport.py','升级Agent.bat','remote-upgrade.ps1')})
         for relative, content in sources.items():
             if relative == missing:
@@ -376,12 +376,12 @@ class HostApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.headers["content-type"], "application/zip")
         self.assertIn("attachment", response.headers["content-disposition"])
-        self.assertIn("SpiderFlyAgent-0.5.0.zip", response.headers["content-disposition"])
+        self.assertIn(f"SpiderFlyAgent-{host_dispatch.CURRENT_AGENT_VERSION}.zip", response.headers["content-disposition"])
         self.assertEqual(response.headers["cache-control"], "no-store")
         with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
             self.assertEqual(set(archive.namelist()), {"SpiderFlyAgent/" + name for name in sources} | {'SpiderFlyAgent/update-manifest.json','SpiderFlyAgent/controller-trust.json'})
             manifest=json.loads(archive.read('SpiderFlyAgent/update-manifest.json'))
-            self.assertEqual(manifest['version'],'0.5.0')
+            self.assertEqual(manifest['version'],host_dispatch.CURRENT_AGENT_VERSION)
             self.assertEqual(manifest['files'],{name:hashlib.sha256(archive.read('SpiderFlyAgent/'+name)).hexdigest() for name in list(sources)+['controller-trust.json']})
             for name, source in sources.items():
                 self.assertEqual(archive.read("SpiderFlyAgent/" + name), source.encode("utf-8"))
@@ -1091,6 +1091,47 @@ class HostApiTests(unittest.TestCase):
         self.assertEqual(run["controller_url"], "http://192.168.1.50:9356")
         self.assertEqual(run["status"], "queued")
         self.assertIsNotNone(run["code_version_id"])
+
+    def test_monthly_http_preview_and_scheduler_dispatch_only_to_assigned_agent(self):
+        self.check_monthly_agent_schedule(31, '2027-03-31T01:00:00+00:00')
+
+    def test_month_end_http_preview_and_scheduler_dispatch_only_to_assigned_agent(self):
+        self.check_monthly_agent_schedule('last', '2027-02-28T01:00:00+00:00')
+
+    def check_monthly_agent_schedule(self, day, expected_next):
+        from app import scheduling
+        from app.services import runtime
+        host_id = self.register(enabled=False)
+        # A new Agent task prepares its business environment on that Agent.
+        database.execute('UPDATE tasks SET first_environment_ready=0 WHERE id=?', (self.task_id,))
+        saved = self.success(self.request('PATCH', f'/api/tasks/{self.task_id}', {
+            'target_host_id': host_id, 'trigger_type': 'monthly',
+            'trigger_config': {'day': day, 'time': '09:00'},
+        }))
+        self.assertEqual(saved['trigger_type'], 'monthly')
+        self.assertEqual(saved['trigger_config'], {'day':day,'time':'09:00'})
+        preview = self.success(self.request('POST', '/api/schedules/preview-plan', {
+            'trigger_type':'monthly', 'trigger_config':{'day':day,'time':'09:00'},
+            'after':'2027-01-31T01:00:00+00:00',
+        }))
+        self.assertEqual(preview['times'][0], expected_next)
+        self.assertEqual(len(preview['times']), 5)
+        invalid = self.request('PATCH', f'/api/tasks/{self.task_id}', {
+            'trigger_type':'monthly','trigger_config':{'day':0,'time':'09:00'},
+        })
+        self.assertEqual(invalid.status_code, 400)
+        self.assertEqual(database.fetch_one('SELECT version FROM tasks WHERE id=?',(self.task_id,))['version'], saved['version'])
+        database.execute('UPDATE tasks SET next_run_at=? WHERE id=?', ('2027-01-31T01:00:00+00:00',self.task_id))
+        for now in ('2027-01-31T01:00:01+00:00', '2027-01-31T01:00:02+00:00'):
+            with patch.object(scheduling, 'utc_now', return_value=now), patch.object(scheduling.asyncio, 'sleep', new=AsyncMock(side_effect=asyncio.CancelledError)):
+                with self.assertRaises(asyncio.CancelledError):
+                    asyncio.run(scheduling.scheduler_loop(runtime._dispatch_scheduled_task))
+        runs = database.fetch_all('SELECT * FROM remote_runs')
+        self.assertEqual(len(runs), 1)
+        self.assertEqual((runs[0]['host_id'],runs[0]['scheduled_for'],runs[0]['trigger_source']),
+                         (host_id,'2027-01-31T01:00:00+00:00','schedule'))
+        self.assertEqual(database.fetch_one('SELECT COUNT(*) AS n FROM executions')['n'], 0)
+        self.assertEqual(database.fetch_one('SELECT next_run_at FROM tasks WHERE id=?',(self.task_id,))['next_run_at'], expected_next)
 
     def test_task_center_manual_run_stays_on_bound_offline_host_and_retries_once(self):
         host_id = self.register(enabled=False)

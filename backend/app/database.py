@@ -409,6 +409,8 @@ def init_db() -> None:
         ensure_settlement_schema(conn)
         ensure_workflow_schema(conn)
         from .services.creation_requests import ensure_schema as ensure_creation_schema
+        from .services.interval_schedules import ensure_schema as ensure_interval_schema
+        ensure_interval_schema(conn)
         ensure_creation_schema(conn)
         _migrate_legacy_apps(conn)
         _recover_interrupted_work(conn)

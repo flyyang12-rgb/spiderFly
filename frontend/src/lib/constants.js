@@ -20,9 +20,11 @@ export const managementTabs = [
 
 export const triggerOptions = [
   { value: 'manual', label: '手动触发' },
+  { value: 'interval', label: '间隔运行' },
   { value: 'daily', label: '每日执行' },
   { value: 'weekly', label: '每周执行' },
-  { value: 'cron', label: 'Cron 计划' },
+  { value: 'monthly', label: '每月执行' },
+  { value: 'cron', label: '原定时规则' },
 ]
 
 export const cronPresets = [

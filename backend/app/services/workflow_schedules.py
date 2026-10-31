@@ -12,11 +12,11 @@ from fastapi import HTTPException
 
 from ..cron_schedule import previous_cron_time
 from ..database import transaction, utc_now
-from ..scheduling import CHINA_TZ, compute_next_run, normalize_trigger
+from ..scheduling import CHINA_TZ, compute_next_run, monthly_occurrence, normalize_trigger
 from . import workflows
 
 logger = logging.getLogger(__name__)
-PLAN_TYPES = {'manual', 'daily', 'weekly', 'cron'}
+PLAN_TYPES = {'manual', 'interval', 'daily', 'weekly', 'monthly', 'cron'}
 
 
 def ensure_schema(conn):
@@ -74,7 +74,7 @@ def update_plan(conn, workflow_id, trigger_type, config, enabled, revision, acto
     if definition['revision'] != revision:
         raise HTTPException(409, '工作流已被其他操作修改，请刷新后重试')
     if trigger_type not in PLAN_TYPES:
-        raise ValueError('工作流仅支持手动、每日、每周和 Cron')
+        raise ValueError('请选择手动、间隔、每日、每周或每月定时')
     normalized = normalize_trigger(trigger_type, config)
     if enabled and trigger_type == 'manual':
         raise ValueError('手动流程不能开启定时计划')
@@ -88,17 +88,27 @@ def update_plan(conn, workflow_id, trigger_type, config, enabled, revision, acto
         next_run = None
     elif not definition['schedule_enabled'] or changed:
         next_run = compute_next_run(trigger_type, normalized, after=_time(now))
+    if (definition['trigger_type'] == 'interval' or trigger_type == 'interval') and (changed or bool(definition['schedule_enabled']) != bool(enabled)):
+        from .interval_schedules import reset
+        reset(conn, 'workflow', workflow_id)
     conn.execute('''UPDATE workflows SET trigger_type=?,trigger_config=?,schedule_enabled=?,next_run_at=?,
         schedule_revision=schedule_revision+1,revision=revision+?,updated_by=?,updated_at=? WHERE id=? AND revision=?''',
         (trigger_type, encoded, int(enabled), next_run, int(bump_revision), actor, _iso(now), workflow_id, revision))
+    if trigger_type == 'interval' and enabled:
+        from .interval_schedules import ensure_schema, refresh
+        ensure_schema(conn)
+        refresh(conn, 'workflow', workflows._definition(conn, workflow_id), _iso(now))
     return workflows.get_definition(conn, workflow_id)
 
 
 def preview(trigger_type, config, after=None):
     if trigger_type not in PLAN_TYPES:
-        raise ValueError('工作流仅支持手动、每日、每周和 Cron')
+        raise ValueError('请选择手动、间隔、每日、每周或每月定时')
     normalized = normalize_trigger(trigger_type, config)
     base = _time(after)
+    if trigger_type == 'interval':
+        return {'trigger_type': trigger_type, 'trigger_config': normalized, 'timezone': 'Asia/Shanghai',
+                'after': _iso(base), 'times': [], 'timing': 'after_completion'}
     point = base
     times = []
     for _ in range(5):
@@ -117,6 +127,8 @@ def latest_slot(trigger_type, config, now):
         return previous_cron_time(config['expression'], point).isoformat(timespec='seconds')
     local = point.astimezone(CHINA_TZ)
     clock = datetime.strptime(config['time'], '%H:%M').time()
+    if trigger_type == 'monthly':
+        return monthly_occurrence(config, point, previous=True).isoformat(timespec='seconds')
     for offset in range(8):
         day = local.date() - timedelta(days=offset)
         if trigger_type == 'weekly' and day.isoweekday() not in config['weekdays']:
@@ -144,6 +156,10 @@ def reconcile(conn=None):
             if run['state'] not in workflows.ACTIVE:
                 opened.execute("UPDATE workflow_triggers SET state='settled',ended_at=?,final_status=?,reason=? WHERE id=?",
                     (run['ended_at'] or utc_now(), run['state'], run['reason'], trigger['id']))
+        from .interval_schedules import ensure_schema, refresh
+        ensure_schema(opened)
+        for definition in opened.execute("SELECT * FROM workflows WHERE archived=0 AND schedule_enabled=1 AND trigger_type='interval'").fetchall():
+            refresh(opened, 'workflow', definition, utc_now())
 
 
 def register_due(workflow_id, now=None, expected_next=None, expected_revision=None):
@@ -162,10 +178,11 @@ def register_due(workflow_id, now=None, expected_next=None, expected_revision=No
             if expected_revision is not None and definition['schedule_revision'] != expected_revision:
                 return None
             config = json.loads(definition['trigger_config'])
-            slot = latest_slot(definition['trigger_type'], config, now)
+            interval = definition['trigger_type'] == 'interval'
+            slot = first if interval else latest_slot(definition['trigger_type'], config, now)
             if _time(slot) < _time(first):
                 raise ValueError('保存的流程计划点与表达式不一致')
-            next_run = compute_next_run(definition['trigger_type'], config, now)
+            next_run = None if interval else compute_next_run(definition['trigger_type'], config, now)
             previous = conn.execute('SELECT * FROM workflow_triggers WHERE workflow_id=? AND scheduled_for=?', (workflow_id, slot)).fetchone()
             if previous:
                 conn.execute('UPDATE workflows SET next_run_at=? WHERE id=?', (next_run, workflow_id))
@@ -200,6 +217,8 @@ def register_due(workflow_id, now=None, expected_next=None, expected_revision=No
                     conn.execute('RELEASE workflow_acceptance')
                     reason = str(exc.detail if isinstance(exc, HTTPException) else exc)
                     conn.execute("UPDATE workflow_triggers SET state='error',reason=?,ended_at=? WHERE id=?", (reason[:2000], now, trigger_id))
+                    if interval:
+                        next_run = compute_next_run('interval', config, now)
             conn.execute('UPDATE workflows SET next_run_at=?,last_triggered_at=? WHERE id=?', (next_run, slot, workflow_id))
             reconcile(conn)
             result = dict(conn.execute('SELECT * FROM workflow_triggers WHERE id=?', (trigger_id,)).fetchone())
@@ -247,6 +266,14 @@ def timetable(conn, start, end, now=None, limit=2000):
     entries = {(row['workflow_id'], row['scheduled_for']): _entry(conn, row) for row in rows[:limit]}
     has_more = len(rows) > limit
     for row in conn.execute('SELECT * FROM workflows WHERE archived=0 AND schedule_enabled=1 ORDER BY id'):
+        if row['trigger_type'] == 'interval':
+            point = row['next_run_at']
+            if point and start <= _time(point) < end and len(entries) < limit:
+                entries[(row['id'], point)] = {'object_type': 'workflow', 'workflow_id': row['id'],
+                    'task': {'id': row['id'], 'name': row['name'], 'trigger_type': 'interval'},
+                    'plannedAt': point, 'state': 'scheduled', 'reason': '', 'execution': None,
+                    'run_id': None, 'trigger_id': None, 'merged_from': None, 'merged_to': None}
+            continue
         after = max(start-timedelta(microseconds=1), now, _time(row['next_run_at'])-timedelta(microseconds=1)) if row['next_run_at'] else max(start-timedelta(microseconds=1), now)
         config = json.loads(row['trigger_config'])
         while len(entries) < limit:

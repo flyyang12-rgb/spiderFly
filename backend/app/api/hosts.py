@@ -28,6 +28,7 @@ class Registration(Payload):
     public_key: str = Field(min_length=40, max_length=100)
     agent_version: str = Field(default="0.1.0", max_length=40)
     protocol_version: int = 1
+    reenrollment_signature: str = Field(default='', max_length=200)
 
 
 class Heartbeat(Payload):
@@ -122,8 +123,10 @@ async def limited_body(request: Request, limit: int) -> bytes:
     return bytes(body)
 
 
-async def signed(request: Request, limit: int = 2 * 1024 * 1024) -> tuple[int, bytes]:
+async def signed(request: Request, limit: int = 2 * 1024 * 1024, *, allow_inactive: bool = False) -> tuple[int, bytes]:
     body = await limited_body(request, limit)
+    if allow_inactive:
+        return service.authenticate(request.headers, request.method, request.url.path, body, allow_inactive=True), body
     return service.authenticate(request.headers, request.method, request.url.path, body), body
 
 
@@ -138,6 +141,12 @@ def parse(model, body: bytes) -> dict:
 @router.get("/api/hosts")
 def hosts(user: dict = Depends(admin_user)):
     return service.list_hosts()
+
+
+@router.get('/api/agent/registration')
+async def registration_status(request: Request):
+    host_id, _ = await signed(request, 0, allow_inactive=True)
+    return service.registration_status(host_id)
 
 
 @router.get("/api/hosts/agent-download")
@@ -193,6 +202,11 @@ def revoke(host_id: int, user: dict = Depends(write_admin)):
 @router.patch("/api/hosts/{host_id}/mode")
 def mode(host_id: int, payload: Mode, user: dict = Depends(write_admin)):
     return service.set_mode(host_id, payload.dispatch_enabled, user)
+
+
+@router.delete('/api/hosts/{host_id}')
+def delete_host(host_id: int, user: dict = Depends(write_admin)):
+    return service.delete_host(host_id, user)
 
 
 @router.post("/api/hosts/{host_id}/runs", status_code=201)

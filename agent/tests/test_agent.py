@@ -4,6 +4,7 @@ import base64
 import hashlib
 import json
 import os
+import queue
 from pathlib import Path
 import sqlite3
 import sys
@@ -19,11 +20,31 @@ import psutil
 
 from spiderfly_agent.api import Api, ApiError, canonical
 from spiderfly_agent.client import Client, recover
-from spiderfly_agent.desktop import tray_label
+from spiderfly_agent.desktop import DesktopApp, tray_label
 from spiderfly_agent.identity import load_identity, public_key
 from spiderfly_agent.journal import Journal
 from spiderfly_agent.windows import SingleInstance
 from spiderfly_agent.worker import Worker, package_hash, safe_artifact, validate_artifact_name
+
+
+class DesktopShutdownTests(unittest.TestCase):
+    def test_management_stop_closes_tray_only_after_client_finishes_cleanup(self):
+        app = DesktopApp.__new__(DesktopApp)
+        app.commands = queue.Queue()
+        app.client = Mock()
+        app.client.snapshot.return_value = {}
+        app.client.shutdown = threading.Event()
+        app.thread, app.root, app.icon = Mock(), Mock(), Mock()
+        app.closing, app.visible = False, False
+        app.client.shutdown.set()
+        app.thread.is_alive.return_value = True
+        app._tick()
+        app.root.destroy.assert_not_called()
+        app.icon.stop.assert_not_called()
+        app.thread.is_alive.return_value = False
+        app._tick()
+        app.root.destroy.assert_called_once()
+        app.icon.stop.assert_called_once()
 
 
 class TemporaryJournal(unittest.TestCase):

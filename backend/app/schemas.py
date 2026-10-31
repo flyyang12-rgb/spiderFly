@@ -46,7 +46,7 @@ class TaskPayload(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     description: str = Field(default="", max_length=500)
     app_id: int = Field(ge=1)
-    trigger_type: Literal["manual", "daily", "weekly", "cron"] = "manual"
+    trigger_type: Literal["manual", "interval", "daily", "weekly", "monthly", "cron"] = "manual"
     trigger_config: dict[str, Any] = Field(default_factory=dict)
     target_host_id: int | None = Field(default=None, ge=1)
     enabled: bool = True
@@ -79,7 +79,7 @@ class TaskPatch(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=100)
     description: str | None = Field(default=None, max_length=500)
     app_id: int | None = Field(default=None, ge=1)
-    trigger_type: Literal["manual", "daily", "weekly", "cron"] | None = None
+    trigger_type: Literal["manual", "interval", "daily", "weekly", "monthly", "cron"] | None = None
     trigger_config: dict[str, Any] | None = None
     target_host_id: int | None = Field(default=None, ge=1)
     enabled: bool | None = None
@@ -123,7 +123,7 @@ class RunResponse(BaseModel):
 
 class WorkflowPlan(BaseModel):
     model_config = ConfigDict(extra='forbid')
-    trigger_type: Literal['manual', 'daily', 'weekly', 'cron']
+    trigger_type: Literal['manual', 'interval', 'daily', 'weekly', 'monthly', 'cron']
     trigger_config: dict[str, Any] = Field(default_factory=dict)
     schedule_enabled: bool
 

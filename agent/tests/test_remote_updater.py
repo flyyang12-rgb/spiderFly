@@ -30,8 +30,9 @@ class RemoteUpdaterTests(unittest.TestCase):
         self.api=Mock();self.api.host_id=5;self.api.server='http://127.0.0.1:18763';self.api.key=Ed25519PrivateKey.generate()
         self.updater=RemoteUpdater(self.api,self.data,'synthetic-machine',self.program)
         self.api.request.return_value={'status':'awaiting_reconnect'}
+        parts=__version__.split('.');self.target_version='.'.join(parts[:-1]+[str(int(parts[-1])+1)])
         self.descriptor={'format':1,'id':'a'*32,'host_id':5,'machine_id':'synthetic-machine','from_version':__version__,
-                         'target_version':'0.5.1','token':'b'*32,'sha256':hashlib.sha256(b'package').hexdigest(),
+                         'target_version':self.target_version,'token':'b'*32,'sha256':hashlib.sha256(b'package').hexdigest(),
                          'size':7,'expires_at':time.time()+600}
 
     def offer(self,**changes):
@@ -89,9 +90,9 @@ class RemoteUpdaterTests(unittest.TestCase):
     def test_restarted_new_version_reports_only_after_finished_local_progress(self):
         state=self.accept();state['phase']='installing';save_json(self.updater.marker,state)
         self.updater.poll();self.api.request.assert_not_called()
-        job=self.updater.job_directory('a'*32);save_json(job/'progress.json',{'done':True,'success':True,'message':'已升级至 0.5.1'})
-        with patch.object(implementation,'__version__','0.5.1'):self.updater.poll()
-        payload=self.api.request.call_args.args[2];self.assertTrue(payload['success']);self.assertEqual(payload['agent_version'],'0.5.1')
+        job=self.updater.job_directory('a'*32);save_json(job/'progress.json',{'done':True,'success':True,'message':'已升级至 '+self.target_version})
+        with patch.object(implementation,'__version__',self.target_version):self.updater.poll()
+        payload=self.api.request.call_args.args[2];self.assertTrue(payload['success']);self.assertEqual(payload['agent_version'],self.target_version)
         self.updater.observe({'agent_update':{'id':'a'*32,'status':'succeeded'}})
         self.assertFalse(self.updater.marker.exists())
 

@@ -1,5 +1,6 @@
 <script setup>
 import { ref } from 'vue'
+import { triggerLabel } from '../../lib/format'
 import { useWorkspaceContext } from '../../workspace/context'
 import CronEntryDetails from './CronEntryDetails.vue'
 import PlanEditor from './PlanEditor.vue'
@@ -91,7 +92,7 @@ const {
             >
               <span
                 ><strong>{{ entry.task.name }}</strong
-                ><small>{{ entry.object_type === 'workflow' ? '工作流 · ' : '任务 · ' }}{{ entry.task.trigger_type === 'cron' ? 'Cron' : entry.task.trigger_type === 'daily' ? '每日' : '每周' }}</small></span
+                ><small>{{ entry.object_type === 'workflow' ? '工作流 · ' : '任务 · ' }}{{ triggerLabel(entry.task.trigger_type) }}</small></span
               >
               <span class="schedule-state"><i></i>{{ scheduleEntryStateLabel(entry) }}</span>
               <WorkflowPlanDetails v-if="entry.object_type === 'workflow'" :entry="entry" @run="id => runId = id" />

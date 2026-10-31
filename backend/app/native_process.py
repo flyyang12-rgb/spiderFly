@@ -68,8 +68,10 @@ def workflow_owned(conn, execution_id: int) -> bool:
 
 
 def coordinated_owned(conn, execution_id: int) -> bool:
-    """Only executions durably associated with new Cron or workflow rounds opt in."""
-    return cron_owned(conn, execution_id) or workflow_owned(conn, execution_id)
+    """Coordinated plans wait for durable process and resource cleanup receipts."""
+    interval = (conn.execute("SELECT 1 FROM sqlite_master WHERE name='interval_executions'").fetchone()
+                and conn.execute('SELECT 1 FROM interval_executions WHERE execution_id=?', (execution_id,)).fetchone())
+    return bool(interval) or cron_owned(conn, execution_id) or workflow_owned(conn, execution_id)
 
 
 def is_workflow_execution(execution_id: int) -> bool:

@@ -33,7 +33,8 @@ onBeforeUnmount(() => { if (previousFocus?.isConnected) previousFocus.focus() })
   <div class="modal-layer" @mousedown.self="!closeDisabled && emit('close')">
     <section ref="dialog" class="modal workflow-dialog" :class="{ wide }" role="dialog" aria-modal="true" :aria-label="title" tabindex="-1" @keydown="keyboard">
       <header>
-        <div><h2>{{ title }}</h2><slot name="subtitle" /></div>
+        <div class="dialog-heading"><h2>{{ title }}</h2><slot name="subtitle" /></div>
+        <slot name="actions" />
         <button class="modal-close" type="button" aria-label="关闭" :disabled="closeDisabled" @click="emit('close')">×</button>
       </header>
       <div class="modal-body"><slot /></div>
@@ -44,7 +45,9 @@ onBeforeUnmount(() => { if (previousFocus?.isConnected) previousFocus.focus() })
 
 <style scoped>
 .workflow-dialog { width: min(760px, 100%); min-width: 0; max-width: 100%; grid-template-columns: minmax(0, 1fr); }
-.workflow-dialog.wide { width: min(940px, 100%); }
+.workflow-dialog.wide { width: min(960px, 100%); }
+.workflow-dialog > header { align-items: center; flex-wrap: wrap; gap: 12px; }
+.dialog-heading { flex: 1; min-width: 0; }
 .workflow-dialog .modal-body { min-width: 0; grid-template-columns: minmax(0, 1fr); align-content: start; }
 .workflow-dialog :deep(p) { line-height: 1.6; }
 @media (max-width: 720px) {
