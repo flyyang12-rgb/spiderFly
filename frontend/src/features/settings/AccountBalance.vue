@@ -71,7 +71,15 @@ function checkedTime(value) {
 
 <template>
   <section class="account-balance" aria-labelledby="account-balance-title" :aria-busy="pending">
-    <header><h3 id="account-balance-title">DeepSeek 账户余额</h3><button class="button secondary" type="button" :disabled="!configured || disabled || pending" @click="refresh">{{ pending ? '正在查询…' : '刷新余额' }}</button></header>
+    <header>
+      <h3 id="account-balance-title">DeepSeek 账户余额</h3>
+      <div class="balance-summary">
+        <span v-if="balance">查询时间 · {{ checkedTime(balance.checked_at) }}</span>
+        <span v-else-if="!configured">请先配置密钥</span>
+        <span v-else-if="!error && !pending">尚未查询</span>
+        <button class="button secondary" type="button" :disabled="!configured || disabled || pending" @click="refresh">{{ pending ? '正在查询…' : '刷新余额' }}</button>
+      </div>
+    </header>
     <template v-if="balance">
       <p v-if="error || !balance.is_available" class="balance-status unavailable">{{ error ? '结果已过期' : '余额不足' }}</p>
       <dl v-for="item in balance.balance_infos" :key="item.currency" class="balance-values">
@@ -79,7 +87,6 @@ function checkedTime(value) {
         <div><dt>充值余额</dt><dd>{{ item.topped_up_balance }} {{ item.currency }}</dd></div>
         <div><dt>赠送余额</dt><dd>{{ item.granted_balance }} {{ item.currency }}</dd></div>
       </dl>
-      <p class="balance-note">查询时间：{{ checkedTime(balance.checked_at) }}</p>
     </template>
 
     <p v-if="error" class="balance-error" role="alert">{{ error }}</p>
@@ -87,6 +94,22 @@ function checkedTime(value) {
 </template>
 
 <style scoped>
-.account-balance{margin:0 24px 24px;padding:20px 0 0;border-top:1px solid #ECEFEC;display:grid;gap:12px;min-width:0}.account-balance header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.account-balance h3{font-size:14px;line-height:20px;margin:0;font-weight:600}.account-balance .button{min-width:104px}.account-balance .button:focus-visible{outline:2px solid #009139;outline-offset:2px}.balance-note,.balance-status,.balance-error{margin:0;font-size:12px;line-height:1.8;overflow-wrap:anywhere}.balance-note{color:#697b70}.balance-status{color:#276b43}.balance-status.unavailable{color:#8b4e25}.balance-error{color:#a13a2d}.balance-values{display:grid;grid-template-columns:2fr 1fr 1fr;gap:16px;margin:0}.balance-values>div{display:grid;align-content:start;gap:4px;min-width:0}.balance-values dt{font-size:12px;color:#697b70}.balance-values dd{font-size:13px;margin:0;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}.balance-total dd{font-size:24px;font-weight:600;line-height:32px}
-@media(max-width:720px){.balance-values{grid-template-columns:1fr 1fr}.balance-total{grid-column:1/-1}}@media(max-width:480px){.account-balance{margin:0 16px 16px;padding:16px}}
+.account-balance { display: grid; min-width: 0; gap: 12px; }
+.account-balance header { display: grid; gap: 7px; }
+.account-balance h3 { margin: 0; color: var(--text); font-size: var(--workspace-body); font-weight: 500; }
+.balance-summary { display: flex; align-items: center; gap: 10px; }
+.balance-summary span { color: var(--muted); font-size: var(--workspace-caption); overflow-wrap: anywhere; }
+.balance-summary .button { min-width: 104px; margin-left: auto; }
+.balance-status, .balance-error { margin: 0; font-size: var(--workspace-caption); overflow-wrap: anywhere; }
+.balance-status.unavailable { color: #8b4e25; }
+.balance-error { color: #a13a2d; }
+.balance-values { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 16px; margin: 0; }
+.balance-values > div { display: grid; min-width: 0; align-content: start; gap: 4px; }
+.balance-values dt { font-size: var(--workspace-caption); color: var(--muted); }
+.balance-values dd { margin: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.balance-total dd { font-size: 24px; font-weight: 600; line-height: 32px; }
+@media (max-width: 720px) {
+  .balance-values { grid-template-columns: 1fr 1fr; }
+  .balance-total { grid-column: 1 / -1; }
+}
 </style>

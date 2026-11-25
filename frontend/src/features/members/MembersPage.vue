@@ -102,15 +102,15 @@ function hideCreate() {
 
 <style scoped>
 .members-title, .members-heading-actions { display: flex; align-items: center; gap: 8px; }
-.members-title > span { color: var(--muted, #757a75); font-size: 12px; }
+.members-title > span { color: var(--muted, #757a75); font-size: var(--workspace-caption, 12px); }
 .member-create-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; padding: 20px; border-bottom: 1px solid var(--border, #dfe3df); background: var(--surface-subtle, #f7f8f6); }
 .member-create-actions { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 8px; }
 .members-list { padding: 0 20px; }
 .member-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 12px; min-height: 80px; padding: 16px 0; }
 .member-row + .member-row { border-top: 1px solid var(--border, #ecefec); }
 .member-identity { display: grid; min-width: 0; gap: 4px; }
-.member-identity strong { color: var(--ink, #221814); font-size: 14px; overflow-wrap: anywhere; }
-.member-identity small, .member-row-actions > small { color: var(--muted, #757a75); font-size: 12px; overflow-wrap: anywhere; }
+.member-identity strong { color: var(--ink, #221814); font-size: var(--workspace-item-title, 14px); overflow-wrap: anywhere; }
+.member-identity small, .member-row-actions > small { color: var(--muted, #757a75); font-size: var(--workspace-caption, 12px); overflow-wrap: anywhere; }
 .member-row-actions { display: flex; align-items: center; gap: 8px; }
 .member-row-actions > small { margin-right: 8px; }
 @media (max-width: 760px) { .member-row { grid-template-columns: auto minmax(0, 1fr) auto; } .member-row-actions { grid-column: 2 / -1; flex-wrap: wrap; } }

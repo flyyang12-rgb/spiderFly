@@ -76,10 +76,17 @@ onUnmounted(() => { disposed = true; cancel(); wipeSecrets(); form.app_id = ''; 
 
 <template>
   <section class="panel feishu-settings" :aria-busy="pending" aria-labelledby="feishu-settings-title">
-    <header class="panel-heading"><h2 id="feishu-settings-title">飞书通知</h2><span class="mini-badge" :class="saved?.configured ? 'success-badge' : 'neutral-badge'">{{ saved?.configuration_error ? '配置异常' : loaded ? saved?.configured ? '已配置' : '未配置' : '加载中' }}</span></header>
-    <form class="service-form" @submit.prevent="save">
+    <header class="panel-heading service-config-heading">
+      <h2 id="feishu-settings-title">飞书通知</h2>
+      <span class="mini-badge" :class="saved?.configured ? 'success-badge' : 'neutral-badge'">{{ saved?.configuration_error ? '配置异常' : loaded ? saved?.configured ? '已配置' : '未配置' : '加载中' }}</span>
+      <fieldset v-if="canEdit && !saved?.read_only" class="notification-choice" :disabled="!loaded || pending">
+        <legend class="sr-only">通知方式</legend>
+        <label><input v-model="form.mode" class="sr-only" type="radio" value="webhook" name="feishu-mode" /><span>群通知</span></label>
+        <label><input v-model="form.mode" class="sr-only" type="radio" value="application" name="feishu-mode" /><span>个人通知</span></label>
+      </fieldset>
+    </header>
+    <form class="service-config-form" @submit.prevent="save">
       <template v-if="canEdit && !saved?.read_only">
-        <fieldset class="notification-choice" :disabled="!loaded || pending"><legend class="sr-only">通知方式</legend><label><input v-model="form.mode" type="radio" value="webhook" name="feishu-mode" />群通知</label><label><input v-model="form.mode" type="radio" value="application" name="feishu-mode" />个人通知</label></fieldset>
         <template v-if="form.mode === 'webhook'">
           <label class="field"><span>Webhook 地址</span><input v-model="form.webhook_url" type="password" autocomplete="off" spellcheck="false" maxlength="2048" :disabled="!loaded || pending" :placeholder="saved?.webhook_url_configured ? '留空保留当前地址' : '粘贴群机器人的 Webhook 地址'" /></label>
           <label class="field"><span>签名密钥 <small>可选</small></span><input v-model="form.webhook_secret" type="password" autocomplete="new-password" spellcheck="false" maxlength="500" :disabled="!loaded || pending || form.clear_webhook_secret" :placeholder="saved?.webhook_secret_configured ? '留空保留当前密钥' : '未开启签名校验可留空'" /></label>
@@ -88,8 +95,10 @@ onUnmounted(() => { disposed = true; cancel(); wipeSecrets(); form.app_id = ''; 
         <template v-else>
           <label class="field"><span>App ID</span><input v-model="form.app_id" autocomplete="off" spellcheck="false" maxlength="200" :disabled="!loaded || pending" /></label>
           <label class="field"><span>App Secret</span><input v-model="form.app_secret" type="password" autocomplete="new-password" spellcheck="false" maxlength="500" :disabled="!loaded || pending" :placeholder="saved?.app_secret_configured ? '留空保留当前密钥' : '输入应用密钥'" /></label>
-          <label class="field"><span>{{ form.receiver_id_type === 'open_id' ? '收件人 Open ID' : '收件人手机号' }}</span><input v-model="form.receiver_id" :inputmode="form.receiver_id_type === 'mobile' ? 'tel' : 'text'" autocomplete="off" spellcheck="false" maxlength="200" :disabled="!loaded || pending" /></label>
-          <details class="recipient-options"><summary>收件人类型</summary><label class="field"><span class="sr-only">收件人类型</span><select v-model="form.receiver_id_type" :disabled="!loaded || pending"><option value="mobile">手机号</option><option value="open_id">Open ID</option></select></label></details>
+          <div class="recipient-row">
+            <label class="field"><span>收件人类型</span><select v-model="form.receiver_id_type" :disabled="!loaded || pending"><option value="mobile">手机号</option><option value="open_id">Open ID</option></select></label>
+            <label class="field"><span>{{ form.receiver_id_type === 'open_id' ? '收件人 Open ID' : '收件人手机号' }}</span><input v-model="form.receiver_id" :inputmode="form.receiver_id_type === 'mobile' ? 'tel' : 'text'" autocomplete="off" spellcheck="false" maxlength="200" :disabled="!loaded || pending" /></label>
+          </div>
         </template>
       </template>
       <dl v-else-if="loaded" class="service-status"><div><dt>通知方式</dt><dd>{{ saved?.mode === 'application' ? '个人通知' : '群通知' }}</dd></div><div><dt>配置来源</dt><dd>{{ sourceLabel }}</dd></div></dl>
@@ -97,14 +106,52 @@ onUnmounted(() => { disposed = true; cancel(); wipeSecrets(); form.app_id = ''; 
       <p v-if="message" class="service-message" :class="{ failed }" :role="failed ? 'alert' : 'status'">{{ message }}</p>
       <div v-if="failed && !pending" class="reload-config"><button class="button ghost" type="button" @click="load">重新加载</button></div>
       <template v-if="canEdit && !saved?.read_only">
-        <div v-if="confirmClear" class="clear-confirm"><p>清除群通知和个人通知配置？</p><button class="button danger" type="button" :disabled="pending" @click="clear">{{ operation === 'clear' ? '正在清除…' : '确认清除' }}</button><button class="button ghost" type="button" :disabled="pending" @click="confirmClear = false">取消</button></div>
-        <div v-else class="service-actions"><button v-if="saved?.source === 'saved'" class="button danger clear-config" type="button" :disabled="pending" @click="confirmClear = true">清除配置</button><button class="button primary" :disabled="!canSave">{{ operation === 'save' ? '正在保存…' : '保存配置' }}</button></div>
+        <div v-if="confirmClear" class="service-config-actions clear-confirm"><p>清除群通知和个人通知配置？</p><button class="button danger" type="button" :disabled="pending" @click="clear">{{ operation === 'clear' ? '正在清除…' : '确认清除' }}</button><button class="button ghost" type="button" :disabled="pending" @click="confirmClear = false">取消</button></div>
+        <div v-else class="service-config-actions"><button v-if="saved?.source === 'saved'" class="button danger clear-config" type="button" :disabled="pending" @click="confirmClear = true">清除配置</button><button class="button primary" :disabled="!canSave">{{ operation === 'save' ? '正在保存…' : '保存配置' }}</button></div>
       </template>
     </form>
   </section>
 </template>
 
 <style scoped>
-.feishu-settings{min-width:0}.feishu-settings h2{margin:0}.service-form{display:grid;gap:16px;padding:24px;min-width:0}.field{min-width:0}.field input,.field select{width:100%;min-width:0;max-width:100%}.field small{color:var(--muted,#757a75);font-size:12px;font-weight:400;margin-left:4px}.notification-choice{display:flex;gap:24px;flex-wrap:wrap;border:0;padding:0;margin:0 0 4px;min-width:0}.notification-choice label,.clear-signature{display:flex;align-items:center;gap:8px;font-size:13px;line-height:20px}.notification-choice input,.clear-signature input{width:16px;height:16px;accent-color:#009139}.clear-signature{color:var(--muted,#757a75)}.service-actions{display:flex;justify-content:flex-end;gap:12px;padding-top:4px}.service-actions .primary{min-width:112px}.service-actions .clear-config{margin-right:auto}.service-message{margin:0;font-size:13px;line-height:1.6;color:#00752e;overflow-wrap:anywhere}.service-message.failed{color:#a13a2d}.reload-config{margin-top:-8px}.reload-config .button{padding-left:0}.service-status{display:grid;gap:18px;margin:0}.service-status>div{display:flex;justify-content:space-between;gap:16px;font-size:13px;line-height:20px}.service-status dt{color:var(--muted,#757a75)}.service-status dd{margin:0}.recipient-options{font-size:12px;color:var(--muted,#757a75)}.recipient-options summary{cursor:pointer;width:fit-content}.recipient-options .field{margin-top:12px}.clear-confirm{display:flex;gap:8px;align-items:center;flex-wrap:wrap;border-top:1px solid #ecefec;padding-top:16px}.clear-confirm p{font-size:13px;margin:0;width:100%}.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}.feishu-settings :is(button,input,select,summary):focus-visible{outline:2px solid #009139;outline-offset:2px}
-@media(max-width:480px){.service-form{padding:18px}.notification-choice{gap:20px}.service-actions .primary{min-width:104px}}
+.notification-choice {
+  display: inline-flex;
+  min-width: 0;
+  margin: 0 0 0 auto;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-subtle);
+}
+.notification-choice label { position: relative; }
+.notification-choice label span {
+  display: block;
+  padding: 3px 9px;
+  border-radius: 5px;
+  color: var(--muted);
+  font-size: var(--workspace-caption);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.notification-choice input:checked + span { background: var(--surface); color: var(--brand-strong); font-weight: 600; box-shadow: 0 1px 3px #2038282b; }
+.notification-choice input:focus-visible + span { outline: 2px solid var(--brand); }
+.notification-choice:disabled span { cursor: default; opacity: .65; }
+.recipient-row { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; }
+.recipient-row .field select { min-width: 92px; }
+.field small, .clear-signature { color: var(--muted); font-size: var(--workspace-caption); }
+.field small { margin-left: 4px; font-weight: 400; }
+.clear-signature { display: flex; align-items: center; gap: 8px; }
+.clear-signature input { width: 16px; height: 16px; accent-color: var(--brand); }
+.clear-config { margin-right: auto; }
+.service-message { margin: 0; font-size: var(--workspace-caption); color: var(--brand-strong); overflow-wrap: anywhere; }
+.service-message.failed { color: #a13a2d; }
+.reload-config .button { padding-left: 0; }
+.service-status { display: grid; gap: 18px; margin: 0; }
+.service-status > div { display: flex; justify-content: space-between; gap: 16px; }
+.service-status dt { color: var(--muted); }
+.service-status dd { margin: 0; }
+.clear-confirm { flex-wrap: wrap; }
+.clear-confirm p { margin: 0 auto 0 0; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+.feishu-settings :is(button, input, select):focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
 </style>

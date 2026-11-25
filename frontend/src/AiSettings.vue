@@ -197,23 +197,35 @@ onUnmounted(() => {
 
 <template>
   <section class="panel ai-settings" :aria-busy="pending">
-    <header class="panel-heading"><h2>API 密钥配置</h2><span class="mini-badge" :class="configured ? 'success-badge' : 'neutral-badge'">{{ configured ? '已配置' : '未配置' }}</span></header>
-    <form @submit.prevent="save">
+    <header class="panel-heading service-config-heading"><h2>API 密钥配置</h2><span class="mini-badge" :class="configured ? 'success-badge' : 'neutral-badge'">{{ configured ? '已配置' : '未配置' }}</span></header>
+    <form class="service-config-form" @submit.prevent="save">
       <template v-if="canEdit">
         <label class="field"><span>DeepSeek API 密钥{{ environmentKey ? '（环境配置）' : '' }}</span><input v-model="form.api_key" :disabled="!loaded || operation === 'save' || environmentKey" type="text" autocomplete="off" spellcheck="false" maxlength="500" :placeholder="configured ? '留空保留当前密钥' : '输入 API 密钥'" /></label>
-        <div class="ai-fetch-row"><button class="button secondary" type="button" :disabled="!canFetch" @click="fetchModels">{{ operation === 'models' ? '正在获取…' : '获取模型列表' }}</button></div>
-        <label class="field"><span>默认模型</span><select v-model="form.model" :disabled="!catalogVerified || pending || !loaded"><option value="" disabled>请先获取模型列表</option><option v-if="form.model && !models.includes(form.model)" :value="form.model" disabled>{{ form.model }}（需刷新列表）</option><option v-for="model in models" :key="model" :value="model">{{ model }}</option></select></label>
+        <div class="ai-model-row">
+          <label class="field"><span>默认模型</span><select v-model="form.model" :disabled="!catalogVerified || pending || !loaded"><option value="" disabled>请先获取模型列表</option><option v-if="form.model && !models.includes(form.model)" :value="form.model" disabled>{{ form.model }}（需刷新列表）</option><option v-for="model in models" :key="model" :value="model">{{ model }}</option></select></label>
+          <button class="button secondary" type="button" :disabled="!canFetch" @click="fetchModels">{{ operation === 'models' ? '正在获取…' : '获取模型列表' }}</button>
+        </div>
       </template>
       <div v-else class="ai-current-config"><div><span>默认模型</span><strong>{{ loaded ? savedModel || '尚未设置' : '正在加载…' }}</strong></div><div><span>密钥来源</span><strong>{{ keySourceLabel }}</strong></div></div>
+      <AccountBalance v-if="loaded" :configured="configured" :revision="balanceRevision" :disabled="operation === 'save'" @session-expired="emit('session-expired')" />
       <p v-if="message" class="ai-setting-message" :class="{ failed }" :role="failed ? 'alert' : 'status'">{{ message }}</p>
-      <div v-if="canEdit" class="ai-setting-actions"><button class="button primary" :disabled="!canSave">{{ operation === 'save' ? '正在保存…' : '保存配置' }}</button></div>
+      <div v-if="canEdit" class="service-config-actions"><button class="button primary" :disabled="!canSave">{{ operation === 'save' ? '正在保存…' : '保存配置' }}</button></div>
     </form>
-    <AccountBalance v-if="loaded" :configured="configured" :revision="balanceRevision" :disabled="operation === 'save'" @session-expired="emit('session-expired')" />
   </section>
 </template>
 
 <style scoped>
-.ai-settings .panel-heading h2{margin:0}
-.ai-settings form{padding:24px;display:grid;gap:16px;min-width:0}.ai-settings .field{min-width:0}.ai-settings input,.ai-settings select{width:100%;min-width:0;max-width:100%}.ai-setting-note{color:#697b70;font-size:13px;line-height:1.8;margin:0;overflow-wrap:anywhere}.ai-fetch-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.ai-fetch-row .button{min-width:128px}.ai-setting-actions{display:flex;justify-content:flex-end;gap:12px}.ai-setting-actions .button{min-width:112px}.ai-setting-message{margin:0;color:#276b43;font-size:13px;line-height:1.6;overflow-wrap:anywhere}.ai-setting-message.failed{color:#a13a2d}.ai-current-config{display:grid;gap:16px}.ai-current-config>div{display:grid;gap:8px;font-size:13px;overflow-wrap:anywhere}.ai-current-config>div>span{color:#697b70}.ai-current-config strong{font-weight:500}.ai-settings :is(button,input,select):focus-visible{outline:2px solid #009139;outline-offset:2px}
-@media(max-width:480px){.ai-settings form{padding:16px}.ai-setting-actions .button{width:100%}}
+.ai-model-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 10px;
+}
+.ai-setting-message { margin: 0; color: var(--brand-strong); font-size: var(--workspace-caption); overflow-wrap: anywhere; }
+.ai-setting-message.failed { color: #a13a2d; }
+.ai-current-config { display: grid; gap: 16px; }
+.ai-current-config > div { display: grid; gap: 8px; overflow-wrap: anywhere; }
+.ai-current-config span { color: var(--muted); }
+.ai-current-config strong { font-weight: 500; }
+.ai-settings :is(button, input, select):focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
 </style>
