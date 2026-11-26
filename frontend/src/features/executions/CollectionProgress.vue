@@ -47,7 +47,7 @@ function eventTime(value) {
       </ol>
     </details>
   </section>
-  <p v-else class="artifact-empty">{{ status === 'pending' ? '任务尚未开始' : '脚本未上报采集进度，请查看运行日志。' }}</p>
+  <p v-else class="artifact-empty">{{ status === 'pending' ? '任务尚未开始' : '暂无采集进度，可查看日志。' }}</p>
 </template>
 
 <style scoped>

@@ -58,7 +58,7 @@ async function loadOptions() {
         fail(result.reason)
       }
     })
-    if (props.lockedObject && !selected.value && !error.value) error.value = '已创建对象暂时没有载入，请刷新确认；请勿重复新建。'
+    if (props.lockedObject && !selected.value && !error.value) error.value = '记录尚未加载，请刷新核对，避免重复创建。'
   } catch (failure) { if (sequence === loadSequence) fail(failure) }
   finally { if (!disposed && sequence === loadSequence && me.value === owner) loading.value = false }
 }
@@ -109,20 +109,20 @@ onBeforeUnmount(() => { disposed = true; loadSequence++; for (const controller o
 <template>
   <WorkflowDialog title="设置定时" :close-disabled="busy" @close="emit('close')">
     <form id="unified-plan-form" class="plan-form" @submit.prevent="save">
-      <p v-if="createdContext" class="plan-hint">已创建。取消定时设置仍会保留此对象。</p>
+      <p v-if="createdContext" class="plan-hint">已创建，取消只关闭定时设置。</p>
       <fieldset v-if="!lockedObject" class="plan-object" :disabled="loading || busy">
         <legend>运行对象</legend>
         <label><input v-model="kind" type="radio" value="task" />单个任务</label>
         <label><input v-model="kind" type="radio" value="workflow" />整个工作流</label>
       </fieldset>
       <p v-if="loading" role="status">正在读取任务和工作流…</p>
-      <p v-if="lockedObject" class="plan-hint">{{ kind === 'workflow' ? '工作流' : '单任务' }}：{{ selected?.name || '正在读取已创建对象…' }}</p>
+      <p v-if="lockedObject" class="plan-hint">{{ kind === 'workflow' ? '工作流' : '单任务' }}：{{ selected?.name || '正在加载…' }}</p>
       <label v-else class="field"><span>{{ kind === 'workflow' ? '选择工作流' : '选择任务' }}</span>
         <select v-model="selectedId" :disabled="loading || busy" required><option value="">请选择</option><option v-for="item in objects" :key="item.id" :value="String(item.id)">{{ item.name }}{{ kind === 'task' && !item.enabled ? '（已停用）' : '' }}</option></select>
       </label>
       <template v-for="(failure, type) in optionErrors" :key="type"><p v-if="failure" class="plan-error" role="alert">{{ type === 'workflow' ? '工作流' : '单任务' }}选项未完整载入：{{ failure }}</p></template>
       <p v-if="selected && kind === 'workflow'" class="plan-hint">{{ selected.steps.map(step => step.task_name).join(' → ') }}</p>
-      <p v-if="selected && kind === 'workflow'" class="plan-hint">整个工作流共用此计划，成员需启用并设为手动。</p>
+      <p v-if="selected && kind === 'workflow'" class="plan-hint">计划适用于整个工作流，成员任务需启用并设为手动。</p>
       <PlanFields :key="kind + ':' + selectedId" :form="form" :remote="kind === 'task' && Boolean(selected?.target_host_id)" :disabled="busy || loading || !selected" :identity="kind + ':' + selectedId" @unauthorized="handleSessionExpired" />
       <div v-if="error" class="plan-error" role="alert">{{ displayedError }}<button v-if="!busy" class="text-button" type="button" @click="refreshOptions">刷新选项</button></div>
     </form>

@@ -143,8 +143,8 @@ watch(me, (user, previous) => { if (!user || user.id !== previous?.id) { planTar
         <div class="center-count" role="status">{{ countLabel }}</div>
         <div class="center-header-actions"><button v-if="isAdmin" class="button secondary compact" type="button" @click="openAi()">AI 创建</button><button v-if="isAdmin" class="button primary compact" type="button" :disabled="Boolean(busy)" @click="openCreate()">新建</button></div>
       </header>
-    <div v-if="tasksLoadError || !tasksLoaded" class="center-feedback error" role="alert">{{ tasksLoadError ? '任务加载失败：' + tasksLoadError : '正在加载任务…' }}<span v-if="tasks.length">当前保留已取得的任务。</span><button class="text-button" type="button" :disabled="refreshBusy" @click="refreshAll">重试读取</button></div>
-    <div v-if="loadError || !definitionsLoaded" class="center-feedback" :class="loadError ? 'error' : 'loading'" :role="loadError ? 'alert' : 'status'">{{ loadError ? '工作流未完整载入：' + loadError : '正在读取工作流…' }}<span v-if="workflows.length">当前保留已取得的工作流。</span><button v-if="loadError" class="text-button" type="button" :disabled="refreshing" @click="refresh()">重试读取</button></div>
+    <div v-if="tasksLoadError || !tasksLoaded" class="center-feedback error" role="alert">{{ tasksLoadError ? '任务加载失败：' + tasksLoadError : '正在加载任务…' }}<span v-if="tasks.length">显示上次结果。</span><button class="text-button" type="button" :disabled="refreshBusy" @click="refreshAll">重试</button></div>
+    <div v-if="loadError || !definitionsLoaded" class="center-feedback" :class="loadError ? 'error' : 'loading'" :role="loadError ? 'alert' : 'status'">{{ loadError ? '工作流加载失败。' + loadError : '正在加载工作流…' }}<span v-if="workflows.length">显示上次结果。</span><button v-if="loadError" class="text-button" type="button" :disabled="refreshing" @click="refresh()">重试</button></div>
     <div v-if="actionError" class="center-feedback error" role="alert">{{ actionError }}</div>
     <div v-if="notice" class="center-feedback success" role="status">{{ notice }}</div>
       <div v-if="rows.length" class="plan-scroll" tabindex="0" aria-label="任务计划表格">
@@ -206,7 +206,7 @@ watch(me, (user, previous) => { if (!user || user.id !== previous?.id) { planTar
           </tbody>
         </table>
       </div>
-      <div v-else class="empty-state compact-empty"><strong>{{ !complete ? '暂无匹配结果' : tasks.length || workflows.length ? '没有匹配的记录' : '还没有任务' }}</strong><p>{{ !complete ? '部分资料仍未取得，请重试读取。' : tasks.length || workflows.length ? '调整筛选条件后再试。' : '点击“新建”，上传 Python 脚本或项目 ZIP。' }}</p></div>
+      <div v-else class="empty-state compact-empty"><strong>{{ !complete ? '暂无匹配结果' : tasks.length || workflows.length ? '没有匹配的记录' : '还没有任务' }}</strong><p>{{ !complete ? '加载未完成，请重试。' : tasks.length || workflows.length ? '请调整筛选条件。' : '点击“新建”，上传 Python 脚本或项目 ZIP。' }}</p></div>
     </section>
     <CreationDialog v-if="createObjectOpen && isAdmin" @created="createdTask" />
     <WorkflowEditor v-if="editor" :state="state" />
@@ -234,17 +234,17 @@ watch(me, (user, previous) => { if (!user || user.id !== previous?.id) { planTar
 .center-count { color: var(--muted); font-size: var(--workspace-caption, 12px); }
 .center-header-actions, .center-object-actions { display: flex; align-items: center; gap: 8px; }
 .plan-scroll { max-width: 100%; overflow-x: auto; }
-.plans-table { width: 100%; min-width: 870px; border-collapse: collapse; text-align: left; font-size: 13px; }
+.plans-table { width: 100%; min-width: 870px; border-collapse: collapse; text-align: left; font-size: var(--workspace-body); }
 .plans-table th, .plans-table td { padding: 12px; border-bottom: 1px solid var(--border-soft); }
 .plans-table :is(th, td):first-child { padding-left: 18px; }
 .plans-table :is(th, td):last-child { padding-right: 18px; }
-.plans-table thead th { font-size: 12px; font-weight: 550; background: var(--surface-subtle); color: var(--muted); white-space: nowrap; }
+.plans-table thead th { font-size: 14px; font-weight: 550; background: var(--surface-subtle); color: var(--muted); white-space: nowrap; }
 .plans-table tbody th { background: transparent; color: var(--ink); }
-.plans-table tbody td { height: 50px; }
+.plans-table tbody td { height: 56px; }
 .plans-table tbody tr:last-child > * { border-bottom: 0; }
 .plans-table tbody tr:hover { background: var(--surface-subtle); }
 .plan-name, .plan-program { display: inline-block; max-width: 20em; vertical-align: middle; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.plan-name { font-size: 14px; font-weight: 600; }
+.plan-name { font-size: var(--ui-heading); font-weight: 600; }
 .plan-program { max-width: 14em; color: var(--muted); }
 .plan-time, .center-object-actions { white-space: nowrap; }
 .plan-time { font-variant-numeric: tabular-nums; }
@@ -258,10 +258,10 @@ watch(me, (user, previous) => { if (!user || user.id !== previous?.id) { planTar
 .center-object-facts { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 16px; color: var(--muted); font-size: var(--workspace-caption, 11px); overflow-wrap: anywhere; }
 .center-more-actions { display: flex; flex-wrap: wrap; gap: 14px; }
 .center-flow-steps { display: flex; flex-wrap: wrap; gap: 6px 12px; margin: 0; padding: 0; list-style: none; }
-.center-flow-steps li { display: inline-flex; gap: 6px; align-items: center; font-size: 12px; overflow-wrap: anywhere; }
+.center-flow-steps li { display: inline-flex; gap: 6px; align-items: center; font-size: var(--workspace-caption); overflow-wrap: anywhere; }
 .center-flow-steps li + li:before { content: '→'; color: var(--faint); }
-.center-flow-steps span { display: grid; place-items: center; width: 20px; height: 20px; flex-shrink: 0; background: var(--surface-subtle); border-radius: 6px; color: var(--muted); font-size: 11px; }
-.center-feedback { padding: 12px 14px; border: 1px solid var(--border); border-radius: 8px; color: var(--muted); font-size: 12px; line-height: 20px; overflow-wrap: anywhere; }
+.center-flow-steps span { display: grid; place-items: center; width: 20px; height: 20px; flex-shrink: 0; background: var(--surface-subtle); border-radius: 6px; color: var(--muted); font-size: var(--workspace-caption); }
+.center-feedback { padding: 12px 14px; border: 1px solid var(--border); border-radius: 8px; color: var(--muted); font-size: var(--workspace-body); line-height: 20px; overflow-wrap: anywhere; }
 .center-feedback.error { border-color: #f0c2b7; background: var(--coral-soft); color: #ad4935; }
 .center-feedback.success { border-color: #c9e2d2; background: var(--brand-soft); color: var(--brand-strong); }
 @media (max-width: 420px) { .center-filter-bar > .filter-field { flex-basis: 100%; } }

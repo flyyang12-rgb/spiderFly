@@ -57,9 +57,9 @@ function submit() { if (props.embedded) emit('submit'); else uploadApp() }
 .script-upload:focus-within { outline: 2px solid var(--brand); outline-offset: 3px; }
 .script-upload .upload-file-mark { width: 42px; height: 46px; border-radius: 10px; font-size: 12px; }
 .script-upload .upload-file-copy { gap: 6px; }
-.script-upload .upload-file-copy strong { white-space: normal; overflow-wrap: anywhere; font-size: 14px; font-weight: 600; }
-.script-upload .upload-file-copy small { white-space: normal; overflow-wrap: anywhere; color: var(--muted); font-size: 12px; }
-.script-upload .upload-file-action { font-size: 12px; }
-.creation-feedback.error { padding: 12px; border: 1px solid #f0c2b7; border-radius: 8px; background: var(--coral-soft); color: #ad4935; font-size: 12px; overflow-wrap: anywhere; }
+.script-upload .upload-file-copy strong { white-space: normal; overflow-wrap: anywhere; font-size: var(--ui-heading); font-weight: 600; }
+.script-upload .upload-file-copy small { white-space: normal; overflow-wrap: anywhere; color: var(--muted); font-size: var(--workspace-caption); }
+.script-upload .upload-file-action { font-size: var(--workspace-body); }
+.creation-feedback.error { padding: 12px; border: 1px solid #f0c2b7; border-radius: 8px; background: var(--coral-soft); color: #ad4935; font-size: var(--workspace-body); overflow-wrap: anywhere; }
 @media (max-width: 420px) { .script-upload { padding: 16px; grid-template-columns: 38px minmax(0, 1fr); } .script-upload .upload-file-action { grid-column: 2; } .script-upload .upload-file-mark { width: 36px; height: 40px; } }
 </style>

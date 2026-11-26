@@ -68,7 +68,7 @@ const { closeUserEditor, editingUser, me, saveUser, savingUser, userEditForm } =
                 placeholder="重置密码时再次输入"
             /></label>
           </template>
-          <p v-else class="member-self-hint">当前账号不能降权、停用或删除。请在账户菜单修改自己的密码。</p>
+          <p v-else class="member-self-hint">当前账号不能降权、停用或删除。密码请在账户菜单修改。</p>
         </div>
         <footer>
           <button type="button" class="button ghost" :disabled="savingUser" @click="closeUserEditor">

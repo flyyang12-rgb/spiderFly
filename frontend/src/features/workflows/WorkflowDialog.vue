@@ -44,7 +44,7 @@ onBeforeUnmount(() => { if (previousFocus?.isConnected) previousFocus.focus() })
 </template>
 
 <style scoped>
-.workflow-dialog { width: min(760px, 100%); min-width: 0; max-width: 100%; grid-template-columns: minmax(0, 1fr); }
+.workflow-dialog { width: min(760px, 100%); min-width: 0; max-width: 100%; max-height: calc(100dvh - 48px); grid-template-columns: minmax(0, 1fr); }
 .workflow-dialog.wide { width: min(960px, 100%); }
 .workflow-dialog > header { align-items: center; flex-wrap: wrap; gap: 12px; }
 .dialog-heading { flex: 1; min-width: 0; }

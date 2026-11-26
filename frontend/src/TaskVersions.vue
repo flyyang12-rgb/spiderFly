@@ -23,7 +23,7 @@ async function upload(){
  if(!uploadFile.value||dependencyStatus.value!=='ready')return
  busy.value=true;error.value=''
  try{const form=new FormData();form.append('script',uploadFile.value);form.append('requirements',requirements.value);form.append('dependency_decisions',JSON.stringify(dependencyDecisions.value));form.append('evidence',evidence.value);form.append('base_version_id',state.value.active_version_id)
- const result=await api('/tasks/'+props.taskId+'/upload',{method:'POST',body:form});uploadNotice.value=`v${result.version} 已保存为未运行候选，确认后才会启用。`;showUpload.value=false;await load()
+ const result=await api('/tasks/'+props.taskId+'/upload',{method:'POST',body:form});uploadNotice.value=`v${result.version} 已保存，待确认启用。尚未试运行。`;showUpload.value=false;await load()
  }catch(e){error.value=e.message}finally{busy.value=false}
 }
 async function action(path){busy.value=true;error.value='';uploadNotice.value='';try{await api(path,{method:'POST'});await load()}catch(e){error.value=e.message}finally{busy.value=false}}
@@ -71,11 +71,11 @@ onBeforeUnmount(()=>{alive=false;clearInterval(timer)})
    </summary>
    <div class="version-section-body">
     <div class="version-toolbar">
-     <div><strong>版本历史</strong><p>上传、确认使用、下载或切换任务脚本</p></div>
+     <div><strong>版本历史</strong></div>
      <button type="button" class="button version-upload-trigger" :aria-expanded="showUpload" @click="openUpload"><span aria-hidden="true">＋</span>{{showUpload?'收起更新':'更新脚本'}}</button>
     </div>
     <form v-if="showUpload" @submit.prevent="upload" class="version-upload">
-     <div class="version-upload-heading"><strong>上传新版本</strong><small>保存为后续 vN，不安装、不试跑；由管理员确认后启用</small></div>
+     <div class="version-upload-heading"><strong>上传新版本</strong><small>上传后保存为待确认版本，尚未试运行。</small></div>
      <div class="version-upload-grid">
       <label class="version-file-picker" :class="{ selected: uploadFile }">
        <input type="file" accept=".py" required @change="uploadFile=$event.target.files[0]">
@@ -113,7 +113,7 @@ onBeforeUnmount(()=>{alive=false;clearInterval(timer)})
       <div class="version-detail" v-if="detail===v.id">
        <div class="version-detail-heading"><strong>保存的任务信息</strong><small>随 v{{v.sequence}} 一起保存</small></div>
        <div v-if="requirementRows(v).length" class="version-requirements"><article v-for="item in requirementRows(v)" :key="item.key"><span>{{item.label}}</span><strong>{{item.value}}</strong><small>{{item.origin}}</small></article></div>
-       <div v-else class="version-empty-requirements">该版本没有记录具体任务要求</div>
+       <div v-else class="version-empty-requirements">暂无任务要求</div>
       </div>
      </article>
     </div>

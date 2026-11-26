@@ -23,9 +23,9 @@ const events = computed(() => props.job.events || [])
 
 <style scoped>
 .maintenance-compact{display:flex;align-items:baseline;gap:4px 16px;flex-wrap:wrap}
-.maintenance-compact>.button{padding:0;min-height:0;font-size:12px}
+.maintenance-compact>.button{padding:0;min-height:0;font-size: var(--workspace-caption)}
 .maintenance-compact>.repair-technical{margin:0}
 .maintenance-compact>.repair-technical[open]{flex-basis:100%;margin-top:8px}
 .repair-summary.repair-failed{color:#a64736}
-.repair-summary{margin:10px 0;font-size:14px;line-height:1.8;color:#385b48;white-space:pre-wrap;overflow-wrap:anywhere}.repair-technical{margin:8px 0 12px;font-size:12px;color:#74877a}.repair-technical>summary{cursor:pointer;width:fit-content}.repair-technical small{display:block;margin:10px 0}.repair-technical ol{padding-left:20px;line-height:1.9}.repair-technical li,.repair-technical p{white-space:pre-wrap;overflow-wrap:anywhere}
+.repair-summary{margin:10px 0;font-size: var(--workspace-body);line-height:1.8;color:#385b48;white-space:pre-wrap;overflow-wrap:anywhere}.repair-technical{margin:8px 0 12px;font-size: var(--workspace-caption);color:#74877a}.repair-technical>summary{cursor:pointer;width:fit-content}.repair-technical small{display:block;margin:10px 0}.repair-technical ol{padding-left:20px;line-height:1.9}.repair-technical li,.repair-technical p{white-space:pre-wrap;overflow-wrap:anywhere}
 </style>

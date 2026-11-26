@@ -91,7 +91,7 @@ const {
         <div v-if="detail.status === 'pending' && detail.error_message" class="notice info">
           <span class="notice-icon">i</span>
           <div>
-            <strong>仍在排队，没有开始计时</strong><small>{{ detail.error_message }}</small>
+            <strong>排队中，运行计时尚未开始</strong><small>{{ detail.error_message }}</small>
           </div>
         </div>
         <div
@@ -156,7 +156,7 @@ const {
         <div>
           <span class="log-label">运行日志</span>
           <pre>{{
-            detail.stdout || (['pending', 'running'].includes(detail.status) ? '等待程序输出…' : '（无输出）')
+            detail.stdout || (['pending', 'running'].includes(detail.status) ? '等待日志…' : '暂无日志')
           }}</pre>
         </div>
         <div v-if="detail.stderr || (detail.error_message && detail.status !== 'pending')">
@@ -195,10 +195,10 @@ const {
 </template>
 
 <style scoped>
-.execution-id { display: block; margin-bottom: 4px; color: var(--muted); font-size: 12px; }
+.execution-id { display: block; margin-bottom: 4px; color: var(--muted); font-size: var(--workspace-caption); }
 .execution-maintenance{align-items:flex-start;padding:12px 14px;gap:10px}
 .execution-maintenance .notice-icon{margin-top:1px}
 .execution-maintenance-content{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 18px;min-width:0;flex:1}
-.execution-maintenance-content>strong{font-size:13px;line-height:1.6}
+.execution-maintenance-content>strong{font-size: var(--workspace-body);line-height:1.6}
 .execution-maintenance-content>.maintenance-log{flex:1;min-width:180px}
 </style>

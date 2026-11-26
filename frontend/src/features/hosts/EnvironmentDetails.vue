@@ -8,12 +8,12 @@ const stages = { create: '创建环境', install: '安装依赖', interpreter: '
     <summary>{{ label }} · {{ environment ? (environment.status === 'ready' ? '已校验' : '准备失败') : (status === 'pending' ? '待回传' : '未提供') }}</summary>
     <template v-if="environment">
       <p v-if="environment.python">Python {{ environment.python }} · {{ environment.bits }} 位 · {{ environment.packages.length }} 个包</p>
-      <p>{{ environment.cache_reused ? '复用缓存并重新校验' : '首次准备' }} · {{ formatTime(environment.verified_at) }}</p>
+      <p>{{ environment.cache_reused ? '已复用并校验' : '首次准备' }} · {{ formatTime(environment.verified_at) }}</p>
       <p v-if="environment.error" class="environment-error">{{ stages[environment.stage] || '环境准备' }}：{{ environment.error }}</p>
       <pre v-if="environment.packages.length" tabindex="0" aria-label="实际安装依赖">{{ environment.packages.map(p => `${p.name}==${p.version}`).join('\n') }}</pre>
       <small>清单 {{ environment.requirements_hash.slice(0, 12) }}</small>
     </template>
-    <p v-else>{{ status === 'pending' ? '目标电脑尚未回传校验结果。' : '本次未回传环境明细。旧 Agent 可升级至 0.4.0。' }}</p>
+    <p v-else>{{ status === 'pending' ? '等待电脑回传环境信息。' : '暂无环境信息' }}</p>
   </details>
 </template>
 <style scoped>

@@ -25,7 +25,7 @@ async function restoreTypeFocus() {
           </label>
         </template>
         <template #scope-help>
-          <details class="run-history-help"><summary>记录范围</summary><p>任务执行含工作流步骤；流程整轮查看整轮与步骤。远程任务记录位于“宿主机”。</p></details>
+          <details class="run-history-help"><summary>记录范围</summary><p>任务执行包括工作流步骤。选择“流程整轮”可查看整个流程。远程记录在“宿主机”页。</p></details>
         </template>
       </component>
     </KeepAlive>

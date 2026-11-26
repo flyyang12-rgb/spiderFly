@@ -85,7 +85,7 @@ onBeforeUnmount(() => { alive = false; sequence++; fileSequence++; controller?.a
         <label v-if="choice(item.id).action === 'package'" class="field"><span>包名或版本约束</span><input :value="choice(item.id).requirement" :placeholder="item.package || '例如：requests>=2.31'" :disabled="disabled" @input="update(item.id, 'requirement', $event.target.value)"></label>
         <label v-if="choice(item.id).action === 'exclude'" class="field"><span>排除理由</span><input :value="choice(item.id).reason" maxlength="500" placeholder="例如：仅用于不执行的可选分支" :disabled="disabled" @input="update(item.id, 'reason', $event.target.value)"></label>
       </article>
-      <small>单文件上传不包含其他业务模块；排除后需自行准备相应文件。</small>
+      <small>引用的本地模块需随项目 ZIP 上传，或在运行电脑准备。</small>
     </div>
     <details v-if="manualInput && result"><summary>识别明细</summary><ul><li v-for="item in result.items" :key="item.id">{{ item.module }} · {{ item.kind === 'stdlib' ? '标准库' : item.kind === 'type_only' ? '仅类型检查' : item.requirement || item.package || item.exclusion_reason || '待补充' }} · 第 {{ item.lines.join('、') }} 行</li></ul><pre v-if="result.requirements">{{ result.requirements }}</pre><small>{{ result.target?.kind === 'agent' ? '目标 Python 待实际准备时核验' : `Python ${result.target?.version || '3.12'}` }}</small></details>
     <details v-if="manualInput" class="dependency-manual"><summary>补充依赖 <small>{{ requirements.trim() ? '已填写' : '可选' }}</small></summary>

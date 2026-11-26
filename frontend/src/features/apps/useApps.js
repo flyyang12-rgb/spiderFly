@@ -164,7 +164,7 @@ export function useApps({ aiOpen, aiSourceThread, aiTaskId, appForm, isAdmin, lo
     try {
       const created = await api('/apps', { method: 'POST', body: form })
       if (!live(generation, owner)) return null
-      if (!created?.task?.id) throw new Error('服务器未返回新任务身份，请先刷新任务中心确认创建结果')
+      if (!created?.task?.id) throw new Error('保存结果未确认，请刷新列表核对，避免重复创建。')
       completedTask = { kind: 'task', id: Number(created.task.id), object: created.task }
       let aiBindingError = ''
       if (sourceThread) {
@@ -191,7 +191,7 @@ export function useApps({ aiOpen, aiSourceThread, aiTaskId, appForm, isAdmin, lo
       uploadUncertain.value = !error.status || error.status >= 500
       if (!uploadUncertain.value) pendingUpload = null
       uploadError.value = uploadUncertain.value
-        ? '创建结果未确认。请先刷新任务中心检查是否已有该任务，避免重复上传。' + (error.message ? ' ' + error.message : '')
+        ? '保存结果未确认，请先刷新列表检查，避免重复上传。' + (error.message ? ' ' + error.message : '')
         : error.message || '创建任务失败，请检查输入'
       if (error.status === 401) handleSessionExpired?.()
       return null

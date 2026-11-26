@@ -55,9 +55,10 @@ onBeforeUnmount(invalidate)
       <label v-else-if="form.trigger_type === 'monthly'" class="field"><span>执行时间</span><input v-model="form.monthly_time" type="time" required /></label>
       <fieldset v-if="form.trigger_type === 'weekly'" class="plan-weekdays"><legend>执行星期</legend><label v-for="day in weekdayOptions" :key="day.value"><input v-model="form.weekly_days" type="checkbox" :value="day.value" />周{{ day.label }}</label></fieldset>
       </div>
-      <p v-if="form.trigger_type === 'interval'" class="plan-help">首次启用后等待所设时长。本次运行结束后重新计时，手动运行也会重新计时；失败或取消后仍按间隔继续。排队和运行期间不会重复提交。</p>
+      <p v-if="form.trigger_type === 'interval'" class="plan-help">启用后开始计时，每次运行结束后重新计时。</p>
+      <details v-if="form.trigger_type === 'interval'" class="plan-times"><summary>计时规则</summary><p class="plan-help">手动运行也会重新计时，失败或取消后仍按间隔继续。排队和运行期间不会重复提交。</p></details>
       <p v-if="form.trigger_type === 'monthly' && Number(form.monthly_day) >= 29" class="plan-help">当月没有该日期时跳过。</p>
-      <p v-if="form.trigger_type === 'cron'" class="plan-help">原计划保持不变，也可选择新的定时方式。</p>
+      <p v-if="form.trigger_type === 'cron'" class="plan-help">可选择新的定时方式。</p>
       <p v-if="error" class="danger-text plan-help" role="alert">{{ error }}</p>
       <details v-if="form.trigger_type !== 'interval'" class="plan-times"><summary>未来 5 次 · 北京时间</summary><p v-if="loading" role="status">正在计算…</p><ol v-else><li v-for="point in times" :key="point">{{ formatTime(point) }}</li></ol></details>
     </template>
@@ -66,19 +67,19 @@ onBeforeUnmount(invalidate)
 
 <style scoped>
 .plan-fields { display: grid; gap: 12px; min-width: 0; margin: 0; padding: 0; border: 0; }
-.plan-fields legend { width: 100%; padding: 0 0 6px; font-size: 13px; font-weight: 600; }
-.plan-fields legend small { float: right; font-weight: 400; color: var(--muted); font-size: 11px; padding-top: 2px; }
+.plan-fields legend { width: 100%; padding: 0 0 6px; font-size: var(--workspace-body); font-weight: 600; }
+.plan-fields legend small { float: right; font-weight: 400; color: var(--muted); font-size: var(--workspace-caption); padding-top: 2px; }
 .plan-mode { display: inline-grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; padding: 4px; border: 1px solid var(--border); border-radius: 10px; background: #eef2ef; }
-.plan-mode button { min-height: 32px; padding: 6px 14px; border: 0; border-radius: 7px; color: var(--muted); background: transparent; font: inherit; font-size: 13px; cursor: pointer; }
+.plan-mode button { min-height: 36px; padding: 6px 14px; border: 0; border-radius: 7px; color: var(--muted); background: transparent; font: inherit; font-size: var(--workspace-body); cursor: pointer; }
 .plan-mode button.active { color: var(--brand-strong); background: var(--surface); box-shadow: 0 1px 4px rgba(30,60,38,.1); font-weight: 600; }
 .plan-mode button:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
 .plan-input-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: start; }
 .plan-input-grid.monthly .plan-type-field { grid-column: 1 / -1; }
 .plan-weekdays { display: flex; grid-column: 1 / -1; flex-wrap: wrap; gap: 8px 12px; border: 0; padding: 0; margin: 0; min-width: 0; }
-.plan-weekdays label { display: flex; gap: 4px; align-items: center; font-size: 12px; cursor: pointer; }
+.plan-weekdays label { display: flex; gap: 4px; align-items: center; font-size: var(--workspace-body); cursor: pointer; }
 .plan-weekdays input { accent-color: var(--brand); margin: 0; width: 15px; height: 15px; }
 .plan-fields select, .plan-fields input { min-width: 0; max-width: 100%; }
-.plan-help, .plan-times { margin: 0; font-size: 12px; overflow-wrap: anywhere; }
+.plan-help, .plan-times { margin: 0; font-size: var(--workspace-caption); overflow-wrap: anywhere; }
 .plan-help:not(.danger-text), .plan-times { color: var(--muted); }
 .plan-times summary { cursor: pointer; }
 .plan-times ol { margin: 8px 0 0; padding-left: 20px; line-height: 1.8; }

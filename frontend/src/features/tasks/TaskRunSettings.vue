@@ -23,7 +23,7 @@ const notificationSummary = computed(() => [props.form.notify_on_success && '成
           <option value="">主控本机</option>
           <option v-for="host in hosts" :key="host.id" :value="String(host.id)" :disabled="host.approval_status !== 'approved'">{{ host.name }}{{ host.approval_status === 'approved' ? '' : '（不可用）' }}</option>
         </select>
-        <small v-if="project && hosts.some(host => String(host.id) === String(form.target_host_id) && !host.supports_project_zip)">可先保存计划。目标电脑升级到 Agent 0.5.3 后开始领取项目。</small>
+        <small v-if="project && hosts.some(host => String(host.id) === String(form.target_host_id) && !host.supports_project_zip)">ZIP 任务需 Agent 0.5.3 或以上，当前可保存计划。</small>
         <small v-else-if="form.target_host_id">离线或忙碌时排队。</small>
       </label>
     </div>
@@ -50,17 +50,17 @@ const notificationSummary = computed(() => [props.form.notify_on_success && '成
 
 <style scoped>
 .task-run-settings { gap: 10px; padding: 16px 18px; }
-.editor-enable-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid var(--border); padding-top: 10px; font-size: 13px; }
-.editor-enable-row .switch-row { height: 28px; font-size: 12px; }
+.editor-enable-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid var(--border); padding-top: 10px; font-size: var(--workspace-body); }
+.editor-enable-row .switch-row { height: 28px; font-size: var(--workspace-body); }
 .notification-disclosure { border-top: 1px solid var(--border); padding-top: 10px; }
 .notification-options { display: flex; flex-wrap: wrap; gap: 12px 16px; border: 0; background: transparent; padding: 12px 0 0; }
-.notification-options label { font-size: 12px; white-space: normal; }
+.notification-options label { font-size: var(--workspace-body); white-space: normal; }
 .notification-options input { width: 15px; height: 15px; margin: 0; }
 .create-settings, .program-target, .run-options { display: grid; gap: 12px; min-width: 0; }
 .create-settings { gap: 20px; }
 .program-target { padding: 14px 16px; border: 1px solid var(--border); border-radius: 10px; }
-.program-target h3 { margin: 0; font-size: 14px; }
+.program-target h3 { margin: 0; font-size: var(--ui-heading); }
 details.run-options { display: block; border-top: 1px solid var(--border-soft); padding-top: 12px; }
-details.run-options > summary { cursor: pointer; font-size: 13px; font-weight: 600; }
+details.run-options > summary { cursor: pointer; font-size: var(--workspace-body); font-weight: 600; }
 details.run-options[open] > :not(summary) { margin-top: 12px; }
 </style>
