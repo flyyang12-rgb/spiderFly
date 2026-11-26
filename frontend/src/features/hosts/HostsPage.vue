@@ -317,7 +317,7 @@ async function copyCode() {
 </template>
 
 <style scoped>
-.hosts-page { --host-green: #009139; --host-ink: var(--ink); --host-text: #292b28; --host-muted: var(--muted); --host-border: #dfe3df; --host-soft: #f7f8f6; display: grid; width: min(var(--content-width), 100%); min-width: 0; margin: 0 auto; gap: 16px; color: var(--host-text); font: 13px/1.55 Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif; }
+.hosts-page { --host-green: #009139; --host-ink: var(--ink); --host-text: #292b28; --host-muted: var(--muted); --host-border: #dfe3df; --host-soft: #f7f8f6; display: grid; width: min(var(--content-width), 100%); min-width: 0; margin: 0 auto; gap: 16px; color: var(--host-text); font-size: 13px; line-height: 1.55; }
 .hosts-page *, .hosts-page *::before, .hosts-page *::after { box-sizing: border-box; }
 .hosts-page h2, .hosts-page h3, .hosts-page h4, .hosts-page p, .hosts-page dl { margin: 0; }
 .hosts-page h2 { color: var(--host-ink); font-size: 20px; line-height: 28px; }

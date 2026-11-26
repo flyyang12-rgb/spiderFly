@@ -1,29 +1,25 @@
-/* Classic Lanting installs use separate names for each weight. The bundled fallback is IBM Plex Sans SC (see /fonts/IBM-Plex-OFL.txt). */
+/* Bundled fallback: IBM Plex Sans SC (see /fonts/IBM-Plex-OFL.txt). */
 @font-face {
   font-family: "SpiderFly Interface";
-  src: local("方正兰亭黑简体"), local("FZLTHJW--GB1-0"), local("方正兰亭黑_GBK"),
-       url("./assets/type/console-sans-regular.woff2") format("woff2");
+  src: url("./assets/type/console-sans-regular.woff2") format("woff2");
   font-weight: 400;
   font-display: swap;
 }
 @font-face {
   font-family: "SpiderFly Interface";
-  src: local("方正兰亭准黑简体"), local("方正兰亭黑简体"), local("FZLTHJW--GB1-0"), local("方正兰亭黑_GBK"),
-       url("./assets/type/console-sans-medium.woff2") format("woff2");
+  src: url("./assets/type/console-sans-medium.woff2") format("woff2");
   font-weight: 500;
   font-display: swap;
 }
 @font-face {
   font-family: "SpiderFly Interface";
-  src: local("方正兰亭中黑简体"), local("方正兰亭粗黑简体"), local("方正兰亭准黑简体"),
-       local("方正兰亭黑简体"), local("FZLTHJW--GB1-0"), local("方正兰亭黑_GBK"),
-       url("./assets/type/console-sans-semibold.woff2") format("woff2");
+  src: url("./assets/type/console-sans-semibold.woff2") format("woff2");
   font-weight: 600;
   font-display: swap;
 }
 
 :root {
-  font-family: "Lantinghei SC", "方正兰亭黑 Pro Global", "方正兰亭黑", "SpiderFly Interface", "PingFang SC", "Microsoft YaHei UI", "Noto Sans SC", sans-serif;
+  font-family: "Microsoft YaHei", "微软雅黑", "Microsoft YaHei UI", "SpiderFly Interface", "PingFang SC", "Noto Sans SC", sans-serif;
   color: #292b28;
   background: #f7f8f6;
   font-synthesis: none;
