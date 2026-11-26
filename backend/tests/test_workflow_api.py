@@ -87,12 +87,34 @@ class WorkflowApiTests(unittest.TestCase):
             ('POST', '/api/workflows', body),
             ('PATCH', f"/api/workflows/{workflow['id']}", {**body, 'revision': workflow['revision']}),
             ('POST', f"/api/workflows/{workflow['id']}/archive", {}),
+            ('DELETE', f"/api/workflows/{workflow['id']}", None),
             ('POST', f"/api/workflows/{workflow['id']}/runs", {'request_id': 'member-request-001'}),
             ('POST', f"/api/workflow-runs/{run['id']}/stop", {}),
         ]:
             self.assertEqual(self.request(method, url, payload, self.token)[0], 403)
         self.assertEqual(self.request('GET', '/api/workflows', token=self.token)[0], 200)
         self.assertEqual(self.request('GET', f"/api/workflow-runs/{run['id']}", token=self.token)[0], 200)
+
+    def test_delete_workflow_removes_its_history_and_keeps_member_tasks(self):
+        workflow = self.create()
+        url = f"/api/workflows/{workflow['id']}"
+        run = self.start(workflow)
+        self.assertEqual(self.request('DELETE', url)[0], 401)
+        self.assertEqual(self.request('DELETE', url, token=self.token)[0], 409)
+        self.assertEqual(self.request('POST', f"/api/workflow-runs/{run['id']}/stop", {}, self.token)[0], 202)
+        self.assertEqual(self.request('POST', url + '/archive', {}, self.token)[0], 200)
+        self.assertTrue(any(workflows.SNAPSHOT_ROOT.iterdir()))
+        self.assertEqual(self.request('DELETE', url, token=self.token)[0], 204)
+        self.assertEqual(self.request('GET', url, token=self.token)[0], 404)
+        self.assertEqual(self.request('GET', '/api/workflows?include_archived=true', token=self.token)[1], [])
+        self.assertEqual(self.request('GET', f"/api/workflow-runs/{run['id']}", token=self.token)[0], 404)
+        self.assertEqual(self.request('GET', '/api/workflow-runs', token=self.token)[1]['total'], 0)
+        self.assertEqual(self.request('DELETE', url, token=self.token)[0], 404)
+        self.assertFalse(any(workflows.SNAPSHOT_ROOT.iterdir()))
+        self.assertEqual(database.fetch_one('SELECT COUNT(*) n FROM workflow_steps')['n'], 0)
+        self.assertEqual(database.fetch_one('SELECT COUNT(*) n FROM workflow_members')['n'], 0)
+        self.assertEqual(database.fetch_one('SELECT id FROM tasks WHERE id=?', (self.task['id'],))['id'], self.task['id'])
+        self.assertTrue(database.fetch_one("SELECT id FROM audit_logs WHERE action='delete_workflow' AND target_id=?", (workflow['id'],)))
 
     def test_validation_revision_archive_and_audit(self):
         for task_ids in ([], [self.task['id'], self.task['id']], [-1]):

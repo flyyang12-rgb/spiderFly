@@ -91,6 +91,14 @@ def update_workflow(workflow_id: int, payload: WorkflowPatch, request: Request,
     return item
 
 
+@router.delete("/api/workflows/{workflow_id}", status_code=204)
+def delete_workflow(workflow_id: int, request: Request, user: dict = Depends(admin_user)) -> None:
+    with transaction() as conn:
+        name = _call(workflows.delete_definition, conn, workflow_id)
+        write_audit(request, user, "delete_workflow", target_type="workflow", target_id=workflow_id,
+                    summary=f"删除流程 {name} 和流程运行记录", conn=conn)
+
+
 @router.post("/api/workflows/{workflow_id}/archive")
 def archive_workflow(workflow_id: int, request: Request,
                      user: dict = Depends(admin_user)) -> dict:

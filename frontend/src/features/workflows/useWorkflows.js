@@ -35,7 +35,6 @@ export function useWorkflows({ isAdmin, me, onSessionExpired, workflowPendingSta
   const actionError = ref('')
   const notice = ref('')
   const busy = ref('')
-  const showArchived = ref(false)
   const filters = reactive({ workflow_id: '', status: 'all', date_from: '', date_to: '' })
   let appliedFilters = { ...filters }
   const editor = ref(null)
@@ -52,7 +51,6 @@ export function useWorkflows({ isAdmin, me, onSessionExpired, workflowPendingSta
   const detailError = ref('')
   const confirmation = ref(null)
   const pendingStarts = workflowPendingStarts || reactive(new Map())
-  const visibleWorkflows = computed(() => workflows.value.filter((item) => showArchived.value || !item.archived))
   const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)))
   const selectedSteps = computed(() => form.task_ids.map((id) => {
     const current = candidates.value.find((task) => Number(task.id) === Number(id))
@@ -164,7 +162,7 @@ export function useWorkflows({ isAdmin, me, onSessionExpired, workflowPendingSta
     // definition request must not prevent a valid history query from loading.
     const historyRequest = includeHistory ? loadHistory({ quiet }) : null
     try {
-      const result = await api('/workflows?include_archived=true')
+      const result = await api(includeHistory ? '/workflows?include_archived=true' : '/workflows')
       if (!live() || user !== me.value || session !== sessionSequence || sequence !== listSequence) return
       if (!Array.isArray(result)) throw new Error('流程列表返回格式不完整，请重试读取')
       workflows.value = result
@@ -311,17 +309,21 @@ export function useWorkflows({ isAdmin, me, onSessionExpired, workflowPendingSta
     if (!live() || !isAdmin.value || !confirmation.value || busy.value) return
     const target = confirmation.value
     const stopping = target.type === 'stop'
+    if (!stopping && target.type !== 'delete') return
     busy.value = `${target.type}:${target.id}`
     actionError.value = ''
     notice.value = ''
     const session = sessionSequence
     try {
-      const result = await api(stopping ? `/workflow-runs/${target.id}/stop` : `/workflows/${target.id}/archive`, { method: 'POST', body: '{}' })
+      const result = stopping
+        ? await api(`/workflow-runs/${target.id}/stop`, { method: 'POST', body: '{}' })
+        : await api(`/workflows/${target.id}`, { method: 'DELETE' })
       if (!live() || session !== sessionSequence) return
       confirmation.value = null
+      if (!stopping) pendingStarts.delete(target.id)
       notice.value = stopping
         ? (result.status === 'cancelled' ? `流程运行 #${target.id} 已取消。` : `已请求停止流程运行 #${target.id}，等待当前步骤收尾。`)
-        : '流程已归档，历史记录保留。'
+        : '流程已删除。'
       await refresh(true)
     } catch (error) { if (session === sessionSequence) fail(error, actionError) }
     finally { if (session === sessionSequence) busy.value = '' }
@@ -375,8 +377,8 @@ export function useWorkflows({ isAdmin, me, onSessionExpired, workflowPendingSta
   onActivated(() => { if (!active) { active = true; refresh(true) } })
   onBeforeUnmount(() => { disposed = true; clear() })
   return {
-    workflows, visibleWorkflows, runs, total, page, pageSize, totalPages, loading, definitionsLoaded, refreshing, historyLoading,
-    loadError, historyError, actionError, notice, busy, showArchived, filters, editor, form, formError,
+    workflows, runs, total, page, pageSize, totalPages, loading, definitionsLoaded, refreshing, historyLoading,
+    loadError, historyError, actionError, notice, busy, filters, editor, form, formError,
     candidates, candidatesLoading, candidatesError, selectedTask, selectedSteps, selectedRunId, runDetail,
     detailLoading, detailError, confirmation, pendingStarts,
     refresh, loadHistory, applyFilters, resetFilters, openRun, closeRun, loadRunDetail, openEditor, closeEditor,

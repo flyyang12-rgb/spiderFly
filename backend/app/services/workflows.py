@@ -216,6 +216,31 @@ def archive_definition(conn, workflow_id, actor=None):
     return get_definition(conn, workflow_id)
 
 
+def delete_definition(conn, workflow_id):
+    definition = _definition(conn, workflow_id)
+    params = (workflow_id,)
+    if conn.execute("""SELECT 1 FROM workflow_runs WHERE workflow_id=? AND state IN ('waiting','running','stopping')
+                       UNION ALL SELECT 1 FROM workflow_triggers WHERE workflow_id=? AND state IN ('registered','active')
+                       LIMIT 1""", (workflow_id, workflow_id)).fetchone():
+        raise HTTPException(409, "流程仍在执行或收尾，暂不能删除")
+    runs = "SELECT id FROM workflow_runs WHERE workflow_id=?"
+    steps = conn.execute(f"SELECT id,snapshot,snapshot_storage_dir FROM workflow_steps WHERE run_id IN ({runs})", params).fetchall()
+    folders = []
+    for step in steps:
+        folder = _step_snapshot_folder(step)
+        if folder:
+            # Older steps recorded ownership only inside the frozen snapshot.
+            conn.execute("UPDATE workflow_steps SET snapshot_storage_dir=? WHERE id=?", (str(folder), step['id']))
+            folders.append(str(folder))
+    remove_snapshot_directories(folders, conn=conn, workflow_id=workflow_id)
+    conn.execute(f"DELETE FROM workflow_steps WHERE run_id IN ({runs})", params)
+    conn.execute("DELETE FROM workflow_triggers WHERE workflow_id=?", params)
+    conn.execute("DELETE FROM workflow_runs WHERE workflow_id=?", params)
+    conn.execute("DELETE FROM workflow_members WHERE workflow_id=?", params)
+    conn.execute("DELETE FROM workflows WHERE id=?", params)
+    return definition["name"]
+
+
 def get_definition(conn, workflow_id):
     result = _definition(conn, workflow_id)
     result["archived"] = bool(result["archived"])
@@ -758,6 +783,22 @@ def reconcile(conn=None, recover=False):
         return list(dict.fromkeys(ids))
 
 
+def _step_snapshot_folder(step):
+    try:
+        if step["snapshot_storage_dir"]:
+            folder = _managed_path(step["snapshot_storage_dir"], SNAPSHOT_ROOT, "历史快照目录")
+        elif step["snapshot"]:
+            script = json.loads(step["snapshot"])["script_path_snapshot"]
+            folder = _managed_path(script, SNAPSHOT_ROOT, "历史快照源码").parent
+        else:
+            return None
+        if len(folder.relative_to(SNAPSHOT_ROOT.resolve()).parts) != 2:
+            raise ValueError("不是流程步骤目录")
+        return folder
+    except (ValueError, TypeError, KeyError) as exc:
+        raise RuntimeError("历史流程快照目录无效，已停止删除") from exc
+
+
 def delete_task_history(conn, task_id):
     """Drop ended-step full snapshots, preserving the six-field summary first.
 
@@ -770,15 +811,10 @@ def delete_task_history(conn, task_id):
         raise RuntimeError("任务仍被未结束流程引用，请停止相关流程并确认收尾后删除")
     folders = []
     for item in conn.execute("SELECT id,snapshot,snapshot_storage_dir FROM workflow_steps WHERE task_id=?", (task_id,)).fetchall():
-        if item["snapshot"] or item["snapshot_storage_dir"]:
-            try:
-                folder = _managed_path(item["snapshot_storage_dir"], SNAPSHOT_ROOT, "历史快照目录") if item["snapshot_storage_dir"] else _managed_path(json.loads(item["snapshot"])["script_path_snapshot"], SNAPSHOT_ROOT, "历史快照源码").parent
-                if not folder.is_relative_to(SNAPSHOT_ROOT.resolve()) or folder == SNAPSHOT_ROOT.resolve():
-                    raise ValueError("目录不在管理范围")
-                folders.append(str(folder))
-            except (ValueError, TypeError, KeyError) as exc:
-                raise RuntimeError("历史流程快照目录无效，已停止删除") from exc
-        conn.execute("UPDATE workflow_steps SET snapshot='',snapshot_digest='',snapshot_storage_dir=? WHERE id=?", (str(folder) if item["snapshot"] or item["snapshot_storage_dir"] else "", item["id"]))
+        folder = _step_snapshot_folder(item)
+        if folder:
+            folders.append(str(folder))
+        conn.execute("UPDATE workflow_steps SET snapshot='',snapshot_digest='',snapshot_storage_dir=? WHERE id=?", (str(folder) if folder else "", item["id"]))
     return list(dict.fromkeys(folders))
 
 
@@ -795,7 +831,7 @@ def prepare_task_deletion(task_id):
         return list(dict.fromkeys(ids))
 
 
-def remove_snapshot_directories(directories):
+def remove_snapshot_directories(directories, *, conn=None, workflow_id=None):
     """Remove only recorded ended-step storage beneath our snapshot root."""
     root = SNAPSHOT_ROOT.resolve()
     for value in directories:
@@ -803,18 +839,21 @@ def remove_snapshot_directories(directories):
         # The fixed layout has exactly two components: random round / position.
         if not path.is_relative_to(root) or len(path.relative_to(root).parts) != 2:
             raise RuntimeError("流程快照清理目录不在管理范围")
-        with transaction() as conn:
-            if not has_schema(conn):
+        with _connection(conn) as opened:
+            if not has_schema(opened):
                 raise RuntimeError("流程历史表不存在，无法确认清理归属")
-            rows = conn.execute("SELECT id,run_id FROM workflow_steps WHERE snapshot_storage_dir=?", (str(path),)).fetchall()
+            rows = opened.execute("SELECT id,run_id FROM workflow_steps WHERE snapshot_storage_dir=?", (str(path),)).fetchall()
             if not rows:
                 raise RuntimeError("流程快照目录没有持久归属，已停止清理")
             for item in rows:
-                if _run(conn, item["run_id"])["state"] in ACTIVE:
+                run = _run(opened, item["run_id"])
+                if workflow_id is not None and run["workflow_id"] != workflow_id:
+                    raise RuntimeError("快照目录还被其他流程引用")
+                if run["state"] in ACTIVE:
                     raise RuntimeError("流程快照仍被活动轮次引用")
             if path.is_dir():
                 shutil.rmtree(path)
-            conn.execute("UPDATE workflow_steps SET snapshot_storage_dir='' WHERE snapshot_storage_dir=? AND snapshot=''", (str(path),))
+            opened.execute("UPDATE workflow_steps SET snapshot_storage_dir='' WHERE snapshot_storage_dir=? AND snapshot=''", (str(path),))
         # Random parent contains no full history once all its member files are gone.
         try:
             path.parent.rmdir()

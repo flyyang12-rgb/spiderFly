@@ -15,15 +15,16 @@ const { me, isAdmin, handleSessionExpired, workflowPendingStarts, tasks, tasksLo
   loadAll, resetFilters, openCreate, openAi, openEdit, taskIsActive, viewTaskExecution, runTask, toggleTask,
   deletingTask, rebuildTaskEnvironment, openExecution } = useWorkspaceContext()
 const state = useWorkflows({ isAdmin, me, onSessionExpired: handleSessionExpired, workflowPendingStarts, mode: 'definitions' })
-const { workflows, visibleWorkflows, definitionsLoaded, loadError, loading, refreshing, showArchived, busy, editor, selectedRunId,
+const { workflows, definitionsLoaded, loadError, loading, refreshing, busy, editor, selectedRunId,
   actionError, notice, confirmation, pendingStarts, refresh, openRun, closeRun, openEditor, startWorkflow, askConfirmation, confirmAction } = state
 const refreshBusy = ref(false)
 const filterIsMobile = ref(false)
 const filtersExpanded = ref(false)
-const activeFilterCount = computed(() => Number(taskCenterKind.value !== 'all')
-  + Number(taskCenterKind.value !== 'task' && showArchived.value)
+const hasWorkflows = computed(() => workflows.value.some(flow => !flow.archived))
+const kind = computed(() => definitionsLoaded.value && !hasWorkflows.value ? 'task' : taskCenterKind.value)
+const activeFilterCount = computed(() => Number(hasWorkflows.value && taskCenterKind.value !== 'all')
   + Number(Boolean(filters.name.trim())) + Number(filters.trigger_type !== 'all')
-  + (taskCenterKind.value === 'task' ? Number(filters.enabled !== 'all') + Number(filters.owner !== 'all') : 0))
+  + (kind.value === 'task' ? Number(filters.enabled !== 'all') + Number(filters.owner !== 'all') : 0))
 let filterMedia = null
 function updateFilterViewport(event) { filterIsMobile.value = event.matches }
 onMounted(() => {
@@ -45,20 +46,20 @@ const complete = computed(() => Boolean(tasksLoaded.value && definitionsLoaded.v
 const rows = computed(() => {
   const query = filters.name.trim().toLowerCase()
   const items = []
-  if (taskCenterKind.value !== 'workflow') {
+  if (kind.value !== 'workflow') {
     for (const task of tasks.value) {
       if (query && !String(task.name || '').toLowerCase().includes(query)) continue
       if (filters.trigger_type !== 'all' && task.trigger_type !== filters.trigger_type) continue
-      if (taskCenterKind.value === 'task') {
+      if (kind.value === 'task') {
         if (filters.enabled !== 'all' && Boolean(task.enabled) !== (filters.enabled === 'enabled')) continue
         if (filters.owner !== 'all' && taskOwnerKey(task) !== filters.owner) continue
       }
       items.push({ kind: 'task', id: Number(task.id), key: `task:${task.id}`, object: task })
     }
   }
-  if (taskCenterKind.value !== 'task') {
+  if (kind.value !== 'task') {
     for (const flow of workflows.value) {
-      if (!showArchived.value && flow.archived) continue
+      if (flow.archived) continue
       if (query && !String(flow.name || '').toLowerCase().includes(query)) continue
       const trigger = flow.schedule_enabled ? flow.trigger_type : 'manual'
       if (filters.trigger_type !== 'all' && trigger !== filters.trigger_type) continue
@@ -83,7 +84,6 @@ async function refreshAll() {
 function resetCenterFilters() {
   resetFilters()
   taskCenterKind.value = 'all'
-  showArchived.value = false
 }
 function choosePlan(row) { planTarget.value = { kind: row.kind, id: row.id, created: false } }
 function createdTask() {
@@ -114,14 +114,13 @@ watch(me, (user, previous) => { if (!user || user.id !== previous?.id) { planTar
         <button class="button ghost compact" type="button" :disabled="refreshBusy || refreshing" @click="refreshAll">{{ refreshBusy || refreshing ? '刷新中…' : '刷新' }}</button>
       </div>
       <div id="task-center-filters" class="filter-bar center-filter-bar" :hidden="filterIsMobile && !filtersExpanded">
-        <label class="filter-field"><span>类型</span><select v-model="taskCenterKind"><option value="all">全部</option><option value="task">任务</option><option v-if="visibleWorkflows.length || taskCenterKind === 'workflow'" value="workflow">工作流</option></select></label>
+        <label v-if="hasWorkflows" class="filter-field"><span>类型</span><select v-model="taskCenterKind"><option value="all">全部</option><option value="task">任务</option><option value="workflow">工作流</option></select></label>
         <label class="filter-field"><span>名称</span><input v-model="filters.name" type="search" placeholder="搜索名称" /></label>
         <label class="filter-field"><span>触发方式</span><select v-model="filters.trigger_type"><option value="all">全部</option><option v-for="option in triggerOptions" :key="option.value" :value="option.value">{{ option.label }}</option></select></label>
-        <template v-if="taskCenterKind === 'task'">
+        <template v-if="kind === 'task'">
           <label class="filter-field"><span>启用状态</span><select v-model="filters.enabled"><option value="all">全部状态</option><option value="enabled">已启用</option><option value="disabled">已停用</option></select></label>
           <label class="filter-field"><span>归属人</span><select v-model="filters.owner"><option value="all">全部</option><option v-for="owner in ownerOptions" :key="owner.value" :value="owner.value">{{ owner.label }}</option></select></label>
         </template>
-        <label v-if="workflows.some(flow => flow.archived) && taskCenterKind !== 'task'" class="center-archive-filter"><input v-model="showArchived" type="checkbox" />含已归档工作流</label>
         <div class="filter-actions"><button v-if="!filterIsMobile" class="button secondary compact" type="button" :disabled="refreshBusy || refreshing" @click="refreshAll">{{ refreshBusy || refreshing ? '刷新中…' : '刷新' }}</button><button class="button ghost compact" type="button" @click="resetCenterFilters">清空筛选</button></div>
       </div>
       </div>
@@ -132,7 +131,7 @@ watch(me, (user, previous) => { if (!user || user.id !== previous?.id) { planTar
       <ul v-if="rows.length" class="center-object-list" aria-label="任务与工作流列表">
         <li v-for="row in rows" :key="row.key" :data-object-key="row.key">
           <div class="center-object-main">
-            <div class="center-object-name"><strong>{{ row.object.name }}</strong><span v-if="row.kind === 'workflow'" class="center-kind-badge">工作流</span><span v-if="row.kind === 'workflow' && row.object.archived" class="center-kind-badge">已归档</span></div>
+            <div class="center-object-name"><strong>{{ row.object.name }}</strong><span v-if="row.kind === 'workflow'" class="center-kind-badge">工作流</span></div>
             <p v-if="row.kind === 'workflow' && row.object.description" class="center-description">{{ row.object.description }}</p>
             <div class="center-object-facts">
               <span>运行电脑：{{ row.kind === 'workflow' ? '主控本机' : row.object.target_host_name || '主控本机' }}</span>
@@ -145,7 +144,7 @@ watch(me, (user, previous) => { if (!user || user.id !== previous?.id) { planTar
               <p v-if="row.object.environment_status === 'failed' && row.object.environment_error" class="center-description danger-text">{{ row.object.environment_error }}</p>
             </template>
             <template v-else>
-              <div class="center-object-facts"><span>{{ row.object.archived ? '已归档' : row.object.steps?.some(step => step.available === false) ? '成员不可用' : '成员可用' }}</span><span v-if="row.object.schedule_enabled">下次运行：{{ row.object.next_run_at ? formatTime(row.object.next_run_at) : row.object.trigger_type === 'interval' ? '本次结束后计算' : '未知' }}</span></div>
+              <div class="center-object-facts"><span>{{ row.object.steps?.some(step => step.available === false) ? '成员不可用' : '成员可用' }}</span><span v-if="row.object.schedule_enabled">下次运行：{{ row.object.next_run_at ? formatTime(row.object.next_run_at) : row.object.trigger_type === 'interval' ? '本次结束后计算' : '未知' }}</span></div>
               <ol class="center-flow-steps" aria-label="执行顺序"><li v-for="step in row.object.steps" :key="step.position" :class="{ 'danger-text': step.available === false }"><span>{{ step.position }}</span>{{ step.task_name }}{{ step.available === false ? '（不可用）' : '' }}</li></ol>
             </template>
           </div>
@@ -171,11 +170,11 @@ watch(me, (user, previous) => { if (!user || user.id !== previous?.id) { planTar
             <template v-else>
               <button v-if="row.object.active_run_id" class="button secondary compact" type="button" @click="openRun(row.object.active_run_id)">查看运行</button>
               <button v-else-if="row.object.last_run" class="button ghost compact" type="button" @click="openRun(row.object.last_run.id)">查看最近结果</button>
-              <button v-if="isAdmin && !row.object.archived" class="button secondary compact" type="button" :disabled="Boolean(busy) || (Boolean(row.object.active_run_id) && !pendingStarts.has(row.object.id))" @click="startWorkflow(row.object)">{{ busy === 'start:' + row.object.id ? '正在提交…' : pendingStarts.has(row.object.id) ? '重试启动' : '运行' }}</button>
-              <button v-if="isAdmin && !row.object.archived" class="button ghost compact" type="button" :disabled="Boolean(busy)" @click="openEditor(row.object)">编辑</button>
-              <details class="center-more"><summary>更多</summary><div class="center-more-actions"><button v-if="isAdmin && !row.object.archived" class="button ghost compact" type="button" :disabled="Boolean(busy)" @click="choosePlan(row)">设置定时</button>
+              <button v-if="isAdmin" class="button secondary compact" type="button" :disabled="Boolean(busy) || (Boolean(row.object.active_run_id) && !pendingStarts.has(row.object.id))" @click="startWorkflow(row.object)">{{ busy === 'start:' + row.object.id ? '正在提交…' : pendingStarts.has(row.object.id) ? '重试启动' : '运行' }}</button>
+              <button v-if="isAdmin" class="button ghost compact" type="button" :disabled="Boolean(busy)" @click="openEditor(row.object)">编辑</button>
+              <details class="center-more"><summary>更多</summary><div class="center-more-actions"><button v-if="isAdmin" class="button ghost compact" type="button" :disabled="Boolean(busy)" @click="choosePlan(row)">设置定时</button>
               <button class="button ghost compact" type="button" @click="triggerTarget = row.object">触发记录</button>
-              <button v-if="isAdmin && !row.object.archived" class="button ghost compact archive-button" type="button" :disabled="Boolean(busy) || Boolean(row.object.active_run_id)" @click="askConfirmation({ type: 'archive', id: row.id, name: row.object.name })">归档</button></div></details>
+              <button v-if="isAdmin" class="button ghost compact archive-button" type="button" :disabled="Boolean(busy) || Boolean(row.object.active_run_id)" @click="askConfirmation({ type: 'delete', id: row.id, name: row.object.name })">删除</button></div></details>
             </template>
           </div>
         </li>
@@ -185,10 +184,10 @@ watch(me, (user, previous) => { if (!user || user.id !== previous?.id) { planTar
     <CreationDialog v-if="createObjectOpen && isAdmin" @created="createdTask" />
     <WorkflowEditor v-if="editor" :state="state" />
     <WorkflowRunDetail v-if="selectedRunId && !confirmation" :state="state" :can-manage="isAdmin" @execution="execution" />
-    <WorkflowDialog v-if="confirmation" :title="confirmation.type === 'stop' ? '停止本轮流程' : '归档流程'" :close-disabled="Boolean(busy)" @close="closeConfirmation">
-      <p v-if="confirmation.type === 'stop'">停止「{{ confirmation.name }}」本轮运行。后续步骤立即取消，当前步骤完成收尾后结束本轮。</p><p v-else>归档「{{ confirmation.name }}」。已有历史记录和成员任务保留，归档后不能新建运行。</p>
+    <WorkflowDialog v-if="confirmation" :title="confirmation.type === 'stop' ? '停止本轮流程' : '删除流程'" :close-disabled="Boolean(busy)" @close="closeConfirmation">
+      <p v-if="confirmation.type === 'stop'">停止「{{ confirmation.name }}」本轮运行。后续步骤立即取消，当前步骤完成收尾后结束本轮。</p><p v-else>永久删除「{{ confirmation.name }}」及其流程运行记录？成员任务会保留。</p>
       <div v-if="actionError" class="center-feedback error" role="alert">{{ actionError }}</div>
-      <template #footer><button class="button secondary" type="button" :disabled="Boolean(busy)" @click="closeConfirmation">取消</button><button class="button danger" type="button" :disabled="Boolean(busy)" @click="confirmAction">{{ busy ? '正在提交…' : confirmation.type === 'stop' ? '停止本轮' : '归档流程' }}</button></template>
+      <template #footer><button class="button secondary" type="button" :disabled="Boolean(busy)" @click="closeConfirmation">取消</button><button class="button danger" type="button" :disabled="Boolean(busy)" @click="confirmAction">{{ busy ? '正在提交…' : confirmation.type === 'stop' ? '停止本轮' : '删除流程' }}</button></template>
     </WorkflowDialog>
     <PlanEditor v-if="planTarget" :initial-kind="planTarget.kind" :initial-id="planTarget.id" locked-object :created-context="planTarget.created" @close="planTarget = null" @saved="refreshAll" />
     <WorkflowTriggerHistory v-if="triggerTarget" :workflow="triggerTarget" @close="triggerTarget = null" @run="id => { triggerTarget = null; openRun(id) }" />
@@ -207,7 +206,6 @@ watch(me, (user, previous) => { if (!user || user.id !== previous?.id) { planTar
 .center-filter-bar input, .center-filter-bar select { font-size: var(--workspace-body, 13px); }
 .center-count { color: var(--muted); font-size: var(--workspace-caption, 12px); }
 .center-header-actions, .center-object-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.center-archive-filter { display: flex; gap: 6px; align-items: center; color: var(--muted); font-size: 11px; }
 .center-object-list { margin: 0; padding: 0; list-style: none; }
 .center-object-list > li { display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, 340px); gap: 20px; padding: 16px 18px; border-bottom: 1px solid var(--border-soft); }
 .center-object-list > li:last-child { border-bottom: 0; }
@@ -233,6 +231,6 @@ watch(me, (user, previous) => { if (!user || user.id !== previous?.id) { planTar
 .center-feedback.error { border-color: #f0c2b7; background: var(--coral-soft); color: #ad4935; }
 .center-feedback.success { border-color: #c9e2d2; background: var(--brand-soft); color: var(--brand-strong); }
 @media (max-width: 1000px) { .center-object-list > li { grid-template-columns: minmax(0, 1fr); gap: 12px; } .center-object-actions { justify-content: flex-start; } .center-more[open] summary { margin-left: 0; } .center-more-actions { justify-content: flex-start; } }
-@media (max-width: 720px) { .center-objects > .panel-heading { align-items: flex-start; flex-wrap: wrap; } .center-header-actions { width: 100%; } .center-header-actions .center-archive-filter { margin-right: auto; } }
+@media (max-width: 720px) { .center-objects > .panel-heading { align-items: flex-start; flex-wrap: wrap; } .center-header-actions { width: 100%; } }
 @media (max-width: 420px) { .center-filter-bar > .filter-field { flex-basis: 100%; } .center-object-list > li { padding: 14px; } .center-object-actions { gap: 6px; } }
 </style>
