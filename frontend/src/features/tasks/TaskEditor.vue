@@ -33,7 +33,7 @@ const {
             <div class="editor-disclosure-body"><TaskVersions :key="editingTask.id" :task-id="editingTask.id" /><DependencyDetails :app-id="editingTask.app_id" :remote="Boolean(editingTask.target_host_id)" /></div>
           </details>
         </section>
-        <TaskRunSettings :form="taskForm" :hosts="targetHosts" :hosts-loading="targetHostsLoading" :show-target="isAdmin && !editingTask?.project_entry" :show-notifications="!editingTask?.project_entry" :disabled="saving" :identity="editingTask?.id" @unauthorized="handleSessionExpired" />
+        <TaskRunSettings :form="taskForm" :hosts="targetHosts" :hosts-loading="targetHostsLoading" :show-target="isAdmin" :project="Boolean(editingTask?.project_entry)" :show-notifications="!editingTask?.project_entry" :disabled="saving" :identity="editingTask?.id" @unauthorized="handleSessionExpired" />
       </div>
     </fieldset>
     <template #footer><button class="button secondary" type="button" :disabled="saving" @click="taskModalOpen = false">取消</button><button class="button primary" type="button" :disabled="saving" @click="saveTask">{{ saving ? '正在保存…' : '保存' }}</button></template>

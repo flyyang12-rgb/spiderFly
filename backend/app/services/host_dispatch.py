@@ -19,12 +19,13 @@ from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from fastapi import HTTPException
 
-from .. import database
+from .. import database, project_archive, project_packages
 from ..collection_progress import feed_progress, progress_view
 from ..config import DATA_DIR, SERVER_URL
 
 PROTOCOL_VERSION = 1
-CURRENT_AGENT_VERSION = "0.5.2"
+CURRENT_AGENT_VERSION = "0.5.3"
+PROJECT_AGENT_VERSION = (0, 5, 3)
 MINIMUM_AGENT_VERSION = "0.3.0"
 ENVIRONMENT_AGENT_VERSION = "0.4.0"
 HEARTBEAT_TIMEOUT = 15
@@ -40,6 +41,10 @@ def _version_tuple(value: str) -> tuple[int, int, int] | None:
     if len(parts) != 3 or any(not part.isdigit() for part in parts):
         return None
     return tuple(int(part) for part in parts)
+
+
+def supports_project_zip(agent_version: str) -> bool:
+    return (_version_tuple(agent_version) or (0, 0, 0)) >= PROJECT_AGENT_VERSION
 
 
 def require_compatible_agent(protocol_version: int, agent_version: str) -> None:
@@ -102,6 +107,8 @@ def init_tables() -> None:
                 notification_error TEXT NOT NULL DEFAULT '',
                 controller_url TEXT NOT NULL DEFAULT ''
             )""",
+            """CREATE TABLE IF NOT EXISTS remote_project_archives (
+                digest TEXT PRIMARY KEY, content BLOB NOT NULL)""",
             """CREATE TABLE IF NOT EXISTS remote_events (
                 run_id INTEGER NOT NULL REFERENCES remote_runs(id), seq INTEGER NOT NULL,
                 payload_json TEXT NOT NULL, created_at TEXT NOT NULL,
@@ -140,6 +147,16 @@ def init_tables() -> None:
         from . import agent_updates
         agent_updates.init_tables(conn)
         columns = {row["name"] for row in conn.execute("PRAGMA table_info(remote_runs)")}
+        if 'project_digest' not in columns:
+            conn.execute("ALTER TABLE remote_runs ADD COLUMN project_digest TEXT REFERENCES remote_project_archives(digest)")
+        if 'project_entry' not in columns:
+            conn.execute("ALTER TABLE remote_runs ADD COLUMN project_entry TEXT")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_remote_project_digest ON remote_runs(project_digest) WHERE project_digest IS NOT NULL")
+        conn.execute("""CREATE TRIGGER IF NOT EXISTS release_remote_archive AFTER DELETE ON remote_runs
+            WHEN OLD.project_digest IS NOT NULL BEGIN
+            DELETE FROM remote_project_archives WHERE digest=OLD.project_digest
+            AND NOT EXISTS (SELECT 1 FROM remote_runs WHERE project_digest=OLD.project_digest);
+            END""")
         if 'environment_report_required' not in columns:
             conn.execute('ALTER TABLE remote_runs ADD COLUMN environment_report_required INTEGER NOT NULL DEFAULT 0')
         if "claimed_at" not in columns:
@@ -243,6 +260,7 @@ def public_host(conn, host: dict) -> dict:
     item = {key: value for key, value in host.items() if key not in {'public_key', 'upgrade_token', 'upgrade_expires_at', 'remote_upgrade_id'}}
     item['upgrade_pending'] = _upgrading(host)
     item['current_agent_version'] = CURRENT_AGENT_VERSION
+    item['supports_project_zip'] = supports_project_zip(host['agent_version'])
     item['remote_upgrade_supported'] = bool(host.get('remote_upgrade_ready')) and (_version_tuple(host['agent_version']) or (0, 0, 0)) >= agent_updates.REMOTE_VERSION
     item['agent_update_available'] = (_version_tuple(host['agent_version']) or (0, 0, 0)) < _version_tuple(CURRENT_AGENT_VERSION)
     item['agent_update'] = agent_updates.latest(conn, host['id'])
@@ -470,9 +488,37 @@ def public_run(conn, run: dict) -> dict:
             "offline": "目标宿主机离线", "non_dispatch": "等待主控与本机开启调度，并保持用户已登录",
             "running": "目标宿主机忙碌", "stopping": "等待目标宿主机停止", "uncertain": "等待确认旧任务状态",
         }.get(state, "等待目标宿主机领取")
+    if run["status"] == "queued" and run.get("project_digest") and not supports_project_zip(host["agent_version"]):
+        item["waiting_reason"] = "等待目标电脑升级到 Agent 0.5.3 或更高版本"
     from .. import remote_maintenance
     item["maintenance"] = remote_maintenance.public_for_run(conn, run["id"])
     return item
+
+
+def _script_snapshot(conn, task_id, expected_version_id):
+    try:
+        from .. import maintenance
+        snapshot = json.loads(maintenance.capture_snapshot(conn, task_id))
+        version = conn.execute(
+                "SELECT * FROM task_code_versions WHERE id=? AND task_id=?",
+                (snapshot["code_version_id"], task_id),
+        ).fetchone()
+        if not version:
+            raise ValueError("任务版本不存在")
+        if expected_version_id is not None and version["id"] != expected_version_id:
+            raise HTTPException(409, "当前版本与确认的候选不一致，未创建远程重跑")
+        policy = conn.execute("SELECT runtime FROM maintenance_policies WHERE task_id=?", (task_id,)).fetchone()
+        if policy and policy["runtime"] not in {"native", ""}:
+            raise HTTPException(409, "该任务依赖专用运行环境，目前远程分发仅支持普通 Python 任务")
+        script, requirements = version["source"], version["requirements"]
+        if len(script.encode("utf-8")) > MAX_SCRIPT_BYTES:
+            raise HTTPException(413, "脚本超过 2 MiB 限制")
+    except HTTPException:
+        raise
+    except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
+        raise HTTPException(409, f"任务版本无法冻结：{exc}") from exc
+    digest = hashlib.sha256(script.encode() + b"\0" + requirements.encode()).hexdigest()
+    return script, requirements, version["id"], version["sequence"], digest
 
 
 def create_run_in_transaction(conn, host_id: int, task_id: int, request_id: str, actor: dict,
@@ -502,30 +548,21 @@ def create_run_in_transaction(conn, host_id: int, task_id: int, request_id: str,
         raise HTTPException(404, "任务不存在")
     if task["template_path"]:
         raise HTTPException(409, "首个远程增量暂不支持输入模板，请选择不依赖模板的普通 Python 任务")
-    try:
-        from .. import maintenance
-        snapshot = json.loads(maintenance.capture_snapshot(conn, task_id))
-        version = conn.execute(
-                "SELECT * FROM task_code_versions WHERE id=? AND task_id=?",
-                (snapshot["code_version_id"], task_id),
-        ).fetchone()
-        if not version:
-            raise ValueError("任务版本不存在")
-        if expected_version_id is not None and version["id"] != expected_version_id:
-            raise HTTPException(409, "当前版本与确认的候选不一致，未创建远程重跑")
-        policy = conn.execute("SELECT runtime FROM maintenance_policies WHERE task_id=?", (task_id,)).fetchone()
-        if policy and policy["runtime"] not in {"native", ""}:
-            raise HTTPException(409, "该任务依赖专用运行环境，目前远程分发仅支持普通 Python 任务")
-        script, requirements = version["source"], version["requirements"]
-        if len(script.encode("utf-8")) > MAX_SCRIPT_BYTES:
-            raise HTTPException(413, "脚本超过 2 MiB 限制")
-    except HTTPException:
-        raise
-    except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
-        raise HTTPException(409, f"任务版本无法冻结：{exc}") from exc
+    project = project_packages.for_app(conn, task["app_id"])
+    if project:
+        if expected_version_id is not None:
+            raise HTTPException(409, "项目任务需要整包版本")
+        try:
+            project_packages.freeze_remote_archive(conn, database.RPA_APPS_DIR, project)
+        except (OSError, ValueError) as exc:
+            raise HTTPException(409, f"项目包无法冻结：{exc}") from exc
+        script, requirements = "", task["requirements_text"] or ""
+        version_id, sequence = None, None
+        digest = project_archive.package_hash(project["digest"], project["entry"], requirements)
+    else:
+        script, requirements, version_id, sequence, digest = _script_snapshot(conn, task_id, expected_version_id)
     if len(requirements.encode()) > MAX_REQUIREMENTS_BYTES:
         raise HTTPException(413, "依赖清单超过 128 KiB 限制")
-    digest = hashlib.sha256(script.encode() + b"\0" + requirements.encode()).hexdigest()
     if task['trigger_type'] == 'interval':
         from .interval_schedules import ensure_schema, refresh
         ensure_schema(conn)
@@ -534,13 +571,13 @@ def create_run_in_transaction(conn, host_id: int, task_id: int, request_id: str,
             """INSERT INTO remote_runs(host_id,task_id,task_name,requested_by,request_id,
                trigger_source,scheduled_for,
                code_version_id,version_sequence,script,requirements,package_hash,timeout_seconds,
-               notify_on_failure,controller_url,created_at)
-               VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+               notify_on_failure,controller_url,created_at,project_digest,project_entry)
+               VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (host_id, task_id, task["name"], actor["id"], request_id,
              trigger_source, scheduled_for,
-             version["id"], version["sequence"], script, requirements, digest,
+             version_id, sequence, script, requirements, digest,
              task["timeout_seconds"], int(bool(task["notify_on_failure"])), controller_url[:2000],
-             database.utc_now()),
+             database.utc_now(), project["digest"] if project else None, project["entry"] if project else None),
     )
     _audit(conn, actor, "remote_run_create", host_id, f"分发任务 {task_id}，远程运行 {cursor.lastrowid}")
     return public_run(conn, _run_row(conn, cursor.lastrowid))
@@ -642,7 +679,9 @@ def heartbeat(host_id: int, payload: dict) -> dict:
                 and host["approval_status"] == "approved"
                 and host["dispatch_enabled"] and host["agent_dispatch_enabled"] and host["interactive_session"]
                 and not _upgrading(host)):
-            row = conn.execute("SELECT id FROM remote_runs WHERE host_id=? AND status='queued' ORDER BY id LIMIT 1", (host_id,)).fetchone()
+            row = conn.execute("""SELECT id FROM remote_runs WHERE host_id=? AND status='queued'
+                AND (project_digest IS NULL OR ?) ORDER BY id LIMIT 1""",
+                (host_id, supports_project_zip(host["agent_version"]))).fetchone()
             if row:
                 active_id = row["id"]
                 conn.execute("UPDATE remote_runs SET status='preparing' WHERE id=?", (active_id,))
@@ -664,6 +703,8 @@ def claim_run(host_id: int, run_id: int) -> dict:
     with database.transaction() as conn:
         host = host_row(conn, host_id)
         run = _run_row(conn, run_id, host_id)
+        if run.get("project_digest") and not supports_project_zip(host["agent_version"]):
+            raise HTTPException(409, "项目任务需要 Agent 0.5.3 或更高版本")
         if _upgrading(host):
             raise HTTPException(409, 'Agent 正在升级，暂缓领取新任务')
         if host["approval_status"] != "approved" or host["active_run_id"] != run_id:
@@ -684,19 +725,46 @@ def claim_run(host_id: int, run_id: int) -> dict:
                 'environment_report_version': 1}
 
 
+def _leased_package(conn, host_id, run_id):
+    host = host_row(conn, host_id)
+    run = _run_row(conn, run_id, host_id)
+    if host["approval_status"] != "approved" or host["active_run_id"] != run_id:
+        raise HTTPException(409, "任务未领取或已停止，不能下载任务包")
+    if run["stop_requested"]:
+        # The admin may stop after the offer but before this download. Give
+        # the owning Agent an explicit cancellation, without executable code.
+        return None
+    if run["claimed_at"] is None or run["status"] not in {"preparing", "running"}:
+        raise HTTPException(409, "运行状态待确认或已结束，不能下载任务包")
+    if run.get("project_digest") and not supports_project_zip(host["agent_version"]):
+        raise HTTPException(409, "项目任务需要 Agent 0.5.3 或更高版本")
+    return run
+
+
 def package(host_id: int, run_id: int) -> dict:
     with database.transaction() as conn:
-        host = host_row(conn, host_id)
-        run = _run_row(conn, run_id, host_id)
-        if host["approval_status"] != "approved" or host["active_run_id"] != run_id:
-            raise HTTPException(409, "任务未领取或已停止，不能下载任务包")
-        if run["stop_requested"]:
-            # The admin may stop after the offer but before this download. Give
-            # the owning Agent an explicit cancellation, without executable code.
+        run = _leased_package(conn, host_id, run_id)
+        if run is None:
             return {"stop_requested": True}
-        if run["claimed_at"] is None or run["status"] not in {"preparing", "running"}:
-            raise HTTPException(409, "运行状态待确认或已结束，不能下载任务包")
+        if run["project_digest"]:
+            row = conn.execute("SELECT length(content) FROM remote_project_archives WHERE digest=?",
+                               (run["project_digest"],)).fetchone()
+            if row is None:
+                raise HTTPException(409, "冻结的项目包不存在")
+            return {"project": {"digest": run["project_digest"], "entry": run["project_entry"], "size": row[0]},
+                    "requirements": run["requirements"], "package_hash": run["package_hash"]}
         return {key: run[key] for key in ("script", "requirements", "package_hash")}
+
+
+def project_content(host_id: int, run_id: int) -> bytes:
+    with database.transaction() as conn:
+        run = _leased_package(conn, host_id, run_id)
+        if run is None or not run["project_digest"]:
+            raise HTTPException(409, "此运行没有可下载的项目包")
+        row = conn.execute("SELECT content FROM remote_project_archives WHERE digest=?", (run["project_digest"],)).fetchone()
+        if row is None:
+            raise HTTPException(409, "冻结的项目包不存在")
+        return row[0]
 
 
 def _upgrading(host: dict) -> bool:

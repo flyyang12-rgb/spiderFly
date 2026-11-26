@@ -222,7 +222,8 @@ def register_due(task_id: int, now: str | datetime | None = None,
         at = _time(now)
         from ..project_packages import for_app
         trigger_type = task["trigger_type"]
-        fixed_project = trigger_type in {"daily", "weekly", "monthly"} and for_app(opened, task.get("app_id"))
+        fixed_project = (task.get("target_host_id") is None and trigger_type in {"daily", "weekly", "monthly"}
+                         and for_app(opened, task.get("app_id")))
         if (task.get("archived") or not task.get("enabled") or (trigger_type != "cron" and not fixed_project)
             or not task.get('first_environment_ready', 1)
             or (expected_version is not None and task["version"] != expected_version)

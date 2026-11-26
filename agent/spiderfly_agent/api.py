@@ -43,24 +43,27 @@ class Api:
                 'X-SpiderFly-Nonce': nonce, 'X-SpiderFly-Signature': base64.b64encode(
                     self.key.sign(canonical(timestamp, nonce, method, unquote(path), body))).decode('ascii')}
 
-    def download(self, path: str, destination: Path, *, size: int, sha256: str):
-        if not 0 < size <= 16 * 1024 * 1024:
-            raise ValueError('升级包大小无效')
+    def download(self, path: str, destination: Path, *, size: int, sha256: str,
+                 max_size: int = 16 * 1024 * 1024, check_cancel=None):
+        if not 0 < size <= max_size:
+            raise ValueError('下载包大小无效')
         temporary = destination.with_suffix('.partial')
         try:
             with self.session.request('GET', self.server + path, headers=self.signed_headers('GET', path),
                                       timeout=(5, 15), allow_redirects=False, stream=True) as response:
                 if response.status_code != 200:
-                    raise ApiError(response.status_code, '升级包下载失败')
+                    raise ApiError(response.status_code, '下载包下载失败')
                 digest = hashlib.sha256();received = 0
                 with temporary.open('wb') as stream:
                     for chunk in response.iter_content(64 * 1024):
+                        if check_cancel:
+                            check_cancel()
                         received += len(chunk)
                         if received > size:
-                            raise ValueError('升级包超过授权大小')
+                            raise ValueError('下载包超过授权大小')
                         digest.update(chunk);stream.write(chunk)
                 if received != size or digest.hexdigest() != sha256:
-                    raise ValueError('升级包校验失败')
+                    raise ValueError('下载包校验失败')
                 os.replace(temporary, destination)
         finally:
             temporary.unlink(missing_ok=True)

@@ -182,6 +182,19 @@ def reconcile_schedules() -> None:
         execute("UPDATE tasks SET next_run_at = ? WHERE id = ?", (next_run, task["id"]))
 
 
+def _queue_remote_project_slot(task, now):
+    from .database import transaction
+    from .services.host_dispatch import dispatch_scheduled_in_transaction
+
+    next_run = compute_next_run(task["trigger_type"], decode_trigger_config(task["trigger_config"]), after=now)
+    with transaction() as conn:
+        changed = conn.execute("""UPDATE tasks SET next_run_at=?, last_triggered_at=?, updated_at=?
+            WHERE id=? AND version=? AND next_run_at=? AND target_host_id=? AND enabled=1 AND archived=0""",
+            (next_run, task["next_run_at"], now, task["id"], task["version"], task["next_run_at"], task["target_host_id"]))
+        if changed.rowcount:
+            dispatch_scheduled_in_transaction(conn, task["id"])
+
+
 async def scheduler_loop(enqueue: Callable[[int, str], Awaitable[int]]) -> None:
     while True:
         now = utc_now()
@@ -213,8 +226,15 @@ async def scheduler_loop(enqueue: Callable[[int, str], Awaitable[int]]) -> None:
             (now,),
         )
         for task in due_tasks:
+            if task.get("project_schedule") and task["target_host_id"] is not None and task["trigger_type"] != "cron":
+                try:
+                    await asyncio.to_thread(_queue_remote_project_slot, task, now)
+                except Exception:
+                    logger.exception("项目任务 %s 未能在目标电脑入队，保留本次计划点", task["id"])
+                continue
             if task["trigger_type"] == "cron" or (
                 task["trigger_type"] in {"daily", "weekly", "monthly"} and task.get("project_schedule")
+                and task["target_host_id"] is None
             ):
                 try:
                     await asyncio.to_thread(

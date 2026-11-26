@@ -88,13 +88,13 @@ onUnmounted(() => { disposed = true; cancel(); wipeSecrets(); form.app_id = ''; 
     <form class="service-config-form" @submit.prevent="save">
       <template v-if="canEdit && !saved?.read_only">
         <template v-if="form.mode === 'webhook'">
-          <label class="field"><span>Webhook 地址</span><input v-model="form.webhook_url" type="password" autocomplete="off" spellcheck="false" maxlength="2048" :disabled="!loaded || pending" :placeholder="saved?.webhook_url_configured ? '留空保留当前地址' : '粘贴群机器人的 Webhook 地址'" /></label>
-          <label class="field"><span>签名密钥 <small>可选</small></span><input v-model="form.webhook_secret" type="password" autocomplete="new-password" spellcheck="false" maxlength="500" :disabled="!loaded || pending || form.clear_webhook_secret" :placeholder="saved?.webhook_secret_configured ? '留空保留当前密钥' : '未开启签名校验可留空'" /></label>
+          <label class="field credential-field"><span>Webhook 地址</span><input v-model="form.webhook_url" type="password" autocomplete="off" spellcheck="false" maxlength="2048" :disabled="!loaded || pending" :placeholder="saved?.webhook_url_configured ? '留空保留当前地址' : '粘贴群机器人的 Webhook 地址'" /></label>
+          <label class="field credential-field"><span>签名密钥 <small>可选</small></span><input v-model="form.webhook_secret" type="password" autocomplete="new-password" spellcheck="false" maxlength="500" :disabled="!loaded || pending || form.clear_webhook_secret" :placeholder="saved?.webhook_secret_configured ? '留空保留当前密钥' : '未开启签名校验可留空'" /></label>
           <label v-if="saved?.webhook_secret_configured" class="clear-signature"><input v-model="form.clear_webhook_secret" type="checkbox" :disabled="pending" />清除已保存的签名密钥</label>
         </template>
         <template v-else>
-          <label class="field"><span>App ID</span><input v-model="form.app_id" autocomplete="off" spellcheck="false" maxlength="200" :disabled="!loaded || pending" /></label>
-          <label class="field"><span>App Secret</span><input v-model="form.app_secret" type="password" autocomplete="new-password" spellcheck="false" maxlength="500" :disabled="!loaded || pending" :placeholder="saved?.app_secret_configured ? '留空保留当前密钥' : '输入应用密钥'" /></label>
+          <label class="field credential-field"><span>App ID</span><input v-model="form.app_id" autocomplete="off" spellcheck="false" maxlength="200" :disabled="!loaded || pending" /></label>
+          <label class="field credential-field"><span>App Secret</span><input v-model="form.app_secret" type="password" autocomplete="new-password" spellcheck="false" maxlength="500" :disabled="!loaded || pending" :placeholder="saved?.app_secret_configured ? '留空保留当前密钥' : '输入应用密钥'" /></label>
           <div class="recipient-row">
             <label class="field"><span>收件人类型</span><select v-model="form.receiver_id_type" :disabled="!loaded || pending"><option value="mobile">手机号</option><option value="open_id">Open ID</option></select></label>
             <label class="field"><span>{{ form.receiver_id_type === 'open_id' ? '收件人 Open ID' : '收件人手机号' }}</span><input v-model="form.receiver_id" :inputmode="form.receiver_id_type === 'mobile' ? 'tel' : 'text'" autocomplete="off" spellcheck="false" maxlength="200" :disabled="!loaded || pending" /></label>

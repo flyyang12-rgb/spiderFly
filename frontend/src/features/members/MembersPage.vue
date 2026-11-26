@@ -109,7 +109,7 @@ function hideCreate() {
 .member-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 12px; min-height: 80px; padding: 16px 0; }
 .member-row + .member-row { border-top: 1px solid var(--border, #ecefec); }
 .member-identity { display: grid; min-width: 0; gap: 4px; }
-.member-identity strong { color: var(--ink, #221814); font-size: var(--workspace-item-title, 14px); overflow-wrap: anywhere; }
+.member-identity strong { color: var(--ink); font-size: var(--workspace-body); font-weight: 550; overflow-wrap: anywhere; }
 .member-identity small, .member-row-actions > small { color: var(--muted, #757a75); font-size: var(--workspace-caption, 12px); overflow-wrap: anywhere; }
 .member-row-actions { display: flex; align-items: center; gap: 8px; }
 .member-row-actions > small { margin-right: 8px; }

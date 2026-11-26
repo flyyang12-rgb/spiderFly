@@ -16,6 +16,7 @@ export const activeRunStates = new Set(['queued', 'preparing', 'running', 'stopp
 
 export function useHosts({ onSessionExpired }) {
   const hosts = ref([])
+  const viewer = ref(null)
   const runs = ref([])
   const loading = ref(true)
   const refreshing = ref(false)
@@ -82,20 +83,41 @@ export function useHosts({ onSessionExpired }) {
     }, runs.value.some((run) => activeRunStates.has(run.status)) ? 2500 : 5000)
   }
 
+  async function loadOlderTaskName(host) {
+    // An active run can be older than the 100 entries in the history response.
+    try {
+      const run = await request(`/remote-runs/${host.active_run_id}`)
+      host.active_task_name = run.task_name
+    } catch (error) {
+      if (!disposed && error.status === 401) onSessionExpired()
+      // Keep the run link usable and retry the name on the next refresh.
+    }
+  }
+
   async function refresh(quiet = false) {
     const sequence = ++refreshSequence
     if (!quiet) refreshing.value = true
     try {
       const [hostResult, runResult] = await Promise.all([
-        request('/hosts'), request('/remote-runs'),
+        request('/hosts?with_viewer=true'), request('/remote-runs'),
       ])
       if (disposed || sequence !== refreshSequence) return
-      hosts.value = hostResult
+      const names = new Map(hosts.value.map(host => [host.active_run_id, host.active_task_name]))
+      for (const run of runResult) names.set(run.id, run.task_name)
+      // Older controllers return the original array and cannot identify the viewer.
+      const rows = Array.isArray(hostResult) ? hostResult : hostResult.hosts
+      hosts.value = rows.map(host => ({ ...host, active_task_name: names.get(host.active_run_id) }))
+      viewer.value = hostResult.viewer || null
       runs.value = runResult
       loadError.value = ''
+      loading.value = false
       if (selectedRunId.value != null) await loadRunDetail(selectedRunId.value, true)
+      await Promise.all(hosts.value.filter(host => host.active_run_id && !host.active_task_name).map(loadOlderTaskName))
     } catch (error) {
-      if (sequence === refreshSequence) fail(error, loadError)
+      if (sequence === refreshSequence) {
+        viewer.value = null
+        fail(error, loadError)
+      }
     } finally {
       if (sequence === refreshSequence) {
         loading.value = false
@@ -142,7 +164,10 @@ export function useHosts({ onSessionExpired }) {
 
   async function upgradeHost(host) {
     if (['succeeded', 'failed', 'expired', 'cancelled'].includes(host.agent_update?.status)) upgradeRequests.delete(host.id)
-    if (!upgradeRequests.has(host.id)) upgradeRequests.set(host.id, crypto.randomUUID().replaceAll('-', ''))
+    if (!upgradeRequests.has(host.id)) {
+      const bytes = crypto.getRandomValues(new Uint8Array(16))
+      upgradeRequests.set(host.id, Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join(''))
+    }
     const result = await perform(`upgrade:${host.id}`, () => request(`/hosts/${host.id}/upgrade`, {
       method: 'POST', body: JSON.stringify({ request_id: upgradeRequests.get(host.id) }),
     }), '升级请求已提交。')
@@ -184,7 +209,7 @@ export function useHosts({ onSessionExpired }) {
   })
 
   return {
-    hosts, runs, loading, refreshing, loadError, actionError, notice, busy, enrollment,
+    hosts, viewer, runs, loading, refreshing, loadError, actionError, notice, busy, enrollment,
     selectedRunId, runDetail, detailLoading, detailError,
     refresh, createEnrollment, hostAction, deleteHost, upgradeHost, setMode, stopRun,
     activateCandidate, dismissCandidate,

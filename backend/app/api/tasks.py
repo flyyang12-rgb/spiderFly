@@ -230,9 +230,6 @@ def update_task(
                 except ValueError as exc:
                     raise HTTPException(400, str(exc)) from exc
             if "target_host_id" in values:
-                from ..project_packages import for_app
-                if values['target_host_id'] is not None and for_app(conn, final_app_id):
-                    raise HTTPException(400, '项目任务只支持主控本机')
                 validate_target_host(conn, values["target_host_id"])
             current_app = conn.execute(
                 "SELECT id FROM rpa_apps WHERE id = ? AND archived = 0",

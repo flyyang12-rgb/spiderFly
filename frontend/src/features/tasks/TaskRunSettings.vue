@@ -6,7 +6,7 @@ const props = defineProps({
   form: { type: Object, required: true }, hosts: { type: Array, default: () => [] },
   hostsLoading: Boolean, disabled: Boolean, showTarget: { type: Boolean, default: true },
   showNotifications: { type: Boolean, default: true },
-  creating: Boolean, identity: { type: [String, Number], default: '' },
+  project: Boolean, creating: Boolean, identity: { type: [String, Number], default: '' },
 })
 const emit = defineEmits(['unauthorized'])
 const notificationSummary = computed(() => [props.form.notify_on_success && '成功', props.form.notify_on_failure && '失败'].filter(Boolean).join('、') || '未开启')
@@ -20,7 +20,8 @@ const notificationSummary = computed(() => [props.form.notify_on_success && '成
         <option value="">主控本机</option>
         <option v-for="host in hosts" :key="host.id" :value="String(host.id)" :disabled="host.approval_status !== 'approved'">{{ host.name }}{{ host.approval_status === 'approved' ? '' : '（不可用）' }}</option>
       </select>
-      <small v-if="form.target_host_id">离线或忙碌时排队。</small>
+      <small v-if="project && hosts.some(host => String(host.id) === String(form.target_host_id) && !host.supports_project_zip)">可先保存计划。目标电脑升级到 Agent 0.5.3 后开始领取项目。</small>
+      <small v-else-if="form.target_host_id">离线或忙碌时排队。</small>
     </label>
     <PlanFields :form="form" :remote="Boolean(form.target_host_id)" :disabled="disabled" :identity="identity" @unauthorized="emit('unauthorized')" />
     <div class="editor-enable-row">

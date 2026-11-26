@@ -10,6 +10,7 @@ from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from ..security import admin_user, super_admin_user
+from . import host_presence
 from ..services import agent_updates
 from ..services import host_dispatch as service
 
@@ -139,8 +140,12 @@ def parse(model, body: bytes) -> dict:
 
 
 @router.get("/api/hosts")
-def hosts(user: dict = Depends(admin_user)):
-    return service.list_hosts()
+def hosts(request: Request, response: Response, with_viewer: bool = False, user: dict = Depends(admin_user)):
+    rows = service.list_hosts()
+    if with_viewer:
+        response.headers["Cache-Control"] = "private, no-store"
+        return {"hosts": rows, "viewer": host_presence.viewer(request, rows)}
+    return rows
 
 
 @router.get('/api/agent/registration')
@@ -256,7 +261,9 @@ async def register(request: Request):
 @router.post("/api/agent/heartbeat")
 async def heartbeat(request: Request):
     host_id, body = await signed(request, 4096)
-    return service.heartbeat(host_id, parse(Heartbeat, body))
+    result = service.heartbeat(host_id, parse(Heartbeat, body))
+    host_presence.heartbeat(request, host_id)
+    return result
 
 
 @router.post('/api/agent/upgrade-pause')
@@ -275,6 +282,14 @@ async def upgrade_resume(request: Request):
 async def package(run_id: int, request: Request):
     host_id, _ = await signed(request, 0)
     return service.package(host_id, run_id)
+
+
+@router.get("/api/agent/runs/{run_id}/project.zip")
+async def project_download(run_id: int, request: Request):
+    host_id, _ = await signed(request, 0)
+    from starlette.concurrency import run_in_threadpool
+    content = await run_in_threadpool(service.project_content, host_id, run_id)
+    return Response(content, media_type="application/zip", headers={"Cache-Control": "no-store"})
 
 
 @router.post("/api/agent/runs/{run_id}/claim")

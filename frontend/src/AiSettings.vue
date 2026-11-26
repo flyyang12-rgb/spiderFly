@@ -197,10 +197,10 @@ onUnmounted(() => {
 
 <template>
   <section class="panel ai-settings" :aria-busy="pending">
-    <header class="panel-heading service-config-heading"><h2>API 密钥配置</h2><span class="mini-badge" :class="configured ? 'success-badge' : 'neutral-badge'">{{ configured ? '已配置' : '未配置' }}</span></header>
+    <header class="panel-heading service-config-heading"><h2><span class="api-prefix">API</span> 密钥配置</h2><span class="mini-badge" :class="configured ? 'success-badge' : 'neutral-badge'">{{ configured ? '已配置' : '未配置' }}</span></header>
     <form class="service-config-form" @submit.prevent="save">
       <template v-if="canEdit">
-        <label class="field"><span>DeepSeek API 密钥{{ environmentKey ? '（环境配置）' : '' }}</span><input v-model="form.api_key" :disabled="!loaded || operation === 'save' || environmentKey" type="text" autocomplete="off" spellcheck="false" maxlength="500" :placeholder="configured ? '留空保留当前密钥' : '输入 API 密钥'" /></label>
+        <label class="field credential-field"><span>DeepSeek API 密钥{{ environmentKey ? '（环境配置）' : '' }}</span><input v-model="form.api_key" :disabled="!loaded || operation === 'save' || environmentKey" type="text" autocomplete="off" spellcheck="false" maxlength="500" :placeholder="configured ? '留空保留当前密钥' : '输入 API 密钥'" /></label>
         <div class="ai-model-row">
           <label class="field"><span>默认模型</span><select v-model="form.model" :disabled="!catalogVerified || pending || !loaded"><option value="" disabled>请先获取模型列表</option><option v-if="form.model && !models.includes(form.model)" :value="form.model" disabled>{{ form.model }}（需刷新列表）</option><option v-for="model in models" :key="model" :value="model">{{ model }}</option></select></label>
           <button class="button secondary" type="button" :disabled="!canFetch" @click="fetchModels">{{ operation === 'models' ? '正在获取…' : '获取模型列表' }}</button>
@@ -215,12 +215,14 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+.api-prefix { color: var(--muted); font-size: 14px; font-weight: 500; }
 .ai-model-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: end;
   gap: 10px;
 }
+.ai-model-row > .button { min-height: var(--field-height); }
 .ai-setting-message { margin: 0; color: var(--brand-strong); font-size: var(--workspace-caption); overflow-wrap: anywhere; }
 .ai-setting-message.failed { color: #a13a2d; }
 .ai-current-config { display: grid; gap: 16px; }

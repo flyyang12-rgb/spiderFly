@@ -63,7 +63,7 @@ def _enqueue_task_in_transaction(task_id, source, requested_by, conn, round_id=N
         raise HTTPException(status_code=409, detail="自动化程序不存在或已经移除")
     project = project_packages.for_app(conn, task['current_app_id'])
     if project and task['target_host_id'] is not None:
-        raise HTTPException(409, '项目任务只支持主控本机')
+        raise HTTPException(409, '任务已绑定远程电脑，不能在主控本机运行')
     app_item = dict(task)
     app_item['script_path'] = task['current_script_path']
     try:

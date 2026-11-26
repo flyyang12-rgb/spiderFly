@@ -136,19 +136,21 @@ onActivated(() => { if (suspended) { suspended = false; loadExecutionHistory() }
                 >
               </td>
               <td>
-                <div class="primary-cell">
-                  <strong>{{ item.task_name }}</strong
-                  ><small>#{{ item.id }}</small>
+                <div class="history-task">
+                  <strong :title="item.task_name">{{ item.task_name }}</strong>
+                  <small>#{{ item.id }}</small>
                 </div>
               </td>
               <td>
-                <span class="person-chip">{{ requesterName(item).slice(0, 1) }}</span
-                >{{ requesterName(item) }}
+                <span class="history-requester">
+                  <span class="person-chip" aria-hidden="true">{{ requesterName(item).slice(0, 1) }}</span>
+                  <span :title="requesterName(item)">{{ requesterName(item) }}</span>
+                </span>
               </td>
               <td>{{ sourceLabel(item.trigger_source) }}</td>
-              <td class="history-time"><span v-for="(part, index) in formatTime(item.created_at).split(' ')" :key="index">{{ part }}</span></td>
-              <td class="history-time"><span v-for="(part, index) in formatTime(item.ended_at || item.finished_at || item.completed_at).split(' ')" :key="index">{{ part }}</span></td>
-              <td>{{ formatDuration(item.duration_ms) }}</td>
+              <td class="history-time">{{ formatTime(item.created_at) }}</td>
+              <td class="history-time">{{ formatTime(item.ended_at || item.finished_at || item.completed_at) }}</td>
+              <td class="history-duration">{{ formatDuration(item.duration_ms) }}</td>
               <td>{{ notificationLabel(item.notification_status) }}</td>
               <td class="align-right">
                 <button class="text-button" type="button" @click.stop="openExecution(item)">查看详情</button>
@@ -208,10 +210,24 @@ onActivated(() => { if (suspended) { suspended = false; loadExecutionHistory() }
 .view-stack, .table-panel { min-width: 0; max-width: 100%; }
 .execution-history-error { margin: 0 18px 16px; flex-wrap: wrap; overflow-wrap: anywhere; }
 .execution-history-error > span { min-width: 0; }
-.table-wrap { min-width: 0; width: 100%; max-width: 100%; overflow-x: auto; overscroll-behavior-x: contain; }
+.table-wrap { container-type: inline-size; min-width: 0; width: 100%; max-width: 100%; overflow-x: auto; overscroll-behavior-x: contain; }
 .execution-history-table { min-width: 900px; table-layout: auto; }
-.execution-history-table td:nth-child(1), .execution-history-table td:nth-child(4), .execution-history-table td:nth-child(7), .execution-history-table td:nth-child(8), .execution-history-table td:nth-child(9) { white-space: nowrap; overflow-wrap: normal; word-break: normal; }
-.execution-history-table .history-time > span { display: block; white-space: nowrap; overflow-wrap: normal; word-break: normal; }
-.execution-history-table .primary-cell strong { overflow-wrap: anywhere; }
+.execution-history-table th, .execution-history-table td { padding-inline: 12px; white-space: nowrap; }
+.execution-history-table th { font-size: 12px; font-weight: 500; }
+.execution-history-table td { height: 46px; font-size: 13px; }
+.history-task, .history-requester { display: inline-flex; align-items: center; gap: 6px; vertical-align: middle; }
+.history-task { max-width: clamp(180px, 18vw, 290px); }
+.history-task strong, .history-requester > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.history-task strong { color: var(--ink); font-size: 14px; font-weight: 500; }
+.history-task small { flex: none; color: var(--muted); font-size: 12px; }
+.history-requester { max-width: 11em; }
+.history-requester .person-chip { flex: none; margin-right: 0; }
+.history-time, .history-duration, .history-task small { font-variant-numeric: tabular-nums; }
+.history-time { color: var(--muted); }
+@container (max-width: 1100px) {
+  .execution-history-table th, .execution-history-table td { padding-inline: 8px; }
+  .history-task { max-width: 185px; }
+  .history-requester { max-width: 7.5em; }
+}
 @media (max-width: 720px) { .panel-heading, .pagination-bar { flex-wrap: wrap; } }
 </style>

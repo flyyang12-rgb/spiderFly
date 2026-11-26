@@ -170,8 +170,8 @@ async def create_app(
         project = None
         project_content = None
         if project_archive is not None:
-            if not project_entry or target_host_id is not None or template is not None:
-                raise ValueError("项目任务需要指定入口，运行电脑为主控本机，模板随项目上传")
+            if not project_entry or template is not None:
+                raise ValueError("请选择项目入口，模板随项目上传")
             project_content = await project_archive.read(project_packages.MAX_ARCHIVE_BYTES + 1)
             try:
                 project = await asyncio.to_thread(project_packages.inspect, project_content, project_entry)

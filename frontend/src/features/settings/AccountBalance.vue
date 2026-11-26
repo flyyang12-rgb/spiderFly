@@ -99,7 +99,7 @@ function checkedTime(value) {
 .account-balance h3 { margin: 0; color: var(--text); font-size: var(--workspace-body); font-weight: 500; }
 .balance-summary { display: flex; align-items: center; gap: 10px; }
 .balance-summary span { color: var(--muted); font-size: var(--workspace-caption); overflow-wrap: anywhere; }
-.balance-summary .button { min-width: 104px; margin-left: auto; }
+.balance-summary .button { min-width: 104px; min-height: var(--field-height, 38px); margin-left: auto; }
 .balance-status, .balance-error { margin: 0; font-size: var(--workspace-caption); overflow-wrap: anywhere; }
 .balance-status.unavailable { color: #8b4e25; }
 .balance-error { color: #a13a2d; }

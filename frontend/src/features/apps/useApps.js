@@ -57,7 +57,6 @@ export function useApps({ aiOpen, aiSourceThread, aiTaskId, appForm, isAdmin, lo
     if (!appForm.name && file) appForm.name = file.name.replace(/\.(py|zip)$/i, '')
     uploadError.value = ''
     if (!file || !/\.zip$/i.test(file.name)) return
-    appForm.target_host_id = ''
     appForm.dependency_status = ''
     appForm.project_loading = true
     const body = new FormData()

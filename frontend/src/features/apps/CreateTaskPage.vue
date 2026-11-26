@@ -40,11 +40,11 @@ function submit() { if (props.embedded) emit('submit'); else uploadApp() }
                   <option value="" disabled>{{ appForm.project_loading ? '正在读取项目文件…' : '选择要启动的 Python 文件' }}</option>
                   <option v-for="entry in appForm.project_entries" :key="entry" :value="entry">{{ entry }}</option>
                 </select>
-                <small>读取项目根目录的 requirements.txt。在主控本机运行。</small>
+                <small>依赖从项目根目录的 requirements.txt 读取。</small>
               </label>
               <DependencyFields v-else :key="uploadKey" :script="appForm.script" v-model:requirements="appForm.requirements_text" v-model="appForm.dependency_decisions" :target="appForm.target_host_id" :disabled="disabled || uploading || uploadUncertain" @state="appForm.dependency_status = $event.status" @unauthorized="handleSessionExpired" />
             </section>
-            <TaskRunSettings :form="appForm" :hosts="targetHosts" :hosts-loading="targetHostsLoading" :show-target="!project" :show-notifications="!project" :disabled="disabled || uploading || uploadUncertain" :identity="uploadKey" creating @unauthorized="handleSessionExpired" />
+            <TaskRunSettings :form="appForm" :hosts="targetHosts" :hosts-loading="targetHostsLoading" :project="project" :show-notifications="!project" :disabled="disabled || uploading || uploadUncertain" :identity="uploadKey" creating @unauthorized="handleSessionExpired" />
           </div>
         </fieldset>
         <div v-if="!embedded" class="upload-actions"><button class="button primary" type="submit" :disabled="uploading || uploadUncertain || requirementsReading || Boolean(appForm.dependency_status && !['ready','idle'].includes(appForm.dependency_status))">{{ uploading ? '正在创建…' : '创建任务' }}</button></div>

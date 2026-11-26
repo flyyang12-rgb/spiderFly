@@ -28,7 +28,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from app import database, main, maintenance, remote_maintenance, security
-from app.api import hosts as hosts_api, tasks as tasks_api
+from app.api import host_presence, hosts as hosts_api, tasks as tasks_api
 from app.services import host_dispatch
 
 
@@ -36,6 +36,8 @@ class HostApiTests(unittest.TestCase):
     def setUp(self):
         self.stack = ExitStack()
         self.addCleanup(self.stack.close)
+        self.stack.enter_context(patch.object(host_presence, "_recent", {}))
+        self.client_ip = "127.0.0.1"
         self.root = Path(self.stack.enter_context(tempfile.TemporaryDirectory()))
         for attribute, value in {
             "DATA_DIR": self.root,
@@ -97,7 +99,7 @@ class HostApiTests(unittest.TestCase):
 
         async def send():
             async with httpx.AsyncClient(
-                transport=httpx.ASGITransport(app=main.app), base_url="http://testserver"
+                transport=httpx.ASGITransport(app=main.app, client=(self.client_ip, 12345)), base_url="http://testserver"
             ) as client:
                 return await client.request(method, path, content=raw or b"", headers=actual_headers)
 
@@ -169,6 +171,32 @@ class HostApiTests(unittest.TestCase):
             **changes,
         }
         return self.success(self.agent(host_id, "POST", "/api/agent/heartbeat", payload))
+
+    def test_current_computer_follows_browser_address_not_admin_session(self):
+        def viewer(**kwargs):
+            response = self.request("GET", "/api/hosts?with_viewer=true", **kwargs)
+            self.assertIn("no-store", response.headers["cache-control"])
+            return self.success(response)["viewer"]
+
+        self.assertEqual(viewer(), {"kind": "controller"})
+        first, second = self.register(), self.register()
+        self.client_ip = "192.168.7.20"
+        self.heartbeat(first)
+        self.client_ip = "192.168.7.21"
+        self.heartbeat(second)
+        self.assertEqual(viewer(), {"kind": "agent", "host_id": second})
+        self.client_ip = "::ffff:192.168.7.20"
+        self.assertEqual(viewer(), {"kind": "agent", "host_id": first})
+        self.assertEqual(viewer(headers={"X-Forwarded-For": "192.168.7.21"}), {"kind": "unknown"})
+        self.assertIsInstance(self.success(self.request("GET", "/api/hosts")), list)
+        self.assertEqual(self.request("GET", "/api/hosts?with_viewer=true", user="member").status_code, 403)
+
+        self.heartbeat(second)
+        self.assertEqual(viewer(), {"kind": "shared"})
+        with patch.object(host_presence, "monotonic", return_value=float("inf")):
+            self.assertEqual(viewer(), {"kind": "unknown"})
+        self.client_ip = "192.168.7.90"
+        self.assertEqual(viewer(), {"kind": "unknown"})
 
     def queue(self, host_id, *, task_id=None, request_id=None):
         return self.success(self.request("POST", f"/api/hosts/{host_id}/runs", {
@@ -344,7 +372,7 @@ class HostApiTests(unittest.TestCase):
 
     def make_agent_sources(self, missing=None):
         root = self.root / ("agent-source-" + uuid.uuid4().hex)
-        modules = ("__init__", "__main__", "api", "client", "desktop", "identity", "journal", "windows", "worker", "environment", "updater", "enrollment")
+        modules = ("__init__", "__main__", "api", "client", "desktop", "identity", "journal", "windows", "worker", "environment", "updater", "enrollment", "project_archive")
         sources = {"README.md": "Synthetic Agent instructions\n", "requirements.txt": "cryptography\n",
                    "start.ps1": "# synthetic launcher\n", "manage.ps1": "# synthetic operations\n",
                    "setup.ps1": "# synthetic setup wizard\n", "install-python.ps1": "# synthetic Python installer\n",
@@ -482,6 +510,57 @@ class HostApiTests(unittest.TestCase):
         self.success(self.agent(host_id, "POST", f"/api/agent/runs/{run['id']}/claim"))
         package = self.success(self.agent(host_id, "GET", f"/api/agent/runs/{run['id']}/package"))
         self.assertEqual(package["script"], "print(\n")
+
+    def test_project_schedule_freezes_whole_archive_and_waits_for_capable_host(self):
+        from fastapi import HTTPException
+        from app import scheduling, project_packages
+        host, other = self.register(), self.register()
+        archive = io.BytesIO()
+        with zipfile.ZipFile(archive, "w") as bundle:
+            bundle.writestr("demo/main.py", "print('ok')")
+            bundle.writestr("demo/values.txt", "42")
+        content = archive.getvalue()
+        digest = hashlib.sha256(content).hexdigest()
+        app_dir = database.RPA_APPS_DIR / str(self.app_id)
+        app_dir.mkdir()
+        path = project_packages.archive_path(app_dir, digest)
+        slot = database.utc_now()
+        database.execute("INSERT INTO project_packages VALUES(?,?,?)", (self.app_id, "demo/main.py", digest))
+        database.execute("""UPDATE tasks SET target_host_id=?,trigger_type='daily',trigger_config=?,
+            next_run_at=?,first_environment_ready=0 WHERE id=?""",
+            (host, json.dumps({"time":"08:00"}), slot, self.task_id))
+        task = database.fetch_one("SELECT * FROM tasks WHERE id=?", (self.task_id,))
+        with self.assertRaises(HTTPException):
+            scheduling._queue_remote_project_slot(task, slot)
+        self.assertEqual(database.fetch_one("SELECT next_run_at FROM tasks WHERE id=?", (self.task_id,))["next_run_at"], slot)
+        path.write_bytes(content)
+        scheduling._queue_remote_project_slot(task, slot)
+        scheduling._queue_remote_project_slot(task, slot)
+        rows = database.fetch_all("SELECT * FROM remote_runs")
+        self.assertEqual(len(rows), 1)
+        run = rows[0]
+        self.assertEqual((run["host_id"], run["trigger_source"], run["project_entry"], run["project_digest"]),
+                         (host, "schedule", "demo/main.py", digest))
+        self.assertFalse(database.fetch_all("SELECT id FROM executions"))
+        path.unlink()
+        self.assertIsNone(self.heartbeat(host)["run"])
+        ordinary_id, _, _ = self.make_task()
+        ordinary = self.queue(host, task_id=ordinary_id)
+        self.assertEqual(self.heartbeat(host)["run"]["id"], ordinary["id"])
+        base = f"/api/agent/runs/{ordinary['id']}"
+        self.success(self.agent(host, "POST", base + "/claim"))
+        self.success(self.events(host, ordinary["id"], {"seq":1, "kind":"finished", "status":"cancelled", "text":"", "exit_code":None}))
+        base = f"/api/agent/runs/{run['id']}"
+        self.assertEqual(self.heartbeat(host, agent_version="0.5.3")["run"]["id"], run["id"])
+        self.assertEqual(self.agent(host, "GET", base + "/project.zip").status_code, 409)
+        self.success(self.agent(host, "POST", base + "/claim"))
+        self.assertEqual(self.agent(other, "GET", base + "/project.zip").status_code, 404)
+        descriptor = self.success(self.agent(host, "GET", base + "/package"))
+        self.assertNotIn("script", descriptor)
+        self.assertEqual(descriptor["project"], {"entry":"demo/main.py","digest":digest,"size":len(content)})
+        self.assertEqual(self.agent(host, "GET", base + "/project.zip").content, content)
+        self.success(self.request("POST", f"/api/remote-runs/{run['id']}/stop"))
+        self.assertEqual(self.agent(host, "GET", base + "/project.zip").status_code, 409)
 
     def test_frozen_source_and_requirements_survive_task_changes(self):
         original = self.script_path.read_bytes().decode("utf-8")

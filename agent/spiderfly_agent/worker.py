@@ -6,6 +6,7 @@ from pathlib import Path
 import queue
 import re
 import signal
+import shutil
 import subprocess
 import sys
 import threading
@@ -14,11 +15,20 @@ from datetime import datetime, timezone
 
 import psutil
 
+from . import project_archive
 from .windows import ProcessJob
 from .environment import PROBE, REPORT_VERSION, bounded_report, read_probe, requirements_hash, verify_packages
 
 MAX_ARTIFACT = 16 * 1024 * 1024
-_GATE = "import subprocess,sys\nif sys.stdin.buffer.readline()!=b'GO\\n': sys.exit(125)\nsys.exit(subprocess.call(sys.argv[1:], stdin=subprocess.DEVNULL))"
+_GATE = """import os, subprocess, sys
+if sys.stdin.buffer.readline() != b'GO\\n':
+    sys.exit(125)
+project = sys.argv[1]
+env = os.environ.copy()
+if project:
+    env["PYTHONPATH"] = project
+sys.exit(subprocess.call(sys.argv[2:], cwd=project or None, env=env, stdin=subprocess.DEVNULL))
+"""
 
 
 class Interrupted(RuntimeError):
@@ -96,14 +106,14 @@ class Worker(threading.Thread):
                     "SPIDERFLY_RESULT_FILE": str(self.artifacts / "result.json")})
         return env
 
-    def command(self, command: list[str]) -> int:
+    def command(self, command: list[str], *, project_root: Path | None = None) -> int:
         self.check_stop()
         self.journal.set_process(self.run_id, state="spawning")
         job, process = ProcessJob(), None
         readers = []
         output = queue.Queue(maxsize=256)
         try:
-            process = subprocess.Popen([sys.executable, "-u", "-c", _GATE, *command],
+            process = subprocess.Popen([sys.executable, "-I", "-u", "-c", _GATE, str(project_root or ""), *command],
                 cwd=self.work, env=self.environment(), stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                 creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
@@ -278,6 +288,7 @@ class Worker(threading.Thread):
 
     def run(self):
         self.deadline = time.monotonic() + max(1, int(self.run_info["timeout_seconds"]))
+        project_dir = None
         status, text, exit_code = "failed", "执行端未完成运行", None
         try:
             if self.run_info.get('environment_report_version') != REPORT_VERSION:
@@ -293,16 +304,35 @@ class Worker(threading.Thread):
             package = self.api.request("GET", f"/api/agent/runs/{self.run_id}/package")
             if package.get("stop_requested") is True:
                 raise Interrupted("cancelled")
-            script, requirements = package["script"], package["requirements"]
-            if package["package_hash"] != expected or package_hash(script, requirements) != expected:
+            requirements = package["requirements"]
+            project = package.get("project")
+            if project is not None:
+                digest = project_archive.package_hash(project["digest"], project["entry"], requirements)
+            else:
+                digest = package_hash(package["script"], requirements)
+            if package["package_hash"] != expected or digest != expected:
                 raise ValueError("任务包内容哈希不匹配")
             self.check_stop()
-            entrypoint = self.work / "main.py"
-            entrypoint.write_text(script, encoding="utf-8", newline="")
+            project_root = None
+            if project is not None:
+                archive = self.work / "project.zip"
+                self.api.download(f"/api/agent/runs/{self.run_id}/project.zip", archive, size=project["size"],
+                                  sha256=project["digest"], max_size=project_archive.MAX_ARCHIVE_BYTES,
+                                  check_cancel=self.check_stop)
+                self.check_stop()
+                project_dir = self.work / "project"
+                try:
+                    entrypoint, project_root = project_archive.extract_project(archive, project["entry"], project_dir)
+                finally:
+                    archive.unlink(missing_ok=True)
+                self.emit("stdout", f"项目入口 {project['entry']} · 版本 {project['digest'][:12]}\n")
+            else:
+                entrypoint = self.work / "main.py"
+                entrypoint.write_text(package["script"], encoding="utf-8", newline="")
             python = self.prepare_environment(requirements, expected)
             self.check_stop()
             self.emit("started", "开始执行")
-            exit_code = self.command([str(python), "-u", str(entrypoint)])
+            exit_code = self.command([str(python), "-u", str(entrypoint)], project_root=project_root)
             status = "succeeded" if exit_code == 0 else "failed"
             text = "执行成功" if exit_code == 0 else f"Python 退出码 {exit_code}"
         except Interrupted as error:
@@ -313,6 +343,13 @@ class Worker(threading.Thread):
         except Exception as error:
             text = f"{type(error).__name__}: {error}"
             self.emit("stderr", text)
+        if project_dir is not None and project_dir.is_dir():
+            try:
+                if project_dir.resolve() != self.root / "runs" / str(self.run_id) / "project":
+                    raise ValueError("项目临时目录已变更")
+                shutil.rmtree(project_dir)
+            except (OSError, ValueError) as error:
+                self.emit("stderr", f"项目临时目录未清理：{error}")
         try:
             if self.artifacts.exists():
                 total_size, count = 0, 0

@@ -197,6 +197,40 @@ class WorkerTests(TemporaryJournal):
         self.assertEqual(self.journal.pending_artifacts(1)[0]["name"], "result.txt")
         self.assertFalse(any(event["kind"] == "finished" for event in events))
 
+    def test_project_runs_subdirectory_entry_with_root_imports_and_relative_files(self):
+        import io
+        import zipfile
+        from spiderfly_agent import project_archive
+
+        stream = io.BytesIO()
+        with zipfile.ZipFile(stream, "w") as bundle:
+            bundle.writestr("demo/jobs/start.py", "from helper import value\n"
+                "import os\nfrom pathlib import Path\n"
+                "output = Path(os.environ['SPIDERFLY_ARTIFACT_DIR']) / 'result.txt'\n"
+                "output.write_text(value + Path('data.txt').read_text())\n")
+            bundle.writestr("demo/jobs/helper.py", "from settings import value")
+            bundle.writestr("demo/settings.py", "value = 'ok:'")
+            bundle.writestr("demo/data.txt", "42")
+        data = stream.getvalue()
+        digest = hashlib.sha256(data).hexdigest()
+        entry = "demo/jobs/start.py"
+        package = {"requirements": "", "package_hash": project_archive.package_hash(digest, entry, ""),
+                   "project": {"entry":entry, "size":len(data), "digest":digest}}
+        run = {**self.run_info, "package_hash":package["package_hash"]}
+        self.journal.claim(run)
+        api = Mock()
+        api.request.return_value = package
+        def download(path, dest, *, size, sha256, max_size, check_cancel):
+            self.assertEqual((size, sha256, path), (len(data), digest, "/api/agent/runs/1/project.zip"))
+            check_cancel()
+            dest.write_bytes(data)
+        api.download.side_effect = download
+        worker = Worker(run, self.root, api, self.journal)
+        worker.prepare_environment = Mock(return_value=Path(sys.executable))
+        worker.run()
+        self.assertEqual(self.outcome()["status"], "succeeded", self.journal.pending(1))
+        self.assertEqual((worker.artifacts/"result.txt").read_text(), "ok:42")
+
     def test_nonzero_exit_is_failure(self):
         self.make_worker("raise SystemExit(7)\n").run()
         self.assertEqual(self.outcome()["status"], "failed")

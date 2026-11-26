@@ -151,7 +151,7 @@ function closeAccountMenu(event) {
       </div>
     </aside>
 
-    <main class="workspace" :class="{ 'hosts-workspace': view === 'management' && managementTab === 'hosts' }">
+    <main class="workspace" :class="{ 'management-workspace': view === 'management' }">
       <header class="workspace-header">
         <div>
           <h1>{{ pageTitle }}</h1>
@@ -198,17 +198,16 @@ function closeAccountMenu(event) {
           <i v-if="tab.id === 'active' && activeExecutions.length">{{ activeExecutions.length }}</i>
         </button>
       </nav>
-      <nav v-else-if="view === 'management' && isAdmin" class="center-tabs" aria-label="管理中心功能">
-        <button
-          v-for="tab in managementTabs"
-          :key="tab.id"
-          type="button"
-          :class="{ active: managementTab === tab.id }"
-          :aria-current="managementTab === tab.id ? 'page' : undefined"
-          @click="managementTab = tab.id"
-        >
-          {{ tab.label }}
-        </button>
+      <nav v-else-if="view === 'management' && isAdmin" class="management-tabs" aria-label="管理中心功能">
+        <div class="management-tab-list">
+          <button
+            v-for="tab in managementTabs"
+            :key="tab.id"
+            type="button"
+            :aria-current="managementTab === tab.id ? 'page' : undefined"
+            @click="managementTab = tab.id"
+          >{{ tab.label }}</button>
+        </div>
       </nav>
 
       <div v-if="loading" class="loading-panel" role="status">

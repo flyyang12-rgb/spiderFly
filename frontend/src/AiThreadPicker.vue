@@ -88,7 +88,7 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', outside))
 </template>
 
 <style scoped>
-.thread-picker { position: relative; min-width: 0; font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
+.thread-picker { position: relative; min-width: 0; }
 .thread-trigger { display: flex; align-items: center; gap: 8px; width: 100%; height: 38px; padding: 0 12px; border: 1px solid #DFE3DF; border-radius: 8px; background: #fff; color: #292B28; font-size: 13px; text-align: left; cursor: pointer; }
 .thread-trigger:hover:not(:disabled) { background: #F7F8F6; }
 .thread-trigger.expanded { border-color: #009139; }
