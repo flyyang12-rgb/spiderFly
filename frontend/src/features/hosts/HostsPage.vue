@@ -29,7 +29,7 @@ async function confirmDeleteHost() {
   }
 }
 const codeInput = ref(null)
-const detailHeading = ref(null)
+const runDrawer = ref(null)
 const connectOpen = ref(false)
 const finderOpen = ref(false)
 const installerName = '安装并接入Agent.bat'
@@ -45,7 +45,6 @@ function findInstallerFiles(event) {
   input.value = ''
 }
 const expandedHosts = ref(new Set())
-let runTrigger = null
 const hostFilter = ref('current')
 const runFilter = ref('all')
 const statusFilter = ref('all')
@@ -119,23 +118,59 @@ function eventLabel(event) {
   return { started: '开始', stdout: '输出', stderr: '错误输出', finished: '结束', uncertain: '状态待确认', environment: '环境校验' }[event.kind] || event.kind
 }
 
-async function showRun(id, event) {
-  runTrigger = event?.currentTarget || null
-  await openRun(id)
-  await nextTick()
-  detailHeading.value?.focus()
+function showRun(id) {
+  openRun(id)
 }
 
-watch([() => props.openRunId, loading], async ([id, isLoading]) => {
+watch([() => props.openRunId, loading], ([id, isLoading]) => {
   if (!id || isLoading) return
-  await showRun(id)
+  showRun(id)
   emit('run-opened')
 }, { immediate: true })
 
-async function closeDetails() {
+function closeDetails() {
   closeRun()
+}
+
+watch(selectedRunId, async (id, previous, onCleanup) => {
+  if (id == null) return
+  const trigger = document.activeElement
+  const app = document.getElementById('app')
+  const previousInert = app?.inert
+  const previousOverflow = document.body.style.overflow
+  if (app) app.inert = true
+  document.body.style.overflow = 'hidden'
+  document.addEventListener('keydown', drawerKeyboard)
+  onCleanup(() => {
+    document.removeEventListener('keydown', drawerKeyboard)
+    if (app) app.inert = previousInert
+    document.body.style.overflow = previousOverflow
+    if (trigger?.isConnected) trigger.focus({ preventScroll: true })
+  })
   await nextTick()
-  if (runTrigger?.isConnected) runTrigger.focus()
+  if (selectedRunId.value === id) runDrawer.value?.focus({ preventScroll: true })
+}, { immediate: true })
+
+function drawerKeyboard(event) {
+  if (event.key === 'Escape') {
+    event.stopPropagation()
+    closeDetails()
+  }
+  if (event.key !== 'Tab' || !runDrawer.value) return
+  const controls = [...runDrawer.value.querySelectorAll('button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), summary, [tabindex="0"]')]
+    .filter(element => element.getClientRects().length && getComputedStyle(element).visibility !== 'hidden')
+  const first = controls[0]
+  const last = controls.at(-1)
+  if (!first) {
+    event.preventDefault()
+    runDrawer.value.focus({ preventScroll: true })
+  } else if (event.shiftKey && (document.activeElement === first || document.activeElement === runDrawer.value || !runDrawer.value.contains(document.activeElement))) {
+    event.preventDefault()
+    last.focus()
+  } else if (!event.shiftKey && (document.activeElement === last || !runDrawer.value.contains(document.activeElement))) {
+    event.preventDefault()
+    first.focus()
+  }
 }
 
 async function confirmAction() {
@@ -238,7 +273,7 @@ async function copyCode() {
               <span class="host-badge" :class="tone(host.state)"><i aria-hidden="true"></i>{{ host.state === 'idle' ? '空闲' : host.state === 'stopping' ? '运行中' : hostStateLabels[host.state] || host.state }}</span>
             </div>
             <dl class="machine-stats">
-              <div><dt>当前任务</dt><dd><button v-if="host.active_run_id" class="host-task-link" type="button" @click="showRun(host.active_run_id, $event)">{{ host.active_task_name || '运行 #' + host.active_run_id }}</button><template v-else>—</template></dd></div>
+              <div><dt>当前任务</dt><dd><button v-if="host.active_run_id" class="host-task-link" type="button" @click="showRun(host.active_run_id)">{{ host.active_task_name || '运行 #' + host.active_run_id }}</button><template v-else>—</template></dd></div>
               <div><dt>Agent 版本</dt><dd>{{ host.agent_version || '未知' }}</dd></div>
               <div><dt>最近心跳</dt><dd>{{ host.last_seen_at ? formatTime(host.last_seen_at) : '—' }}</dd></div>
             </dl>
@@ -289,45 +324,65 @@ async function copyCode() {
         <ul v-else class="host-runs">
           <li v-for="run in visibleRuns" :key="run.id" :class="{ selected: selectedRunId === run.id }">
             <div class="host-run-summary"><strong>{{ run.task_name }}</strong><span>#{{ run.id }} · v{{ run.version_sequence ?? '?' }} · {{ run.host_name }} · {{ formatTime(run.created_at) }}</span><p v-if="run.waiting_reason">{{ run.waiting_reason }}</p></div>
-            <div class="host-card-actions"><span class="host-badge" :class="tone(run.status)"><i aria-hidden="true"></i>{{ runStatusLabels[run.status] || run.status }}</span><button class="host-button" type="button" :aria-label="`查看运行 #${run.id} ${run.task_name} 的日志与结果`" :aria-expanded="selectedRunId === run.id" aria-controls="remote-run-detail" @click="showRun(run.id, $event)">日志与结果</button></div>
+            <div class="host-card-actions"><span class="host-badge" :class="tone(run.status)"><i aria-hidden="true"></i>{{ runStatusLabels[run.status] || run.status }}</span><button class="host-button" type="button" :aria-label="`查看运行 #${run.id} ${run.task_name} 的日志与结果`" :aria-expanded="selectedRunId === run.id" aria-controls="remote-run-detail" @click="showRun(run.id)">日志与结果</button></div>
           </li>
         </ul>
       </section>
 
-      <section v-if="selectedRunId != null" id="remote-run-detail" class="host-panel host-detail" aria-labelledby="run-detail-heading">
-        <header class="host-section-heading"><h3 id="run-detail-heading" ref="detailHeading" tabindex="-1">运行 #{{ selectedRunId }} · 日志与结果</h3><button class="host-button" type="button" @click="closeDetails">收起详情</button></header>
-        <p v-if="detailLoading" class="host-help" role="status">正在载入运行详情…</p>
-        <div v-if="detailError" class="host-feedback error" role="alert"><span>运行详情刷新失败：{{ detailError }}</span><button class="host-button" type="button" @click="loadRunDetail(selectedRunId)">重试</button></div>
-        <template v-if="runDetail">
-          <div class="host-detail-summary"><div><strong>{{ runDetail.task_name }} · v{{ runDetail.version_sequence ?? '?' }}</strong><p>{{ runDetail.host_name }} · <span class="host-badge" :class="tone(runDetail.status)"><i aria-hidden="true"></i>{{ runStatusLabels[runDetail.status] || runDetail.status }}</span></p></div><button v-if="activeRunStates.has(runDetail.status) && !runDetail.stop_requested" class="host-button danger" type="button" :disabled="Boolean(busy)" @click="stopRun(runDetail)">{{ busy === `stop:${runDetail.id}` ? '正在请求…' : runDetail.status === 'queued' ? '取消排队' : '请求停止' }}</button></div>
-          <p v-if="runDetail.stop_requested && activeRunStates.has(runDetail.status)" class="host-inline-warning">已请求停止，等待宿主机确认进程结束。</p>
-          <p v-if="runDetail.status === 'uncertain'" class="host-inline-warning">旧运行尚未确认结束，宿主机暂不接收新任务。</p>
-          <p v-if="runDetail.waiting_reason" class="host-help">{{ runDetail.waiting_reason }}</p>
-          <p v-if="runDetail.error" class="host-feedback" :class="runDetail.status === 'succeeded' ? 'success' : ['failed', 'timed_out'].includes(runDetail.status) ? 'error' : ''">{{ runDetail.error }}</p>
-          <div v-if="runDetail.collection_progress" class="host-progress">
-            <strong>采集进度</strong>
-            <p>{{ runDetail.collection_progress.latest.stage || '任务上报' }}<template v-if="runDetail.collection_progress.latest.page != null"> · 第 {{ runDetail.collection_progress.latest.page }} 页</template><template v-if="runDetail.collection_progress.latest.collected != null"> · 已采集 {{ runDetail.collection_progress.latest.collected }} 条</template><template v-if="runDetail.collection_progress.latest.total != null"> / {{ runDetail.collection_progress.latest.total }} 条</template></p>
-            <small>{{ runDetail.collection_progress.latest.message || `已收到 ${runDetail.collection_progress.event_count} 条结构化进度` }}</small>
-          </div>
-          <div v-if="runDetail.maintenance" class="host-maintenance" :class="{ ready: runDetail.maintenance.status === 'candidate' }">
-            <div><strong>AI 维护建议</strong><p v-if="['pending','generating'].includes(runDetail.maintenance.status)">正根据本次代码和失败日志生成建议，生成后需管理员确认。</p><p v-else-if="runDetail.maintenance.status === 'candidate'">候选 v{{ runDetail.maintenance.sequence }} 尚未试跑。确认后会启用，并在原宿主机新建运行。</p><p v-else-if="runDetail.maintenance.status === 'activated'">管理员已确认候选，远程重跑 #{{ runDetail.maintenance.rerun_remote_run_id }} 已单独记录。</p><p v-else>{{ runDetail.maintenance.note || '本次未生成代码候选。' }}</p></div>
-            <div v-if="runDetail.maintenance.status === 'candidate'" class="host-maintenance-actions"><a class="host-button" :href="`/api/task-versions/versions/${runDetail.maintenance.candidate_version_id}/download`" download>下载候选源码</a><button class="host-button" type="button" :disabled="Boolean(busy)" @click="dismissCandidate(runDetail.maintenance)">暂不使用</button><button class="host-button primary" type="button" :disabled="Boolean(busy)" @click="activateCandidate(runDetail.maintenance)">{{ busy === `candidate:${runDetail.maintenance.update_id}` ? '正在确认…' : '确认并重新运行' }}</button></div>
-          </div>
-          <dl class="host-run-facts"><div><dt>提交时间</dt><dd>{{ formatTime(runDetail.created_at) }}</dd></div><div><dt>开始时间</dt><dd>{{ formatTime(runDetail.started_at) }}</dd></div><div><dt>结束时间</dt><dd>{{ formatTime(runDetail.finished_at) }}</dd></div><div><dt>退出码</dt><dd>{{ runDetail.exit_code ?? '—' }}</dd></div></dl>
-          <details class="host-technical"><summary>执行快照</summary><p v-if="runDetail.project_entry">项目入口 {{ runDetail.project_entry }} · 项目版本 {{ runDetail.project_digest.slice(0, 12) }}</p><p v-else>本次运行固定使用 v{{ runDetail.version_sequence ?? '?' }}（内部版本 #{{ runDetail.code_version_id ?? '—' }}），代码与依赖内容不可变。</p><code>{{ runDetail.package_hash }}</code></details>
-          <h4 class="host-subheading">运行日志</h4>
-          <p v-if="runDetail.events_truncated" class="host-help">仅显示最近 500 条日志，完整事件仍保存在主控。</p>
-          <div v-if="runDetail.events?.length" class="host-log" tabindex="0" role="region" aria-label="运行原始日志，可使用键盘滚动">
-            <div v-for="event in runDetail.events" :key="event.seq" class="host-log-entry" :class="{ 'log-error': event.kind === 'stderr' }"><span class="host-log-label">#{{ event.seq }} {{ eventLabel(event) }}{{ event.status ? ' · ' + (runStatusLabels[event.status] || event.status) : '' }}</span><pre v-if="event.text">{{ event.text }}</pre></div>
-          </div>
-          <p v-else class="host-help">{{ runDetail.status === 'queued' ? '任务尚未开始，等待目标电脑领取。' : '执行端尚未回传日志。' }}</p>
-          <EnvironmentDetails :environment="runDetail.environment" :status="runDetail.environment_status" />
-          <h4 class="host-subheading">结果文件</h4>
-          <ul v-if="runDetail.artifacts?.length" class="host-artifacts"><li v-for="artifact in runDetail.artifacts" :key="artifact.name"><div><strong>{{ artifact.name }}</strong><span>{{ formatFileSize(artifact.size) }}</span></div><a v-if="artifactUrl(artifact.download_url)" class="host-button" :href="artifactUrl(artifact.download_url)" :aria-label="`下载 ${artifact.name}`" download>下载</a><span v-else class="host-help">下载地址不可用</span></li></ul>
-          <p v-else class="host-help">暂未收到结果文件。脚本需要把结果写入本次产物目录。</p>
-        </template>
-      </section>
     </template>
+    <Teleport to="body">
+      <Transition name="run-drawer">
+        <div v-if="selectedRunId != null" class="hosts-page management-workspace host-drawer-layer" @mousedown.self="closeDetails">
+          <section id="remote-run-detail" ref="runDrawer" class="host-drawer" role="dialog" aria-modal="true" aria-labelledby="run-detail-heading" tabindex="-1">
+            <header class="run-drawer-heading">
+              <div class="run-drawer-title"><h2 id="run-detail-heading">{{ runDetail?.task_name || '日志与结果' }}</h2><span>运行 #{{ selectedRunId }}<template v-if="runDetail?.version_sequence != null"> · v{{ runDetail.version_sequence }}</template></span></div>
+              <div class="host-card-actions">
+                <button class="host-button" type="button" :disabled="detailLoading" @click="loadRunDetail(selectedRunId)">{{ detailLoading ? '刷新中…' : '刷新' }}</button>
+                <button class="run-drawer-close" type="button" aria-label="关闭日志与结果" @click="closeDetails">×</button>
+              </div>
+            </header>
+            <div class="run-drawer-body">
+              <p v-if="actionError" class="host-feedback error" role="alert">{{ actionError }}</p>
+              <p v-if="notice" class="host-feedback success" role="status">{{ notice }}</p>
+              <p v-if="detailLoading" class="host-help" role="status">正在载入运行详情…</p>
+              <div v-if="detailError" class="host-feedback error" role="alert"><span>运行详情刷新失败：{{ detailError }}</span><button class="host-button" type="button" @click="loadRunDetail(selectedRunId)">重试</button></div>
+              <div v-if="runDetail" class="run-detail-layout">
+                <aside class="run-context" aria-label="执行详情">
+                  <div class="host-detail-summary"><div><h3>执行详情</h3><p>{{ runDetail.host_name }} · <span class="host-badge" :class="tone(runDetail.status)"><i aria-hidden="true"></i>{{ runStatusLabels[runDetail.status] || runDetail.status }}</span></p></div><button v-if="activeRunStates.has(runDetail.status) && !runDetail.stop_requested" class="host-button danger" type="button" :disabled="Boolean(busy)" @click="stopRun(runDetail)">{{ busy === `stop:${runDetail.id}` ? '正在请求…' : runDetail.status === 'queued' ? '取消排队' : '请求停止' }}</button></div>
+                  <p v-if="runDetail.stop_requested && activeRunStates.has(runDetail.status)" class="host-inline-warning">已请求停止，等待宿主机确认进程结束。</p>
+                  <p v-if="runDetail.status === 'uncertain'" class="host-inline-warning">旧运行尚未确认结束，宿主机暂不接收新任务。</p>
+                  <p v-if="runDetail.waiting_reason" class="host-help">{{ runDetail.waiting_reason }}</p>
+                  <p v-if="runDetail.error" class="host-feedback" :class="runDetail.status === 'succeeded' ? 'success' : ['failed', 'timed_out'].includes(runDetail.status) ? 'error' : ''">{{ runDetail.error }}</p>
+                  <div v-if="runDetail.collection_progress" class="host-progress">
+                    <strong>采集进度</strong>
+                    <p>{{ runDetail.collection_progress.latest.stage || '任务上报' }}<template v-if="runDetail.collection_progress.latest.page != null"> · 第 {{ runDetail.collection_progress.latest.page }} 页</template><template v-if="runDetail.collection_progress.latest.collected != null"> · 已采集 {{ runDetail.collection_progress.latest.collected }} 条</template><template v-if="runDetail.collection_progress.latest.total != null"> / {{ runDetail.collection_progress.latest.total }} 条</template></p>
+                    <small>{{ runDetail.collection_progress.latest.message || `已收到 ${runDetail.collection_progress.event_count} 条结构化进度` }}</small>
+                  </div>
+                  <div v-if="runDetail.maintenance" class="host-maintenance" :class="{ ready: runDetail.maintenance.status === 'candidate' }">
+                    <div><strong>AI 维护建议</strong><p v-if="['pending','generating'].includes(runDetail.maintenance.status)">正根据本次代码和失败日志生成建议，生成后需管理员确认。</p><p v-else-if="runDetail.maintenance.status === 'candidate'">候选 v{{ runDetail.maintenance.sequence }} 尚未试跑。确认后会启用，并在原宿主机新建运行。</p><p v-else-if="runDetail.maintenance.status === 'activated'">管理员已确认候选，远程重跑 #{{ runDetail.maintenance.rerun_remote_run_id }} 已单独记录。</p><p v-else>{{ runDetail.maintenance.note || '本次未生成代码候选。' }}</p></div>
+                    <div v-if="runDetail.maintenance.status === 'candidate'" class="host-maintenance-actions"><a class="host-button" :href="`/api/task-versions/versions/${runDetail.maintenance.candidate_version_id}/download`" download>下载候选源码</a><button class="host-button" type="button" :disabled="Boolean(busy)" @click="dismissCandidate(runDetail.maintenance)">暂不使用</button><button class="host-button primary" type="button" :disabled="Boolean(busy)" @click="activateCandidate(runDetail.maintenance)">{{ busy === `candidate:${runDetail.maintenance.update_id}` ? '正在确认…' : '确认并重新运行' }}</button></div>
+                  </div>
+                  <dl class="host-run-facts"><div><dt>提交时间</dt><dd>{{ formatTime(runDetail.created_at) }}</dd></div><div><dt>开始时间</dt><dd>{{ formatTime(runDetail.started_at) }}</dd></div><div><dt>结束时间</dt><dd>{{ formatTime(runDetail.finished_at) }}</dd></div><div><dt>退出码</dt><dd>{{ runDetail.exit_code ?? '—' }}</dd></div></dl>
+                  <details class="host-technical"><summary>执行快照</summary><p v-if="runDetail.project_entry">项目入口 {{ runDetail.project_entry }} · 项目版本 {{ runDetail.project_digest.slice(0, 12) }}</p><p v-else>本次运行固定使用 v{{ runDetail.version_sequence ?? '?' }}（内部版本 #{{ runDetail.code_version_id ?? '—' }}），代码与依赖内容不可变。</p><code>{{ runDetail.package_hash }}</code></details>
+                  <EnvironmentDetails :environment="runDetail.environment" :status="runDetail.environment_status" />
+                </aside>
+                <section class="run-output" aria-label="日志与结果">
+                  <h3>运行日志</h3>
+                  <p v-if="runDetail.events_truncated" class="host-help">仅显示最近 500 条日志，完整事件仍保存在主控。</p>
+                  <div v-if="runDetail.events?.length" class="host-log" tabindex="0" role="region" aria-label="运行原始日志，可使用键盘滚动">
+                    <div v-for="event in runDetail.events" :key="event.seq" class="host-log-entry" :class="{ 'log-error': event.kind === 'stderr' }"><span class="host-log-label">#{{ event.seq }} {{ eventLabel(event) }}{{ event.status ? ' · ' + (runStatusLabels[event.status] || event.status) : '' }}</span><pre v-if="event.text">{{ event.text }}</pre></div>
+                  </div>
+                  <p v-else class="host-help">{{ runDetail.status === 'queued' ? '任务尚未开始，等待目标电脑领取。' : '执行端尚未回传日志。' }}</p>
+                  <h4 class="host-subheading">结果文件</h4>
+                  <ul v-if="runDetail.artifacts?.length" class="host-artifacts"><li v-for="artifact in runDetail.artifacts" :key="artifact.name"><div><strong>{{ artifact.name }}</strong><span>{{ formatFileSize(artifact.size) }}</span></div><a v-if="artifactUrl(artifact.download_url)" class="host-button" :href="artifactUrl(artifact.download_url)" :aria-label="`下载 ${artifact.name}`" download>下载</a><span v-else class="host-help">下载地址不可用</span></li></ul>
+                  <p v-else class="host-help">暂未收到结果文件。脚本需要把结果写入本次产物目录。</p>
+                </section>
+              </div>
+            </div>
+          </section>
+        </div>
+      </Transition>
+    </Teleport>
     <WorkflowDialog v-if="deletingHost" title="永久删除电脑" :close-disabled="Boolean(busy)" @close="deletingHost = null">
       <p>删除「{{ deletingHost.name }}」的登记和接入凭据，保留运行记录。再次使用需重新接入。</p>
       <p v-if="actionError" class="danger-text" role="alert">{{ actionError }}</p>
@@ -448,7 +503,7 @@ async function copyCode() {
 .host-detail-summary { margin-bottom: 16px; align-items: flex-start; }
 .host-detail-summary strong { font-size: 14px; overflow-wrap: anywhere; }
 .host-detail-summary p { margin-top: 4px; color: var(--host-muted); }
-.host-detail > .host-inline-warning, .host-detail > .host-feedback { margin-bottom: 12px; }
+.run-context > .host-inline-warning, .run-context > .host-feedback { margin-bottom: 12px; }
 .host-technical { margin-top: 16px; padding-top: 12px; border-top: 1px solid #ecefec; }
 .host-technical summary { cursor: pointer; font-size: 12px; }
 .host-technical p { margin: 8px 0; color: var(--host-muted); font-size: 12px; }
@@ -489,4 +544,45 @@ async function copyCode() {
   .host-detail-summary { flex-wrap: wrap; }
 }
 @media (prefers-reduced-motion: reduce) { .host-button { transition: none; } .host-button:active:not(:disabled) { transform: none; } }
+
+.hosts-page.host-drawer-layer { position: fixed; inset: 0; z-index: 105; display: flex; justify-content: flex-end; width: 100%; margin: 0; background: rgba(23, 38, 29, .32); }
+.host-drawer { display: flex; flex-direction: column; width: min(1360px, calc(100% - 72px)); height: 100dvh; min-width: 0; background: var(--surface); box-shadow: -12px 0 48px rgba(22, 48, 31, .14); outline: none; }
+.run-drawer-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 24px; border-bottom: 1px solid var(--host-border); }
+.run-drawer-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; min-width: 0; }
+.run-drawer-title h2 { font-size: 17px; overflow-wrap: anywhere; }
+.run-drawer-title > span { color: var(--host-muted); font-size: 12px; white-space: nowrap; }
+.run-drawer-heading .host-card-actions { flex-shrink: 0; }
+.run-drawer-close { display: grid; place-items: center; width: 36px; height: 36px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--host-text); font: inherit; font-size: 25px; cursor: pointer; }
+.run-drawer-close:hover { background: var(--host-soft); }
+.run-drawer-body { flex: 1; min-height: 0; padding: 24px; overflow-y: auto; overscroll-behavior: contain; }
+.run-drawer-body > .host-feedback { margin-bottom: 16px; }
+.run-detail-layout { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 24px; align-items: start; }
+.run-context { min-width: 0; padding-right: 24px; border-right: 1px solid var(--host-border); }
+.run-context .host-detail-summary { flex-direction: column; gap: 12px; }
+.run-context .host-run-facts { grid-template-columns: 1fr; gap: 14px; }
+.run-context .host-maintenance { flex-direction: column; align-items: stretch; padding: 12px; }
+.run-context .host-maintenance-actions { justify-content: flex-start; }
+.run-context .host-maintenance-actions .host-button { white-space: normal; }
+.run-output { min-width: 0; }
+.run-output > h3 { margin-bottom: 16px; }
+.run-output .host-log { min-height: 240px; max-height: max(280px, calc(100dvh - 300px)); }
+.run-drawer-enter-active, .run-drawer-leave-active { transition: background-color 200ms ease; }
+.run-drawer-enter-active .host-drawer, .run-drawer-leave-active .host-drawer { transition: transform 200ms ease; }
+.run-drawer-enter-from, .run-drawer-leave-to { background-color: transparent !important; }
+.run-drawer-enter-from .host-drawer, .run-drawer-leave-to .host-drawer { transform: translateX(100%); }
+@media (max-width: 800px) {
+  .host-drawer { width: 100%; }
+  .run-drawer-heading { padding: 12px 16px; }
+  .run-drawer-title { display: grid; }
+  .run-drawer-body { padding: 16px; }
+  .run-detail-layout { grid-template-columns: minmax(0, 1fr); gap: 24px; }
+  .run-output { order: -1; }
+  .run-context { padding: 20px 0 0; border-right: 0; border-top: 1px solid var(--host-border); }
+  .run-context .host-run-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .run-output .host-log { min-height: 180px; }
+  .run-drawer-close { width: 44px; height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .run-drawer-enter-active, .run-drawer-leave-active, .run-drawer-enter-active .host-drawer, .run-drawer-leave-active .host-drawer { transition: none; }
+}
 </style>
