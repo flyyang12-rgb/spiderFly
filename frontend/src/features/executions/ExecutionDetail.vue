@@ -53,9 +53,11 @@ const {
         <span v-if="detail.business_outcome"
           >脚本结果 <strong>{{ businessOutcomeLabel(detail.business_outcome) }}</strong></span
         >
-        <span
-          >飞书 <strong>{{ notificationLabel(detail.notification_status) }}</strong></span
-        >
+        <template v-if="detail.project_entry">
+          <span>项目入口 <strong>{{ detail.project_entry }}</strong></span>
+          <span>项目版本 <code>{{ detail.project_version }}</code></span>
+        </template>
+        <span v-else>飞书 <strong>{{ notificationLabel(detail.notification_status) }}</strong></span>
       </div>
       <div class="modal-body log-body">
         <CollectionProgress :progress="detail.collection_progress" :status="detail.status" />

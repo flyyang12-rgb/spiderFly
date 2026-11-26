@@ -412,6 +412,8 @@ def init_db() -> None:
         from .services.interval_schedules import ensure_schema as ensure_interval_schema
         ensure_interval_schema(conn)
         ensure_creation_schema(conn)
+        from .project_packages import ensure_schema as ensure_project_schema
+        ensure_project_schema(conn)
         _migrate_legacy_apps(conn)
         _recover_interrupted_work(conn)
         conn.executescript(

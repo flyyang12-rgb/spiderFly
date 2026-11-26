@@ -201,7 +201,8 @@ async def scheduler_loop(enqueue: Callable[[int, str], Awaitable[int]]) -> None:
         due_tasks = await asyncio.to_thread(
             fetch_all,
             """
-            SELECT * FROM tasks
+            SELECT tasks.*, EXISTS(SELECT 1 FROM project_packages p WHERE p.app_id=tasks.app_id) AS project_schedule
+            FROM tasks
             WHERE enabled = 1
               AND trigger_type NOT IN ('manual','interval')
               AND next_run_at IS NOT NULL
@@ -212,7 +213,9 @@ async def scheduler_loop(enqueue: Callable[[int, str], Awaitable[int]]) -> None:
             (now,),
         )
         for task in due_tasks:
-            if task["trigger_type"] == "cron":
+            if task["trigger_type"] == "cron" or (
+                task["trigger_type"] in {"daily", "weekly", "monthly"} and task.get("project_schedule")
+            ):
                 try:
                     await asyncio.to_thread(
                         cron_runs.register_due, task["id"], now,

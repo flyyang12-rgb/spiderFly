@@ -1,6 +1,6 @@
 import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, reactive, ref, watch } from 'vue'
 import { request } from '../../lib/api.js'
-import { emptyPlan, readPlan, planBody, validatePlan, creationRequestId } from '../../lib/plans'
+import { emptyPlan, readPlan, planBody, validatePlan } from '../../lib/plans'
 
 export const workflowStatusLabels = {
   waiting: '等待中', pending: '排队中', running: '运行中', stopping: '停止中',
@@ -41,9 +41,7 @@ export function useWorkflows({ isAdmin, me, onSessionExpired, workflowPendingSta
   const editor = ref(null)
   const form = reactive({ name: '', description: '', task_ids: [], ...emptyPlan() })
   let originalPlan = ''
-  let pendingCreation = null
   const formError = ref('')
-  const formUncertain = ref(false)
   const candidates = ref([])
   const candidatesLoading = ref(false)
   const candidatesError = ref('')
@@ -216,17 +214,15 @@ export function useWorkflows({ isAdmin, me, onSessionExpired, workflowPendingSta
     finally { if (user === me.value && session === sessionSequence && sequence === candidateSequence) candidatesLoading.value = false }
   }
 
-  function openEditor(flow = null) {
-    if (!live() || !isAdmin.value || busy.value) return
-    editor.value = flow ? { ...flow, steps: [...(flow.steps || [])] } : { id: null, steps: [] }
+  function openEditor(flow) {
+    if (!flow?.id || !live() || !isAdmin.value || busy.value) return
+    editor.value = { ...flow, steps: [...(flow.steps || [])] }
     Object.assign(form, {
       name: flow?.name || '', description: flow?.description || '',
       task_ids: (flow?.steps || []).map((step) => Number(step.task_id)),
       ...readPlan(flow, true),
     })
     originalPlan = JSON.stringify(planBody(form, true))
-    pendingCreation = null
-    formUncertain.value = false
     formError.value = ''
     selectedTask.value = ''
     candidates.value = []
@@ -260,9 +256,8 @@ export function useWorkflows({ isAdmin, me, onSessionExpired, workflowPendingSta
     form.task_ids = updated
   }
 
-  async function saveWorkflow({ retryUncertain = false } = {}) {
+  async function saveWorkflow() {
     if (!live() || !isAdmin.value || !editor.value || busy.value) return
-    if (formUncertain.value && !retryUncertain) return
     if (!form.name.trim()) { formError.value = '请填写流程名称'; return }
     if (!form.task_ids.length) { formError.value = '请至少添加一个任务'; return }
     const planError = validatePlan(form)
@@ -270,15 +265,14 @@ export function useWorkflows({ isAdmin, me, onSessionExpired, workflowPendingSta
     const editing = editor.value
     const payload = { name: form.name.trim(), description: form.description.trim(), task_ids: [...form.task_ids] }
     const schedule = planBody(form, true)
-    if (!editing.id || JSON.stringify(schedule) !== originalPlan) payload.schedule = schedule
-    if (editing.id) payload.revision = editing.revision
-    else { pendingCreation ||= { ...payload, request_id: creationRequestId() }; Object.assign(payload, pendingCreation) }
+    if (JSON.stringify(schedule) !== originalPlan) payload.schedule = schedule
+    payload.revision = editing.revision
     const session = sessionSequence
     busy.value = 'save'
     formError.value = ''
     try {
-      const result = await api(editing.id ? `/workflows/${editing.id}` : '/workflows', {
-        method: editing.id ? 'PATCH' : 'POST', body: JSON.stringify(payload),
+      const result = await api(`/workflows/${editing.id}`, {
+        method: 'PATCH', body: JSON.stringify(payload),
       })
       if (!live() || session !== sessionSequence) return
       editor.value = null
@@ -286,26 +280,8 @@ export function useWorkflows({ isAdmin, me, onSessionExpired, workflowPendingSta
       await refresh(true)
       if (live() && session === sessionSequence) return result
     } catch (error) {
-      if (session === sessionSequence) {
-        formUncertain.value = !editing.id && (!error.status || error.status >= 500)
-        if (!formUncertain.value) pendingCreation = null
-        fail(error, formError)
-      }
+      if (session === sessionSequence) fail(error, formError)
     }
-    finally { if (session === sessionSequence) busy.value = '' }
-  }
-
-  async function resolveCreation() {
-    if (!live() || !isAdmin.value || busy.value || !pendingCreation || !formUncertain.value) return
-    const session = sessionSequence
-    busy.value = 'save'
-    try {
-      await api('/creation-requests/workflow/' + pendingCreation.request_id)
-      if (!live() || session !== sessionSequence) return
-      editor.value = null; formUncertain.value = false; pendingCreation = null
-      notice.value = '流程已保存。'
-      await refresh(true)
-    } catch (error) { if (session === sessionSequence) fail(error, formError) }
     finally { if (session === sessionSequence) busy.value = '' }
   }
 
@@ -370,7 +346,7 @@ export function useWorkflows({ isAdmin, me, onSessionExpired, workflowPendingSta
     if (clearPending) pendingStarts.clear()
     editor.value = null; confirmation.value = null; runDetail.value = null; selectedRunId.value = null
     Object.assign(form, { name: '', description: '', task_ids: [], ...emptyPlan() })
-    pendingCreation = null; originalPlan = ''; formUncertain.value = false
+    originalPlan = ''
     Object.assign(filters, { workflow_id: '', status: 'all', date_from: '', date_to: '' })
     appliedFilters = { ...filters }
     total.value = 0; page.value = 1; busy.value = ''; notice.value = ''; actionError.value = ''
@@ -400,10 +376,10 @@ export function useWorkflows({ isAdmin, me, onSessionExpired, workflowPendingSta
   onBeforeUnmount(() => { disposed = true; clear() })
   return {
     workflows, visibleWorkflows, runs, total, page, pageSize, totalPages, loading, definitionsLoaded, refreshing, historyLoading,
-    loadError, historyError, actionError, notice, busy, showArchived, filters, editor, form, formError, formUncertain,
+    loadError, historyError, actionError, notice, busy, showArchived, filters, editor, form, formError,
     candidates, candidatesLoading, candidatesError, selectedTask, selectedSteps, selectedRunId, runDetail,
     detailLoading, detailError, confirmation, pendingStarts,
     refresh, loadHistory, applyFilters, resetFilters, openRun, closeRun, loadRunDetail, openEditor, closeEditor,
-    addStep, moveStep, saveWorkflow, resolveCreation, startWorkflow, confirmAction, askConfirmation, loadCandidates,
+    addStep, moveStep, saveWorkflow, startWorkflow, confirmAction, askConfirmation, loadCandidates,
   }
 }

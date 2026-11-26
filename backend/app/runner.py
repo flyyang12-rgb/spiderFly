@@ -125,6 +125,12 @@ def _workflow_execution_snapshot(execution_id: int) -> dict[str, Any]:
     return snapshot
 
 
+def _project_snapshot(execution_id: int) -> dict | None:
+    from .project_packages import for_execution
+    with transaction() as conn:
+        return for_execution(conn, execution_id)
+
+
 def _check_workflow_allowed(execution_id: int, control: ExecutionControl) -> None:
     """The persisted stop flag also covers the claim-to-runner and gated-launch gaps."""
     _check_stop(control)
@@ -504,7 +510,10 @@ async def _run_execution(execution_id: int, control: ExecutionControl) -> int | 
     if not task:
         return
     workflow_execution = await asyncio.to_thread(native_process.is_workflow_execution, execution_id)
-    if not workflow_execution and task.get('maintenance_snapshot'):
+    project = await asyncio.to_thread(_project_snapshot, execution_id)
+    if project:
+        task.update(notify_on_success=False, notify_on_failure=False, failure_screenshot=False)
+    if not workflow_execution and not project and task.get('maintenance_snapshot'):
         import json
         snapshot = json.loads(task['maintenance_snapshot'])
         if snapshot['policy']['runtime'] in {'readonly-v1', 'collection-v1', 'drissionpage-v1'}:
@@ -549,6 +558,10 @@ async def _run_execution(execution_id: int, control: ExecutionControl) -> int | 
         script, interpreter = (validate_workflow_script if workflow_execution else validate_script)(
             task["script_path_snapshot"], task["python_path_snapshot"]
         )
+        working_directory = script.parent
+        if project:
+            from .project_packages import prepare
+            script, working_directory = await asyncio.to_thread(prepare, project, workspace.temporary_dir)
         public_work_dir, staged_template = await asyncio.to_thread(
             prepare_work_directory,
             WORK_DIR,
@@ -581,18 +594,21 @@ async def _run_execution(execution_id: int, control: ExecutionControl) -> int | 
                 staged_template,
                 browser_port=task['browser_port'] if workflow_execution else None,
         )
+        if project:
+            # A nested entry can import both its siblings and modules at the project root.
+            runtime_environment["PYTHONPATH"] = str(working_directory)
         if settlement_id is not None:
             owned_job = await asyncio.to_thread(native_process.OwnedJob, execution_id, job_name)
             _check_stop(control)
             process = await native_process.launch_owned(
                 execution_id, owned_job, interpreter, script,
-                cwd=str(script.parent), env=runtime_environment,
+                cwd=str(working_directory), env=runtime_environment,
                 before_gate=(lambda: _check_workflow_allowed(execution_id, control))
                 if workflow_execution else (lambda: _check_stop(control)),
             )
         else:
             process = await asyncio.create_subprocess_exec(
-                interpreter, "-u", str(script), cwd=str(script.parent), env=runtime_environment,
+                interpreter, "-u", str(script), cwd=str(working_directory), env=runtime_environment,
                 stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, creationflags=creationflags,
             )
         stdout_task = asyncio.create_task(_consume_stream(process.stdout, execution_id, "stdout"))

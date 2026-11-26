@@ -82,6 +82,12 @@ TASK_SELECT = """
 def _public_task(task: dict) -> dict:
     item = dict(task)
     item["trigger_config"] = decode_trigger_config(item.get("trigger_config"))
+    from ..project_packages import for_app
+    from ..database import connection
+    with connection() as conn:
+        project = for_app(conn, item.get("app_id"))
+    if project:
+        item["project_entry"] = project["entry"]
     item["runtime_ready"] = runtime_ready(
         {
             "script_path": item.get("app_script_path") or item.get("script_path") or "",

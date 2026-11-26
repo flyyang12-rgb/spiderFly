@@ -27,12 +27,13 @@ const {
           <div class="editor-section-heading"><h3>任务内容</h3></div>
           <label class="field"><span>任务名称</span><input v-model="taskForm.name" type="text" maxlength="100" placeholder="例如：订单同步" /></label>
           <label class="field"><span>任务说明 <small>可选</small></span><input v-model="taskForm.description" type="text" maxlength="500" placeholder="简要说明用途" /></label>
-          <details v-if="editingTask" class="editor-disclosure edit-code-versions">
+          <p v-if="editingTask?.project_entry" class="editor-footnote">项目入口 {{ editingTask.project_entry }}</p>
+          <details v-else-if="editingTask" class="editor-disclosure edit-code-versions">
             <summary><span>脚本与版本</span><small>查看代码、依赖和历史版本</small></summary>
             <div class="editor-disclosure-body"><TaskVersions :key="editingTask.id" :task-id="editingTask.id" /><DependencyDetails :app-id="editingTask.app_id" :remote="Boolean(editingTask.target_host_id)" /></div>
           </details>
         </section>
-        <TaskRunSettings :form="taskForm" :hosts="targetHosts" :hosts-loading="targetHostsLoading" :show-target="isAdmin" :disabled="saving" :identity="editingTask?.id" @unauthorized="handleSessionExpired" />
+        <TaskRunSettings :form="taskForm" :hosts="targetHosts" :hosts-loading="targetHostsLoading" :show-target="isAdmin && !editingTask?.project_entry" :show-notifications="!editingTask?.project_entry" :disabled="saving" :identity="editingTask?.id" @unauthorized="handleSessionExpired" />
       </div>
     </fieldset>
     <template #footer><button class="button secondary" type="button" :disabled="saving" @click="taskModalOpen = false">取消</button><button class="button primary" type="button" :disabled="saving" @click="saveTask">{{ saving ? '正在保存…' : '保存' }}</button></template>

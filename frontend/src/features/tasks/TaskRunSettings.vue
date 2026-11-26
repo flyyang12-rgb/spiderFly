@@ -5,6 +5,7 @@ import PlanFields from '../schedule/PlanFields.vue'
 const props = defineProps({
   form: { type: Object, required: true }, hosts: { type: Array, default: () => [] },
   hostsLoading: Boolean, disabled: Boolean, showTarget: { type: Boolean, default: true },
+  showNotifications: { type: Boolean, default: true },
   creating: Boolean, identity: { type: [String, Number], default: '' },
 })
 const emit = defineEmits(['unauthorized'])
@@ -26,7 +27,7 @@ const notificationSummary = computed(() => [props.form.notify_on_success && '成
       <span>{{ creating ? '创建后启用' : '启用任务' }}</span>
       <button class="switch-row" type="button" role="switch" :aria-label="creating ? '创建后启用' : '启用任务'" :aria-checked="form.enabled" :disabled="disabled" @click="form.enabled = !form.enabled"><i :class="{ active: form.enabled }"><b></b></i><span>{{ form.enabled ? '已启用' : '已停用' }}</span></button>
     </div>
-    <details class="editor-disclosure notification-disclosure">
+    <details v-if="showNotifications" class="editor-disclosure notification-disclosure">
       <summary><span>飞书通知</span><small>{{ notificationSummary }}</small></summary>
       <div class="notification-options">
         <label><input v-model="form.notify_on_success" type="checkbox" :disabled="disabled" />成功时通知</label>

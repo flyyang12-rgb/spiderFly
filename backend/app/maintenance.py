@@ -245,6 +245,9 @@ def _failure_decision(conn, execution_id, code, reason):
 def record_failure(execution_id):
     with transaction() as conn:
         from .native_process import workflow_owned
+        from .project_packages import for_execution
+        if for_execution(conn, execution_id):
+            return _failure_decision(conn, execution_id, 'project_package', '项目执行保留日志，由管理员决定是否重新运行')
         if workflow_owned(conn, execution_id):
             return {'decision': 'none', 'reason_code': 'workflow_step',
                     'reason': '流程步骤失败不进入独立任务自动维护', 'maintenance_job_id': None}

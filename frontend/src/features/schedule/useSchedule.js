@@ -104,6 +104,7 @@ export function useSchedule({ executions, me, runtimeTab, scheduleScope, tasks, 
 
   function buildScheduleDay(dateKey) {
     const weekday = isoWeekday(dateKey)
+    const recorded = cronScheduleEntries.value.filter(entry => entry.dateKey === dateKey)
     const entries = tasks.value
       .flatMap((task) => {
         if (task.enabled && task.trigger_type === 'interval') {
@@ -123,6 +124,7 @@ export function useSchedule({ executions, me, runtimeTab, scheduleScope, tasks, 
         if (!/^\d{2}:\d{2}$/.test(config.time || '')) return []
         const plannedTimestamp = scheduleTimestamp(dateKey, config.time)
         if (!plannedTimestamp) return []
+        if (recorded.some(entry => !entry.object_type && entry.task.id === task.id && entry.plannedTimestamp === plannedTimestamp)) return []
         const execution = scheduleExecution(task.id, dateKey)
         if (!execution && task.first_environment_ready === 0 && !task.target_host_id) return []
         if (!execution && timestampOf(task.created_at) > plannedTimestamp) return []
@@ -136,7 +138,7 @@ export function useSchedule({ executions, me, runtimeTab, scheduleScope, tasks, 
           },
         ]
       })
-      .concat(cronScheduleEntries.value.filter((entry) => entry.dateKey === dateKey))
+      .concat(recorded)
       .sort(
         (a, b) =>
           a.plannedTimestamp - b.plannedTimestamp ||
@@ -155,7 +157,7 @@ export function useSchedule({ executions, me, runtimeTab, scheduleScope, tasks, 
   }
 
   function scheduleEntryState(entry) {
-    if (entry.object_type === 'workflow' || entry.task.trigger_type === 'cron') return entry.state || 'waiting'
+    if (entry.object_type === 'workflow' || entry.round_id || entry.task.trigger_type === 'cron') return entry.state || 'waiting'
     if (entry.execution) return entry.execution.status
     return entry.plannedTimestamp > Date.now() ? 'scheduled' : 'missed'
   }

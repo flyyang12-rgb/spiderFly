@@ -161,7 +161,6 @@ export function useWorkspace() {
     workflowPendingStarts,
     taskCenterKind: workspaceState.taskCenterKind,
     createObjectOpen: workspaceState.createObjectOpen,
-    createObjectKind: workspaceState.createObjectKind,
     runHistoryKind: workspaceState.runHistoryKind,
     tasksLoaded: workspaceState.tasksLoaded,
     tasksLoadError: workspaceState.tasksLoadError,

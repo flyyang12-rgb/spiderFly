@@ -126,6 +126,9 @@ def _member(conn, task_id):
 
 
 def _native_runtime(conn, task, source=None):
+    from ..project_packages import for_app
+    if for_app(conn, task.get('app_id')):
+        raise HTTPException(409, '整包项目通过自身计划运行，当前工作流只支持单脚本成员')
     runtime = None
     if _table(conn, "maintenance_policies"):
         policy = conn.execute("SELECT runtime FROM maintenance_policies WHERE task_id=?", (task["id"],)).fetchone()

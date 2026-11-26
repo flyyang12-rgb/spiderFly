@@ -6,7 +6,7 @@ import asyncio
 import sqlite3
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from typing import Annotated
-from .. import security
+from .. import project_packages, security
 from ..database import fetch_all, transaction
 from ..environments import (
     MAX_SCRIPT_BYTES,
@@ -124,12 +124,23 @@ def dependency_details(app_id: int, user: dict = Depends(admin_user)):
             'environments':records, 'remote_environments':remote_records}
 
 
+@router.post("/api/apps/project-entries")
+async def project_entries(project_archive: UploadFile = File(...), user: dict = Depends(admin_user)):
+    content = await project_archive.read(project_packages.MAX_ARCHIVE_BYTES + 1)
+    try:
+        return await asyncio.to_thread(project_packages.inspect, content, "")
+    except (ValueError, OSError) as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
 @router.post("/api/apps", status_code=201)
 async def create_app(
     request: Request,
     name: str = Form(...),
     requirements_text: str = Form(default=""),
-    script: UploadFile = File(...),
+    script: Annotated[UploadFile | None, File()] = None,
+    project_archive: Annotated[UploadFile | None, File()] = None,
+    project_entry: Annotated[str, Form(max_length=200)] = "",
     template: UploadFile | None = File(default=None),
     description: Annotated[str, Form()] = "",
     trigger_type: Annotated[str, Form()] = "manual",
@@ -153,17 +164,33 @@ async def create_app(
             raise ValueError("Cron 首版仅支持主控本机，请选择主控本机")
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    content = await script.read(MAX_SCRIPT_BYTES + 1)
-    template_content = (
-        await template.read(MAX_TEMPLATE_BYTES + 1) if template is not None else None
-    )
+    if bool(script) == bool(project_archive):
+        raise HTTPException(400, "请选择一个 Python 脚本或项目 ZIP")
     try:
+        project = None
+        project_content = None
+        if project_archive is not None:
+            if not project_entry or target_host_id is not None or template is not None:
+                raise ValueError("项目任务需要指定入口，运行电脑为主控本机，模板随项目上传")
+            project_content = await project_archive.read(project_packages.MAX_ARCHIVE_BYTES + 1)
+            try:
+                project = await asyncio.to_thread(project_packages.inspect, project_content, project_entry)
+            except OSError as exc:
+                raise ValueError('无法读取项目 ZIP') from exc
+            filename = project["entry"].rsplit("/", 1)[-1]
+            content = project["source"]
+            requirements_text = project["requirements"]
+            notify_on_success = notify_on_failure = failure_screenshot = False
+        else:
+            filename = script.filename or "main.py"
+            content = await script.read(MAX_SCRIPT_BYTES + 1)
+        template_content = await template.read(MAX_TEMPLATE_BYTES + 1) if template is not None else None
         import json
         decisions = json.loads(dependency_decisions)
         created = await asyncio.to_thread(
             create_managed_task_bundle,
             name,
-            script.filename or "main.py",
+            filename,
             content,
             requirements_text,
             int(user["id"]),
@@ -180,6 +207,7 @@ async def create_app(
             failure_screenshot=failure_screenshot,
             request_id=request_id,
             dependency_decisions=decisions,
+            project=project, project_content=project_content,
             on_created=lambda conn, task_id: security.write_audit(
                 request, user, 'create_task', target_type='task', target_id=task_id,
                 summary=f'创建任务 {name} 并准备独立 Python 环境', conn=conn),

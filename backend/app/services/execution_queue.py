@@ -7,7 +7,7 @@ import logging
 import sqlite3
 import json
 from fastapi import HTTPException
-from .. import maintenance, task_versions
+from .. import maintenance, project_packages, task_versions
 from ..config import HOST_CHECK_INTERVAL_SECONDS, WORK_DIR
 from ..database import TASK_EXECUTION_STATUS_SQL, execute, fetch_one, transaction, utc_now
 from ..environments import managed_runtime_paths
@@ -61,6 +61,9 @@ def _enqueue_task_in_transaction(task_id, source, requested_by, conn, round_id=N
         raise HTTPException(status_code=409, detail="任务已绑定远程电脑，不能在主控本机运行")
     if not task['current_app_id'] or task['app_archived']:
         raise HTTPException(status_code=409, detail="自动化程序不存在或已经移除")
+    project = project_packages.for_app(conn, task['current_app_id'])
+    if project and task['target_host_id'] is not None:
+        raise HTTPException(409, '项目任务只支持主控本机')
     app_item = dict(task)
     app_item['script_path'] = task['current_script_path']
     try:
@@ -69,8 +72,10 @@ def _enqueue_task_in_transaction(task_id, source, requested_by, conn, round_id=N
         detail = "Python 环境尚未准备好" if task['environment_status'] != 'ready' else str(exc)
         raise HTTPException(status_code=409, detail=detail) from exc
     active = conn.execute("SELECT id FROM executions WHERE task_id=? AND status IN ('pending','running') LIMIT 1", (task_id,)).fetchone()
-    if active and (source != 'schedule' or round_id is not None):
+    if active and (project or source != 'schedule' or round_id is not None):
         raise HTTPException(status_code=409, detail="任务已经在排队或运行")
+    if project and cron_runs._busy_reason(conn, task_id, round_id):
+        raise HTTPException(409, '项目上一次执行或收尾尚未结束')
     now = utc_now()
     if task['trigger_type'] == 'interval':
         from .interval_schedules import ensure_schema, refresh
@@ -79,15 +84,21 @@ def _enqueue_task_in_transaction(task_id, source, requested_by, conn, round_id=N
     execution_id = int(conn.execute('''INSERT INTO executions(
         task_id,status,trigger_source,requested_by,script_path_snapshot,python_path_snapshot,created_at)
         VALUES(?,'pending',?,?,?,?,?)''', (task_id,source,requested_by,str(script),str(python_path),now)).lastrowid)
-    snapshot = maintenance.capture_snapshot(conn, task_id)
-    if task['trigger_type'] == 'interval' and json.loads(snapshot)['policy']['runtime'] in {'native', 'readonly-v1'}:
+    if project:
+        conn.execute('INSERT INTO project_executions VALUES(?,?,?,?)',
+                     (execution_id, project['app_id'], project['entry'], project['digest']))
+    snapshot = '' if project else maintenance.capture_snapshot(conn, task_id)
+    runtime = 'native'
+    if not project and (task['trigger_type'] == 'interval' or round_id is not None):
+        runtime = json.loads(snapshot)['policy']['runtime']
+    if task['trigger_type'] == 'interval' and runtime in {'native', 'readonly-v1'}:
         from .interval_schedules import ensure_schema
         ensure_schema(conn)
         conn.execute('INSERT INTO interval_executions(execution_id) VALUES(?)', (execution_id,))
     if round_id is not None:
         from .task_queries import validate_cron_runtime
         try:
-            validate_cron_runtime(conn, runtime=json.loads(snapshot)['policy']['runtime'])
+            validate_cron_runtime(conn, runtime=runtime)
         except ValueError as exc:
             raise HTTPException(409, str(exc)) from exc
     conn.execute('UPDATE executions SET maintenance_snapshot=? WHERE id=?', (snapshot, execution_id))

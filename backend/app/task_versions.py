@@ -119,6 +119,8 @@ def submit(task_id, source, requirements, patch, evidence, actor, *, base_id=Non
     requirements=_safe_requirements(requirements)
     if ai_settings.redact(source)!=source: raise ValueError('源码包含疑似密钥，请移除')
     with transaction() as conn:
+        from .project_packages import require_script_task
+        require_script_task(conn, task_id)
         task,policy,current,details=active(conn,task_id)
         if base_id is not None and int(base_id)!=current['id']: raise ValueError('任务版本已改变，请读取最新版本后再提交')
         analysis = None
@@ -186,7 +188,9 @@ def submit(task_id, source, requirements, patch, evidence, actor, *, base_id=Non
 
 def publish(conn,task_id,version_id, *, expected_policy=None):
     from .native_process import workflow_owned
+    from .project_packages import require_script_task
     from .services import cron_runs
+    require_script_task(conn, task_id)
     from .services.task_queries import validate_cron_runtime
     accepted = cron_runs.active_round(conn, task_id)
     if accepted and accepted['state'] == 'pending':

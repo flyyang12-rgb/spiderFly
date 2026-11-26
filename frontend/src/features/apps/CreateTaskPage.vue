@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useWorkspaceContext } from '../../workspace/context'
 import TaskRunSettings from '../tasks/TaskRunSettings.vue'
 import DependencyFields from './DependencyFields.vue'
@@ -8,6 +8,7 @@ const props = defineProps({ embedded: Boolean, disabled: Boolean, formId: { type
 const emit = defineEmits(['submit'])
 const { appForm, isAdmin, openAi, selectScript, loadTargetHosts, targetHosts, targetHostsLoading,
   uploadApp, uploadKey, uploading, uploadError, uploadUncertain, requirementsReading, handleSessionExpired } = useWorkspaceContext()
+const project = computed(() => /\.zip$/i.test(appForm.script?.name || ''))
 onMounted(loadTargetHosts)
 function submit() { if (props.embedded) emit('submit'); else uploadApp() }
 </script>
@@ -28,14 +29,22 @@ function submit() { if (props.embedded) emit('submit'); else uploadApp() }
                 <label class="field"><span>任务说明 <small>可选</small></span><input v-model="appForm.description" type="text" maxlength="500" placeholder="简要说明用途" /></label>
               </div>
               <label class="upload-file-card required-file script-upload" :class="{ selected: appForm.script }">
-                <input :key="uploadKey" type="file" accept=".py,text/x-python" @change="selectScript" />
-                <span class="upload-file-mark">PY</span>
-                <span class="upload-file-copy"><strong>{{ appForm.script?.name || '上传 Python 脚本' }}</strong><small>{{ appForm.script ? '已选择 · 保存后准备依赖' : '选择 .py 文件，自动识别依赖' }}</small></span>
+                <input :key="uploadKey" type="file" accept=".py,.zip,text/x-python,application/zip" @change="selectScript" />
+                <span class="upload-file-mark">{{ project ? "ZIP" : "PY" }}</span>
+                <span class="upload-file-copy"><strong>{{ appForm.script?.name || '上传脚本或项目' }}</strong><small>{{ appForm.script ? '已选择 · 保存后准备依赖' : '单个 .py 文件或项目 .zip' }}</small></span>
                 <span class="upload-file-action">{{ appForm.script ? '更换文件' : '选择文件' }}</span>
               </label>
-              <DependencyFields :key="uploadKey" :script="appForm.script" v-model:requirements="appForm.requirements_text" v-model="appForm.dependency_decisions" :target="appForm.target_host_id" :disabled="disabled || uploading || uploadUncertain" @state="appForm.dependency_status = $event.status" @unauthorized="handleSessionExpired" />
+              <label v-if="project" class="field">
+                <span>项目入口</span>
+                <select v-model="appForm.project_entry" :disabled="appForm.project_loading" required>
+                  <option value="" disabled>{{ appForm.project_loading ? '正在读取项目文件…' : '选择要启动的 Python 文件' }}</option>
+                  <option v-for="entry in appForm.project_entries" :key="entry" :value="entry">{{ entry }}</option>
+                </select>
+                <small>读取项目根目录的 requirements.txt。在主控本机运行。</small>
+              </label>
+              <DependencyFields v-else :key="uploadKey" :script="appForm.script" v-model:requirements="appForm.requirements_text" v-model="appForm.dependency_decisions" :target="appForm.target_host_id" :disabled="disabled || uploading || uploadUncertain" @state="appForm.dependency_status = $event.status" @unauthorized="handleSessionExpired" />
             </section>
-            <TaskRunSettings :form="appForm" :hosts="targetHosts" :hosts-loading="targetHostsLoading" :disabled="disabled || uploading || uploadUncertain" :identity="uploadKey" creating @unauthorized="handleSessionExpired" />
+            <TaskRunSettings :form="appForm" :hosts="targetHosts" :hosts-loading="targetHostsLoading" :show-target="!project" :show-notifications="!project" :disabled="disabled || uploading || uploadUncertain" :identity="uploadKey" creating @unauthorized="handleSessionExpired" />
           </div>
         </fieldset>
         <div v-if="!embedded" class="upload-actions"><button class="button primary" type="submit" :disabled="uploading || uploadUncertain || requirementsReading || Boolean(appForm.dependency_status && !['ready','idle'].includes(appForm.dependency_status))">{{ uploading ? '正在创建…' : '创建任务' }}</button></div>

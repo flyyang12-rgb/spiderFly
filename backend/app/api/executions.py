@@ -264,6 +264,12 @@ def get_execution(
     item["stop_requested"] = item["status"] == "running" and execution_stop_requested(execution_id)
     item.pop("script_path_snapshot", None)
     item.pop("maintenance_snapshot", None)
+    from ..project_packages import for_execution
+    from ..database import connection
+    with connection() as conn:
+        project = for_execution(conn, execution_id)
+    if project:
+        item.update(project_entry=project["entry"], project_version=project["digest"][:12])
     item["maintenance"] = maintenance.execution_note(execution_id)
     item.pop("python_path_snapshot", None)
     if item.get("retryable") is not None:

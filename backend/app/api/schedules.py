@@ -91,7 +91,9 @@ def _round_entry(conn, record):
     elif state == 'settled':
         state = record.get('final_status') or (rerun['status'] if rerun else (execution['status'] if execution else 'settled'))
         reason = reason or record.get('result_summary', '')
-    return {'task': {'id': record['task_id'], 'name': record['task_name'], 'trigger_type': 'cron'},
+    import json
+    trigger_type = json.loads(record['config']).get('trigger_type', 'cron')
+    return {'task': {'id': record['task_id'], 'name': record['task_name'], 'trigger_type': trigger_type},
             'plannedAt': record['scheduled_for'], 'execution': dict(execution) if execution else None,
             'round_id': record['id'], 'state': state, 'reason': reason,
             'maintenance_job_id': record['maintenance_job_id'],

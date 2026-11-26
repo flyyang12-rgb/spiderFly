@@ -6,10 +6,10 @@ const props = defineProps({ state: { type: Object, required: true } })
 </script>
 
 <template>
-  <WorkflowDialog :title="state.editor.value.id ? '编辑流程' : '新建流程'" wide :close-disabled="state.busy.value === 'save'" @close="state.closeEditor">
+  <WorkflowDialog title="编辑流程" wide :close-disabled="state.busy.value === 'save'" @close="state.closeEditor">
     <form id="workflow-form" class="workflow-form" @submit.prevent="state.saveWorkflow()">
       <div v-if="state.formError.value" class="workflow-feedback error" role="alert">{{ state.formError.value }}</div>
-      <fieldset class="workflow-fields" :disabled="state.busy.value === 'save' || state.formUncertain.value"><legend class="sr-only">工作流设置</legend>
+      <fieldset class="workflow-fields" :disabled="state.busy.value === 'save'"><legend class="sr-only">工作流设置</legend>
       <div class="editor-layout"><section class="editor-main" aria-label="流程内容"><div class="editor-section-heading"><h3>流程内容</h3></div><div class="workflow-basics"><label class="field"><span>流程名称</span><input v-model="state.form.name" type="text" maxlength="100" required :disabled="state.busy.value === 'save'" placeholder="例如：报表下载与入库" /></label>
       <label class="field"><span>流程说明 <small>可选</small></span><textarea v-model="state.form.description" maxlength="500" rows="2" :disabled="state.busy.value === 'save'" placeholder="说明流程用途" /></label>
       </div>
@@ -47,14 +47,13 @@ const props = defineProps({ state: { type: Object, required: true } })
       </section>
       <p v-if="state.editor.value.active_run_id" class="workflow-help">当前运行沿用原步骤与版本。</p>
       </section><section class="editor-aside" aria-label="运行设置"><div class="editor-section-heading"><h3>运行设置</h3></div><div class="editor-target"><span>运行电脑</span><strong>主控本机</strong></div>
-      <PlanFields :form="state.form" :disabled="state.busy.value === 'save'" :identity="state.editor.value.id || 'new'" />
+      <PlanFields :form="state.form" :disabled="state.busy.value === 'save'" :identity="state.editor.value.id" />
       <p class="editor-footnote">整轮共用一个计划。</p></section></div>
       </fieldset>
-      <div v-if="state.formUncertain.value"><button class="button secondary" type="button" :disabled="Boolean(state.busy.value)" @click="state.resolveCreation">核对创建结果</button><button class="text-button" type="button" :disabled="Boolean(state.busy.value)" @click="state.saveWorkflow({ retryUncertain: true })">原请求重试</button></div>
     </form>
     <template #footer>
       <button class="button ghost" type="button" :disabled="state.busy.value === 'save'" @click="state.closeEditor">取消</button>
-      <button class="button primary" type="submit" form="workflow-form" :disabled="Boolean(state.busy.value) || state.formUncertain.value">{{ state.busy.value === 'save' ? '正在保存…' : '保存' }}</button>
+      <button class="button primary" type="submit" form="workflow-form" :disabled="Boolean(state.busy.value)">{{ state.busy.value === 'save' ? '正在保存…' : '保存' }}</button>
     </template>
   </WorkflowDialog>
 </template>

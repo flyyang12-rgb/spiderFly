@@ -97,6 +97,7 @@ const {
               <span class="schedule-state"><i></i>{{ scheduleEntryStateLabel(entry) }}</span>
               <WorkflowPlanDetails v-if="entry.object_type === 'workflow'" :entry="entry" @run="id => runId = id" />
               <CronEntryDetails v-else-if="entry.task.trigger_type === 'cron'" :entry="entry" />
+              <small v-else-if="entry.reason">{{ entry.reason }}</small>
             </div>
           </article>
         </div>
@@ -136,6 +137,7 @@ const {
                 >
                 <WorkflowPlanDetails v-if="entry.object_type === 'workflow'" :entry="entry" @run="id => runId = id" />
                 <CronEntryDetails v-else-if="entry.task.trigger_type === 'cron'" :entry="entry" />
+                <small v-else-if="entry.reason">{{ entry.reason }}</small>
               </article>
             </div>
             <div v-else class="schedule-week-empty">{{ cronScheduleLoading ? '正在载入' : cronScheduleError ? 'Cron 暂未载入' : '无定时计划' }}</div>

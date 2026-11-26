@@ -8,7 +8,6 @@ export function createWorkspaceDataState() {
   const managementTab = ref('services')
   const taskCenterKind = ref('all')
   const createObjectOpen = ref(false)
-  const createObjectKind = ref('task')
   const runHistoryKind = ref('task')
   const tasksLoaded = ref(false)
   const tasksLoadError = ref('')
@@ -19,7 +18,7 @@ export function createWorkspaceDataState() {
   const saving = ref(false)
   const toast = reactive({ visible: false, type: 'success', title: '', message: '' })
   return { view, runtimeTab, managementTab, remoteRunTarget, loading, overview, settings, saving, toast,
-    taskCenterKind, createObjectOpen, createObjectKind, runHistoryKind, tasksLoaded, tasksLoadError }
+    taskCenterKind, createObjectOpen, runHistoryKind, tasksLoaded, tasksLoadError }
 }
 
 export function useWorkspaceData({
@@ -58,7 +57,6 @@ export function useWorkspaceData({
   workflowPendingStarts,
   taskCenterKind,
   createObjectOpen,
-  createObjectKind,
   runHistoryKind,
   tasksLoaded,
   tasksLoadError,
@@ -109,7 +107,6 @@ export function useWorkspaceData({
     resetExecutionSession?.()
     resetTaskSession?.()
     createObjectOpen.value = false
-    createObjectKind.value = 'task'
     taskCenterKind.value = 'all'
     runHistoryKind.value = 'task'
     tasksLoaded.value = false
@@ -222,7 +219,7 @@ export function useWorkspaceData({
   function navigateTo(target, tab = null) {
     if (target === 'management' && ['ai', 'settings', 'users'].includes(tab)) tab = 'services'
     if (target === 'workflows') { taskCenterKind.value = 'workflow'; target = 'tasks' }
-    if (target === 'management' && tab === 'apps') { openCreate('task', { preserveDraft: true }); return }
+    if (target === 'management' && tab === 'apps') { openCreate({ preserveDraft: true }); return }
     if (target === 'management' && !isAdmin.value) {
       view.value = 'overview'
       showToast('error', '此区域仅管理员可用', '普通成员可使用工作台、任务中心和运行中心')
@@ -233,11 +230,10 @@ export function useWorkspaceData({
     view.value = target
   }
 
-  function openCreate(kind = 'task', { preserveDraft = false } = {}) {
-    if (!isAdmin.value) { showToast('error', '请联系管理员新建任务或工作流'); return }
+  function openCreate({ preserveDraft = false } = {}) {
+    if (!isAdmin.value) { showToast('error', '请联系管理员新建任务'); return }
     if (!preserveDraft) resetCreateSession?.()
     view.value = 'tasks'
-    createObjectKind.value = kind === 'workflow' ? 'workflow' : 'task'
     createObjectOpen.value = true
   }
 

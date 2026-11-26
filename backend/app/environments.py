@@ -677,6 +677,8 @@ def create_managed_task_bundle(
     request_id: str | None = None,
     on_created=None,
     dependency_decisions=None,
+    project=None,
+    project_content=None,
 ) -> dict:
     """Atomically create one managed program and its one-to-one configured task."""
     with _APP_STORAGE_LOCK:
@@ -701,6 +703,7 @@ def create_managed_task_bundle(
             request_id=request_id,
             on_created=on_created,
             dependency_decisions=dependency_decisions,
+            project=project, project_content=project_content,
         )
 
 
@@ -726,6 +729,8 @@ def _create_managed_app_locked(
     request_id: str | None = None,
     on_created=None,
     dependency_decisions=None,
+    project=None,
+    project_content=None,
 ) -> dict:
     name = name.strip()
     if not name or len(name) > 100:
@@ -751,6 +756,7 @@ def _create_managed_app_locked(
         'target_host_id': task_target_host_id, 'notify_on_success': task_notify_on_success,
         'notify_on_failure': task_notify_on_failure, 'failure_screenshot': task_failure_screenshot,
         'dependency_decisions': dependency_decisions or [],
+        **({'project_entry': project['entry'], 'project_digest': project['digest']} if project else {}),
     })
     now = utc_now()
     app_id: int | None = None
@@ -767,13 +773,13 @@ def _create_managed_app_locked(
                 return {**dict(saved), 'active_task_count': 1, 'creation_replayed': True}
             # Re-evaluate submitted content; client summaries/hashes are never trusted.
             analysis = None
-            if create_manual_task:
+            if create_manual_task and not project:
                 from . import dependency_analysis as deps
                 analysis = deps.analyze(source, safe_name, requirements_text, dependency_decisions,
                                         deps.target_context(task_target_host_id))
                 deps.require_resolved(analysis)
                 requirements = analysis['requirements']
-            if create_manual_task and task_trigger_type == 'cron':
+            if create_manual_task and task_trigger_type == 'cron' and not project:
                 from .services.task_queries import validate_cron_runtime
                 if task_target_host_id is not None:
                     raise ValueError('Cron 首版仅支持主控本机，请选择主控本机')
@@ -852,6 +858,14 @@ def _create_managed_app_locked(
             app_dir.mkdir(parents=True, exist_ok=True)
             script_path = app_dir / safe_name
             script_path.write_text(source, encoding="utf-8", newline="\n")
+            from . import project_packages
+            if project:
+                project_packages.archive_path(app_dir, project["digest"]).write_bytes(project_content)
+                conn.execute("""INSERT INTO project_packages(app_id,entry,digest) VALUES(?,?,?)
+                    ON CONFLICT(app_id) DO UPDATE SET entry=excluded.entry,digest=excluded.digest""",
+                    (app_id, project["entry"], project["digest"]))
+            elif existing and project_packages.for_app(conn, app_id):
+                conn.execute("DELETE FROM project_packages WHERE app_id=?", (app_id,))
             template_path = ""
             if safe_template_name:
                 managed_template = app_dir / safe_template_name
@@ -1420,6 +1434,12 @@ async def build_environment(app_id: int) -> None:
             if code != 0:
                 if code == 124:
                     raise RuntimeError(f"安装依赖超过 {PIP_TIMEOUT_SECONDS} 秒")
+                missing = re.search(
+                    r"^ERROR: No matching distribution found for ([A-Za-z0-9][A-Za-z0-9._-]*)(?=[\s<>=!~;\[]|$)",
+                    output, re.MULTILINE,
+                )
+                if missing:
+                    raise RuntimeError(f"安装依赖失败：找不到与要求匹配的 {missing[1]} 安装包")
                 raise RuntimeError("安装 requirements.txt 失败")
         else:
             logs.append("[安装依赖]\n未声明第三方依赖，跳过安装。")

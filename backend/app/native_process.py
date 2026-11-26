@@ -71,7 +71,8 @@ def coordinated_owned(conn, execution_id: int) -> bool:
     """Coordinated plans wait for durable process and resource cleanup receipts."""
     interval = (conn.execute("SELECT 1 FROM sqlite_master WHERE name='interval_executions'").fetchone()
                 and conn.execute('SELECT 1 FROM interval_executions WHERE execution_id=?', (execution_id,)).fetchone())
-    return bool(interval) or cron_owned(conn, execution_id) or workflow_owned(conn, execution_id)
+    from .project_packages import for_execution
+    return bool(interval) or cron_owned(conn, execution_id) or workflow_owned(conn, execution_id) or bool(for_execution(conn, execution_id))
 
 
 def is_workflow_execution(execution_id: int) -> bool:

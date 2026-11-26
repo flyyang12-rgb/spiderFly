@@ -3,7 +3,7 @@ import { request } from '../../lib/api'
 import { emptyPlan, planBody, validatePlan, creationRequestId } from '../../lib/plans'
 
 function emptyForm() {
-  return { name: '', description: '', requirements_text: '', requirements_filename: '', script: null,
+  return { name: '', description: '', requirements_text: '', requirements_filename: '', script: null, project_entry: '', project_entries: [], project_loading: false,
     dependency_decisions: [], dependency_status: '',
     enabled: true, notify_on_success: true, notify_on_failure: true, failure_screenshot: false,
     ...emptyPlan(), target_host_id: '' }
@@ -44,12 +44,36 @@ export function useApps({ aiOpen, aiSourceThread, aiTaskId, appForm, isAdmin, lo
   }
   if (me) watch(me, (user, previous) => { if (user !== previous) resetCreateSession() }, { flush: 'sync' })
 
-  function selectScript(event) {
+  async function selectScript(event) {
     if (uploading.value || uploadUncertain.value) return
     aiSourceThread.value = null
-    appForm.script = event.target.files?.[0] || null
-    if (!appForm.name && appForm.script) appForm.name = appForm.script.name.replace(/\.py$/i, '')
+    const generation = session
+    const owner = me?.value
+    const file = event.target.files?.[0] || null
+    appForm.script = file
+    appForm.project_entry = ''
+    appForm.project_entries = []
+    appForm.project_loading = false
+    if (!appForm.name && file) appForm.name = file.name.replace(/\.(py|zip)$/i, '')
     uploadError.value = ''
+    if (!file || !/\.zip$/i.test(file.name)) return
+    appForm.target_host_id = ''
+    appForm.dependency_status = ''
+    appForm.project_loading = true
+    const body = new FormData()
+    body.append('project_archive', file)
+    try {
+      const result = await api('/apps/project-entries', { method: 'POST', body })
+      if (!live(generation, owner) || appForm.script !== file) return
+      appForm.project_entries = result.entries
+      if (result.entries.length === 1) appForm.project_entry = result.entries[0]
+    } catch (error) {
+      if (!live(generation, owner) || appForm.script !== file) return
+      uploadError.value = error.message || '无法读取项目入口'
+      if (error.status === 401) handleSessionExpired()
+    } finally {
+      if (live(generation, owner) && appForm.script === file) appForm.project_loading = false
+    }
   }
 
   async function selectRequirementsFile(event) {
@@ -95,7 +119,7 @@ export function useApps({ aiOpen, aiSourceThread, aiTaskId, appForm, isAdmin, lo
     aiSourceThread.value = draft.task_id ? null : draft.thread_id
     uploadKey.value += 1
     aiOpen.value = false
-    if (openCreate) openCreate('task', { preserveDraft: true })
+    if (openCreate) openCreate({ preserveDraft: true })
     else navigateTo('management', 'apps')
     showToast('success', 'Python 草稿已带入', draft.trial?.status === 'success' ? '可在本表单选择手动或定时' : '语法已检查，实际结果需运行验证')
   }
@@ -104,9 +128,14 @@ export function useApps({ aiOpen, aiSourceThread, aiTaskId, appForm, isAdmin, lo
     if (!isAdmin.value || uploading.value || (uploadUncertain.value && !retryUncertain) || requirementsReading.value || (me && !me.value)) return null
     if (completedTask) return completedTask
     uploadError.value = ''
-    if (!appForm.name.trim() || !appForm.script) { uploadError.value = '请选择 Python 脚本并填写任务名称'; return null }
-    if (!appForm.script.name.toLowerCase().endsWith('.py')) { uploadError.value = '只能上传一个 .py 文件'; return null }
-    if (!pendingUpload && appForm.dependency_status && appForm.dependency_status !== 'ready') {
+    if (!appForm.name.trim() || !appForm.script) { uploadError.value = '请选择脚本或项目并填写任务名称'; return null }
+    const project = /\.zip$/i.test(appForm.script.name)
+    if (!project && !/\.py$/i.test(appForm.script.name)) { uploadError.value = '请选择 .py 或项目 .zip'; return null }
+    if (project && (!appForm.project_entry || appForm.project_loading)) {
+      uploadError.value = '请选择项目的 Python 入口'
+      return null
+    }
+    if (!project && !pendingUpload && appForm.dependency_status && appForm.dependency_status !== 'ready') {
       uploadError.value = appForm.dependency_status === 'loading' ? '依赖识别尚未完成' : '请先处理依赖分析中的待补充项'; return null
     }
     const planError = validatePlan(appForm, Boolean(appForm.target_host_id))
@@ -125,7 +154,8 @@ export function useApps({ aiOpen, aiSourceThread, aiTaskId, appForm, isAdmin, lo
     form.append('trigger_config', JSON.stringify(plan.trigger_config))
     if (appForm.target_host_id) form.append('target_host_id', appForm.target_host_id)
     for (const key of ['enabled', 'notify_on_success', 'notify_on_failure', 'failure_screenshot']) form.append(key, String(appForm[key]))
-    form.append('script', appForm.script)
+    form.append(project ? 'project_archive' : 'script', appForm.script)
+    if (project) form.append('project_entry', appForm.project_entry)
     form.append('request_id', creationRequestId())
     pendingUpload = { form }
     }

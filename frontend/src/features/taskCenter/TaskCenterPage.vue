@@ -77,7 +77,10 @@ async function refreshAll() {
 }
 function resetCenterFilters() { resetFilters(); showArchived.value = false }
 function choosePlan(row) { planTarget.value = { kind: row.kind, id: row.id, created: false } }
-function createdObject(target) { if (target.kind === 'workflow') refresh(true); else loadAll({ quiet: true, includeAdmin: false }) }
+function createdTask() {
+  if (taskCenterKind.value === 'workflow') taskCenterKind.value = 'task'
+  loadAll({ quiet: true, includeAdmin: false })
+}
 async function execution(id) { closeRun(); await nextTick(); openExecution({ id }) }
 function closeConfirmation() { if (!busy.value) confirmation.value = null }
 watch(taskCenterKind, () => {
@@ -94,7 +97,7 @@ watch(me, (user, previous) => { if (!user || user.id !== previous?.id) { planTar
     <section class="panel center-objects">
       <header class="panel-heading">
         <div class="center-count" role="status">{{ countLabel }}</div>
-        <div class="center-header-actions"><button v-if="isAdmin" class="button secondary compact" type="button" @click="openAi()">AI 创建</button><button v-if="isAdmin" class="button primary compact" type="button" :disabled="Boolean(busy)" @click="openCreate(taskCenterKind === 'workflow' ? 'workflow' : 'task')">新建</button></div>
+        <div class="center-header-actions"><button v-if="isAdmin" class="button secondary compact" type="button" @click="openAi()">AI 创建</button><button v-if="isAdmin" class="button primary compact" type="button" :disabled="Boolean(busy)" @click="openCreate()">新建</button></div>
       </header>
       <div class="center-filter-region">
       <div v-if="filterIsMobile" class="center-mobile-filter-tools">
@@ -102,14 +105,14 @@ watch(me, (user, previous) => { if (!user || user.id !== previous?.id) { planTar
         <button class="button ghost compact" type="button" :disabled="refreshBusy || refreshing" @click="refreshAll">{{ refreshBusy || refreshing ? '刷新中…' : '刷新' }}</button>
       </div>
       <div id="task-center-filters" class="filter-bar center-filter-bar" :hidden="filterIsMobile && !filtersExpanded">
-        <label class="filter-field"><span>类型</span><select v-model="taskCenterKind"><option value="all">全部</option><option value="task">单任务</option><option value="workflow">工作流</option></select></label>
+        <label class="filter-field"><span>类型</span><select v-model="taskCenterKind"><option value="all">全部</option><option value="task">单任务</option><option v-if="workflows.length || taskCenterKind === 'workflow'" value="workflow">已有工作流</option></select></label>
         <label class="filter-field"><span>名称</span><input v-model="filters.name" type="search" placeholder="搜索任务或工作流" /></label>
         <label class="filter-field"><span>触发方式</span><select v-model="filters.trigger_type"><option value="all">全部</option><option v-for="option in triggerOptions" :key="option.value" :value="option.value">{{ option.label }}</option></select></label>
         <template v-if="taskCenterKind === 'task'">
           <label class="filter-field"><span>启用状态</span><select v-model="filters.enabled"><option value="all">全部状态</option><option value="enabled">已启用</option><option value="disabled">已停用</option></select></label>
           <label class="filter-field"><span>归属人</span><select v-model="filters.owner"><option value="all">全部</option><option v-for="owner in ownerOptions" :key="owner.value" :value="owner.value">{{ owner.label }}</option></select></label>
         </template>
-        <label v-if="taskCenterKind !== 'task'" class="center-archive-filter"><input v-model="showArchived" type="checkbox" />显示已归档流程</label>
+        <label v-if="workflows.length && taskCenterKind !== 'task'" class="center-archive-filter"><input v-model="showArchived" type="checkbox" />显示已归档流程</label>
         <div class="filter-actions"><button v-if="!filterIsMobile" class="button secondary compact" type="button" :disabled="refreshBusy || refreshing" @click="refreshAll">{{ refreshBusy || refreshing ? '刷新中…' : '刷新' }}</button><button class="button ghost compact" type="button" @click="resetCenterFilters">清空筛选</button></div>
       </div>
       </div>
@@ -160,9 +163,9 @@ watch(me, (user, previous) => { if (!user || user.id !== previous?.id) { planTar
           </div>
         </li>
       </ul>
-      <div v-else class="empty-state compact-empty"><strong>{{ !complete ? '当前没有已载入的匹配对象' : tasks.length || workflows.length ? '没有匹配的任务或工作流' : '还没有任务或工作流' }}</strong><p>{{ !complete ? '部分资料仍未取得，请重试读取。' : tasks.length || workflows.length ? '调整筛选条件后再试。' : '从“新建”选择单任务或工作流。' }}</p></div>
+      <div v-else class="empty-state compact-empty"><strong>{{ !complete ? '当前没有已载入的匹配对象' : tasks.length || workflows.length ? '没有匹配的记录' : '还没有任务' }}</strong><p>{{ !complete ? '部分资料仍未取得，请重试读取。' : tasks.length || workflows.length ? '调整筛选条件后再试。' : '点击“新建”，上传 Python 脚本或项目 ZIP。' }}</p></div>
     </section>
-    <CreationDialog v-if="createObjectOpen && isAdmin" @created="createdObject" />
+    <CreationDialog v-if="createObjectOpen && isAdmin" @created="createdTask" />
     <WorkflowEditor v-if="editor" :state="state" />
     <WorkflowRunDetail v-if="selectedRunId && !confirmation" :state="state" :can-manage="isAdmin" @execution="execution" />
     <WorkflowDialog v-if="confirmation" :title="confirmation.type === 'stop' ? '停止本轮流程' : '归档流程'" :close-disabled="Boolean(busy)" @close="closeConfirmation">
@@ -184,8 +187,8 @@ watch(me, (user, previous) => { if (!user || user.id !== previous?.id) { planTar
 .center-filter-bar[hidden] { display: none; }
 .center-filter-bar { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; }
 .center-filter-bar > .filter-field { flex: 1 1 160px; min-width: 0; }
-.center-filter-bar input, .center-filter-bar select { font-size: 13px; }
-.center-count { color: var(--muted); font-size: 12px; }
+.center-filter-bar input, .center-filter-bar select { font-size: var(--workspace-body, 13px); }
+.center-count { color: var(--muted); font-size: var(--workspace-caption, 12px); }
 .center-header-actions, .center-object-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .center-archive-filter { display: flex; gap: 6px; align-items: center; color: var(--muted); font-size: 11px; }
 .center-object-list { margin: 0; padding: 0; list-style: none; }
@@ -193,10 +196,10 @@ watch(me, (user, previous) => { if (!user || user.id !== previous?.id) { planTar
 .center-object-list > li:last-child { border-bottom: 0; }
 .center-object-main { display: grid; gap: 8px; min-width: 0; }
 .center-object-name { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.center-object-name strong { font-size: 14px; overflow-wrap: anywhere; }
-.center-kind-badge { border: 1px solid var(--border); border-radius: 6px; padding: 3px 6px; color: var(--muted); background: var(--surface-subtle); font-size: 11px; }
-.center-description { margin: 0; color: var(--muted); font-size: 12px; line-height: 20px; overflow-wrap: anywhere; }
-.center-object-facts { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 16px; color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+.center-object-name strong { font-size: var(--workspace-item-title, 14px); overflow-wrap: anywhere; }
+.center-kind-badge { border: 1px solid var(--border); border-radius: 6px; padding: 3px 6px; color: var(--muted); background: var(--surface-subtle); font-size: var(--workspace-caption, 11px); }
+.center-description { margin: 0; color: var(--muted); font-size: var(--workspace-body, 12px); line-height: 20px; overflow-wrap: anywhere; }
+.center-object-facts { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 16px; color: var(--muted); font-size: var(--workspace-caption, 11px); overflow-wrap: anywhere; }
 .center-object-actions { align-content: center; justify-content: flex-end; }
 .center-more { max-width: 100%; color: var(--muted); font-size: 13px; }
 .center-more summary { cursor: pointer; padding: 7px 10px; border-radius: 8px; }

@@ -220,16 +220,27 @@ def register_due(task_id: int, now: str | datetime | None = None,
             return None
         task = dict(row)
         at = _time(now)
-        if (task.get("archived") or not task.get("enabled") or task["trigger_type"] != "cron"
+        from ..project_packages import for_app
+        trigger_type = task["trigger_type"]
+        fixed_project = trigger_type in {"daily", "weekly", "monthly"} and for_app(opened, task.get("app_id"))
+        if (task.get("archived") or not task.get("enabled") or (trigger_type != "cron" and not fixed_project)
             or not task.get('first_environment_ready', 1)
             or (expected_version is not None and task["version"] != expected_version)
             or (expected_next_run is not None and task["next_run_at"] != expected_next_run)
             or not task.get("next_run_at") or _time(task["next_run_at"]) > at):
             return None
         config = _config(task)
-        expression = config["trigger_config"]["expression"]
         first = _time(task["next_run_at"])
-        scheduled = max(first, previous_cron_time(expression, at))
+        if fixed_project:
+            from .workflow_schedules import latest_slot
+            from ..scheduling import compute_next_run
+            config["trigger_type"] = trigger_type
+            scheduled = max(first, _time(latest_slot(trigger_type, config["trigger_config"], at)))
+            next_run = compute_next_run(trigger_type, config["trigger_config"], after=at)
+        else:
+            expression = config["trigger_config"]["expression"]
+            scheduled = max(first, previous_cron_time(expression, at))
+            next_run = _iso(cron_times(expression, at, 1)[0])
         slot, timestamp = _iso(scheduled), _iso(at)
         old = opened.execute("SELECT * FROM cron_rounds WHERE task_id=? AND scheduled_for=?", (task_id, slot)).fetchone()
         reason = _busy_reason(opened, task_id)
@@ -249,7 +260,6 @@ def register_due(task_id: int, now: str | datetime | None = None,
             result = _get(opened, int(cursor.lastrowid))
         else:
             result = dict(old)
-        next_run = _iso(cron_times(expression, at, 1)[0])
         opened.execute("UPDATE tasks SET next_run_at=?,last_triggered_at=?,updated_at=? WHERE id=?",
                        (next_run, slot, timestamp, task_id))
         return result
