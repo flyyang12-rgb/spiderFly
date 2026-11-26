@@ -15,7 +15,7 @@ const { me, isAdmin, handleSessionExpired, workflowPendingStarts, tasks, tasksLo
   loadAll, resetFilters, openCreate, openAi, openEdit, taskIsActive, viewTaskExecution, runTask, toggleTask,
   deletingTask, rebuildTaskEnvironment, openExecution } = useWorkspaceContext()
 const state = useWorkflows({ isAdmin, me, onSessionExpired: handleSessionExpired, workflowPendingStarts, mode: 'definitions' })
-const { workflows, definitionsLoaded, loadError, loading, refreshing, showArchived, busy, editor, selectedRunId,
+const { workflows, visibleWorkflows, definitionsLoaded, loadError, loading, refreshing, showArchived, busy, editor, selectedRunId,
   actionError, notice, confirmation, pendingStarts, refresh, openRun, closeRun, openEditor, startWorkflow, askConfirmation, confirmAction } = state
 const refreshBusy = ref(false)
 const filterIsMobile = ref(false)
@@ -68,14 +68,23 @@ const rows = computed(() => {
   return items.sort((left, right) => nameCollator.compare(String(left.object.name || ''), String(right.object.name || ''))
     || left.kind.localeCompare(right.kind) || left.id - right.id)
 })
-const countLabel = computed(() => complete.value ? `${rows.value.length} 个对象` : `已显示 ${rows.value.length} 个对象 · 载入不完整`)
+const countLabel = computed(() => complete.value ? `共 ${rows.value.length} 项` : `已加载 ${rows.value.length} 项`)
+function scheduleText({ kind, object }) {
+  if (object.trigger_type === 'manual' || (kind === 'workflow' && !object.schedule_enabled)) return '手动'
+  if (object.trigger_type === 'cron') return triggerLabel('cron')
+  return triggerDetail(object)
+}
 async function refreshAll() {
   if (refreshBusy.value) return
   refreshBusy.value = true
   try { await Promise.allSettled([loadAll({ quiet: true, includeAdmin: false }), refresh()]) }
   finally { refreshBusy.value = false }
 }
-function resetCenterFilters() { resetFilters(); showArchived.value = false }
+function resetCenterFilters() {
+  resetFilters()
+  taskCenterKind.value = 'all'
+  showArchived.value = false
+}
 function choosePlan(row) { planTarget.value = { kind: row.kind, id: row.id, created: false } }
 function createdTask() {
   if (taskCenterKind.value === 'workflow') taskCenterKind.value = 'task'
@@ -105,34 +114,34 @@ watch(me, (user, previous) => { if (!user || user.id !== previous?.id) { planTar
         <button class="button ghost compact" type="button" :disabled="refreshBusy || refreshing" @click="refreshAll">{{ refreshBusy || refreshing ? '刷新中…' : '刷新' }}</button>
       </div>
       <div id="task-center-filters" class="filter-bar center-filter-bar" :hidden="filterIsMobile && !filtersExpanded">
-        <label class="filter-field"><span>类型</span><select v-model="taskCenterKind"><option value="all">全部</option><option value="task">单任务</option><option v-if="workflows.length || taskCenterKind === 'workflow'" value="workflow">已有工作流</option></select></label>
-        <label class="filter-field"><span>名称</span><input v-model="filters.name" type="search" placeholder="搜索任务或工作流" /></label>
+        <label class="filter-field"><span>类型</span><select v-model="taskCenterKind"><option value="all">全部</option><option value="task">任务</option><option v-if="visibleWorkflows.length || taskCenterKind === 'workflow'" value="workflow">工作流</option></select></label>
+        <label class="filter-field"><span>名称</span><input v-model="filters.name" type="search" placeholder="搜索名称" /></label>
         <label class="filter-field"><span>触发方式</span><select v-model="filters.trigger_type"><option value="all">全部</option><option v-for="option in triggerOptions" :key="option.value" :value="option.value">{{ option.label }}</option></select></label>
         <template v-if="taskCenterKind === 'task'">
           <label class="filter-field"><span>启用状态</span><select v-model="filters.enabled"><option value="all">全部状态</option><option value="enabled">已启用</option><option value="disabled">已停用</option></select></label>
           <label class="filter-field"><span>归属人</span><select v-model="filters.owner"><option value="all">全部</option><option v-for="owner in ownerOptions" :key="owner.value" :value="owner.value">{{ owner.label }}</option></select></label>
         </template>
-        <label v-if="workflows.length && taskCenterKind !== 'task'" class="center-archive-filter"><input v-model="showArchived" type="checkbox" />显示已归档流程</label>
+        <label v-if="workflows.some(flow => flow.archived) && taskCenterKind !== 'task'" class="center-archive-filter"><input v-model="showArchived" type="checkbox" />含已归档工作流</label>
         <div class="filter-actions"><button v-if="!filterIsMobile" class="button secondary compact" type="button" :disabled="refreshBusy || refreshing" @click="refreshAll">{{ refreshBusy || refreshing ? '刷新中…' : '刷新' }}</button><button class="button ghost compact" type="button" @click="resetCenterFilters">清空筛选</button></div>
       </div>
       </div>
-    <div v-if="tasksLoadError || !tasksLoaded" class="center-feedback error" role="alert">{{ tasksLoadError ? '单任务未完整载入：' + tasksLoadError : '单任务尚未载入完成。' }}<span v-if="tasks.length">当前保留已取得的任务。</span><button class="text-button" type="button" :disabled="refreshBusy" @click="refreshAll">重试读取</button></div>
+    <div v-if="tasksLoadError || !tasksLoaded" class="center-feedback error" role="alert">{{ tasksLoadError ? '任务加载失败：' + tasksLoadError : '正在加载任务…' }}<span v-if="tasks.length">当前保留已取得的任务。</span><button class="text-button" type="button" :disabled="refreshBusy" @click="refreshAll">重试读取</button></div>
     <div v-if="loadError || !definitionsLoaded" class="center-feedback" :class="loadError ? 'error' : 'loading'" :role="loadError ? 'alert' : 'status'">{{ loadError ? '工作流未完整载入：' + loadError : '正在读取工作流…' }}<span v-if="workflows.length">当前保留已取得的工作流。</span><button v-if="loadError" class="text-button" type="button" :disabled="refreshing" @click="refresh()">重试读取</button></div>
     <div v-if="actionError" class="center-feedback error" role="alert">{{ actionError }}</div>
     <div v-if="notice" class="center-feedback success" role="status">{{ notice }}</div>
       <ul v-if="rows.length" class="center-object-list" aria-label="任务与工作流列表">
         <li v-for="row in rows" :key="row.key" :data-object-key="row.key">
           <div class="center-object-main">
-            <div class="center-object-name"><strong>{{ row.object.name }}</strong><span class="center-kind-badge">{{ row.kind === 'task' ? '单任务' : '工作流' }}</span><span v-if="row.kind === 'workflow' && row.object.archived" class="center-kind-badge">已归档</span></div>
-            <p v-if="row.object.description" class="center-description">{{ row.object.description }}</p>
+            <div class="center-object-name"><strong>{{ row.object.name }}</strong><span v-if="row.kind === 'workflow'" class="center-kind-badge">工作流</span><span v-if="row.kind === 'workflow' && row.object.archived" class="center-kind-badge">已归档</span></div>
+            <p v-if="row.kind === 'workflow' && row.object.description" class="center-description">{{ row.object.description }}</p>
             <div class="center-object-facts">
               <span>运行电脑：{{ row.kind === 'workflow' ? '主控本机' : row.object.target_host_name || '主控本机' }}</span>
-              <span>{{ row.kind === 'workflow' && !row.object.schedule_enabled ? '手动 · 定时关闭' : row.object.trigger_type === 'manual' ? '手动' : triggerLabel(row.object.trigger_type) + (triggerDetail(row.object) ? ' · ' + triggerDetail(row.object) : '') }}</span>
-              <span v-if="row.kind === 'task'" class="status-badge"><i class="status-dot" :class="row.object.last_status"></i>最近：{{ statusLabel(row.object.last_status) }}</span>
-              <span v-else class="status-badge"><i class="status-dot" :class="row.object.last_run?.status"></i>最近：{{ workflowStatusLabel(row.object.last_run?.status) }}</span>
+              <span>{{ scheduleText(row) }}</span>
+              <span v-if="row.kind === 'task' && row.object.last_status" class="status-badge"><i class="status-dot" :class="row.object.last_status"></i>最近：{{ statusLabel(row.object.last_status) }}</span>
+              <span v-else-if="row.kind === 'workflow' && row.object.last_run" class="status-badge"><i class="status-dot" :class="row.object.last_run.status"></i>最近：{{ workflowStatusLabel(row.object.last_run?.status) }}</span>
+              <span v-if="row.kind === 'task' && row.object.enabled && row.object.trigger_type !== 'manual' && row.object.next_run_at">下次：{{ formatTime(row.object.next_run_at) }}</span>
             </div>
             <template v-if="row.kind === 'task'">
-              <div class="center-object-facts"><span :class="'env-' + row.object.environment_status">{{ row.object.target_host_id ? '运行时准备环境' : envStatusLabel(row.object.environment_status) }}</span><span>归属人：{{ row.object.created_by_name || '系统迁移' }}</span><span v-if="row.object.trigger_type !== 'manual'">下次运行：{{ !row.object.enabled ? '停用后不调度' : row.object.first_environment_ready === 0 && !row.object.target_host_id ? '依赖准备中' : row.object.next_run_at ? formatTime(row.object.next_run_at) : row.object.trigger_type === 'interval' ? '本次结束后计算' : '未知' }}</span></div>
               <p v-if="row.object.environment_status === 'failed' && row.object.environment_error" class="center-description danger-text">{{ row.object.environment_error }}</p>
             </template>
             <template v-else>
@@ -146,7 +155,15 @@ watch(me, (user, previous) => { if (!user || user.id !== previous?.id) { planTar
               <button v-if="taskIsActive(row.object)" class="button secondary compact" type="button" @click="viewTaskExecution(row.object)">查看运行</button>
               <button v-else class="button secondary compact" type="button" :disabled="!row.object.enabled || (row.object.target_host_id ? !isAdmin : row.object.environment_status !== 'ready')" :title="row.object.target_host_id && !isAdmin ? '远程任务需由管理员运行' : '将在 ' + (row.object.target_host_name || '主控本机') + ' 运行'" @click="runTask(row.object)">运行</button>
               <button class="button ghost compact" type="button" :disabled="taskIsActive(row.object)" @click="openEdit(row.object)">编辑</button>
-              <details v-if="isAdmin" class="center-more"><summary>更多</summary><div class="center-more-actions"><button class="button ghost compact" type="button" @click="choosePlan(row)">设置定时</button>
+              <details class="center-more">
+                <summary>更多</summary>
+                <p v-if="row.object.description" class="center-description">{{ row.object.description }}</p>
+                <div class="center-object-facts">
+                  <span :class="'env-' + row.object.environment_status">{{ row.object.target_host_id ? '运行时准备环境' : envStatusLabel(row.object.environment_status) }}</span>
+                  <span>归属人：{{ row.object.created_by_name || '系统迁移' }}</span>
+                  <span v-if="row.object.enabled && row.object.trigger_type !== 'manual' && !row.object.next_run_at">下次运行：{{ row.object.first_environment_ready === 0 && !row.object.target_host_id ? '依赖准备中' : row.object.trigger_type === 'interval' ? '本次结束后计算' : '未知' }}</span>
+                </div>
+                <div v-if="isAdmin" class="center-more-actions"><button class="button ghost compact" type="button" @click="choosePlan(row)">设置定时</button>
               <button v-if="isAdmin" class="button ghost compact" type="button" @click="openAi(row.object)">AI 助手</button>
               <button v-if="isAdmin && row.object.environment_status === 'failed'" class="button ghost compact" type="button" @click="rebuildTaskEnvironment(row.object)">修复环境</button>
               <button v-if="isAdmin" class="button ghost compact archive-button" type="button" title="同时删除程序、独立环境和运行记录；流程简要历史按原规则保留" @click="deletingTask = row.object">删除</button></div></details>
@@ -163,7 +180,7 @@ watch(me, (user, previous) => { if (!user || user.id !== previous?.id) { planTar
           </div>
         </li>
       </ul>
-      <div v-else class="empty-state compact-empty"><strong>{{ !complete ? '当前没有已载入的匹配对象' : tasks.length || workflows.length ? '没有匹配的记录' : '还没有任务' }}</strong><p>{{ !complete ? '部分资料仍未取得，请重试读取。' : tasks.length || workflows.length ? '调整筛选条件后再试。' : '点击“新建”，上传 Python 脚本或项目 ZIP。' }}</p></div>
+      <div v-else class="empty-state compact-empty"><strong>{{ !complete ? '暂无匹配结果' : tasks.length || workflows.length ? '没有匹配的记录' : '还没有任务' }}</strong><p>{{ !complete ? '部分资料仍未取得，请重试读取。' : tasks.length || workflows.length ? '调整筛选条件后再试。' : '点击“新建”，上传 Python 脚本或项目 ZIP。' }}</p></div>
     </section>
     <CreationDialog v-if="createObjectOpen && isAdmin" @created="createdTask" />
     <WorkflowEditor v-if="editor" :state="state" />
