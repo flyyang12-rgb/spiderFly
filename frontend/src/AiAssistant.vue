@@ -31,6 +31,7 @@ let timer
 let alive = true
 let generation = 0
 const active = computed(() => thread.value?.turns?.find(item => ['pending', 'running'].includes(item.status)))
+const canSend = computed(() => Boolean(thread.value && message.value.trim() && !active.value && !busy.value && setting.value?.key_configured))
 const latest = computed(() => thread.value?.turns?.[0])
 const turnError = computed(() => latest.value?.status === 'cancelled' && latest.value.error === '已停止 AI 处理，现有对话与草稿保留。' ? '' : latest.value?.error)
 const tokens = computed(() => (thread.value?.turns || []).reduce((sum, item) => sum + item.input_tokens + item.output_tokens, 0))
@@ -148,8 +149,14 @@ async function deleteThread(id) {
   finally { busy.value = false }
 }
 
+function composeKeydown(event) {
+  if (event.key !== 'Enter' || event.shiftKey || event.isComposing || event.keyCode === 229) return
+  event.preventDefault()
+  if (!event.repeat) send()
+}
+
 async function send() {
-  if (!message.value.trim() || active.value || busy.value) return
+  if (!canSend.value) return
   busy.value = true
   error.value = ''
   try {
@@ -247,11 +254,12 @@ onBeforeUnmount(() => { alive = false; generation++; window.clearInterval(timer)
           </div>
           <p v-if="turnError && turnError !== error" class="ai-turn-error" role="alert">{{ turnError }}</p>
           <form class="ai-compose" @submit.prevent="send">
-            <textarea ref="composer" v-model="message" rows="2" maxlength="12000" aria-label="任务需求" placeholder="描述任务或继续提问…" :disabled="!thread"></textarea>
+            <textarea ref="composer" v-model="message" rows="2" maxlength="12000" aria-label="任务需求" aria-describedby="ai-compose-hint" placeholder="描述任务或继续提问…" :disabled="!thread" @keydown="composeKeydown"></textarea>
             <div class="ai-compose-footer">
+              <span id="ai-compose-hint" class="ai-compose-hint">Enter 发送 · Shift+Enter 换行</span>
               <span v-if="latest && latest.status !== 'completed'" class="ai-status" aria-live="polite"><i :class="{ active: Boolean(active) }" aria-hidden="true"></i>{{ active?.stop_requested ? '正在停止…' : labels[latest.status] }}</span>
               <button v-if="active" class="button secondary ai-send" type="button" :disabled="active.stop_requested" @click="stop">停止</button>
-              <button v-else class="button primary ai-send" type="submit" :disabled="!thread || busy || !message.trim() || !setting?.key_configured">发送 <span aria-hidden="true">↑</span></button>
+              <button v-else class="button primary ai-send" type="submit" :disabled="!canSend">发送 <span aria-hidden="true">↑</span></button>
             </div>
           </form>
         </main>
@@ -307,7 +315,7 @@ onBeforeUnmount(() => { alive = false; generation++; window.clearInterval(timer)
 .ai-message{max-width:720px;margin:0 auto 28px;overflow-wrap:anywhere}.ai-message-author{display:block;margin-bottom:8px;color:#68716b;font-size:12px;line-height:18px;font-weight:500}.ai-message.assistant{padding:0 4px}.ai-message.user{width:fit-content;max-width:85%;margin-left:auto;margin-right:0;padding:12px 16px;border-radius:12px;background:#f4f6f3}.ai-message.user .ai-message-author{display:none}.ai-user-content{color:var(--text,#292b28);font-size:14px;line-height:1.7;white-space:pre-wrap}
 .ai-intro{display:grid;place-content:center;min-height:100%;padding:32px 0}.ai-intro h3{margin:0;color:var(--ink,#221814);font-size:24px;font-weight:500;line-height:1.5;letter-spacing:-.02em}
 .ai-compose{flex:none;margin:0 auto;width:100%;max-width:760px;padding:12px;border:1px solid #d9dfd9;border-radius:12px;background:#fff;transition:border-color 140ms ease,box-shadow 140ms ease}.ai-compose:focus-within{border-color:var(--brand,#009139);box-shadow:0 0 0 2px rgb(0 145 57 / 7%)}
-.ai-compose textarea{display:block;width:100%;height:64px;min-height:56px;max-height:160px;resize:vertical;padding:4px;border:0;outline:none;background:transparent;color:var(--text,#292b28);font:inherit;font-size:14px;line-height:1.7}.ai-compose textarea::placeholder{color:#828a83}.ai-compose-footer{display:flex;align-items:center;justify-content:flex-end;gap:12px;min-height:36px;margin-top:4px}.ai-send{flex:none;min-width:76px;min-height:36px;font-size:13px;border-radius:8px}.ai-send span{margin-left:4px;font-size:17px;font-weight:400}
+.ai-compose textarea{display:block;width:100%;height:64px;min-height:56px;max-height:160px;resize:vertical;padding:4px;border:0;outline:none;background:transparent;color:var(--text,#292b28);font:inherit;font-size:14px;line-height:1.7}.ai-compose textarea::placeholder{color:#828a83}.ai-compose-footer{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:8px 12px;min-height:36px;margin-top:4px}.ai-compose-hint{margin-right:auto;color:var(--muted);font-size:12px;line-height:1.5}.ai-send{flex:none;min-width:76px;min-height:36px;font-size:13px;border-radius:8px}.ai-send span{margin-left:4px;font-size:17px;font-weight:400}
 .ai-status{display:flex;align-items:center;gap:8px;margin-right:auto;color:#5e6961;font-size:12px;line-height:18px}.ai-status i{width:6px;height:6px;border-radius:50%;background:#879389;flex:none}.ai-status i.active{background:var(--brand,#009139);animation:ai-pulse 1.6s ease-in-out infinite}
 .ai-error,.ai-turn-error{margin:12px 24px 0;padding:10px 12px;border:1px solid #f2d4c9;border-radius:8px;background:#fff7f3;color:#a13a2d;font-size:13px;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere;max-height:100px;overflow:auto;flex:none}.ai-turn-error{margin:0 0 12px}
 .ai-side{display:none;min-width:0;min-height:0;overflow:auto;overscroll-behavior:contain;padding:24px 20px;border-left:1px solid var(--border-soft,#ecefec);background:#fafbf9;scrollbar-width:thin}.ai-side.mobile-open{display:block}
@@ -317,8 +325,8 @@ onBeforeUnmount(() => { alive = false; generation++; window.clearInterval(timer)
 .ai-disclosure{font-size:13px;line-height:1.7;color:#637067;overflow-wrap:anywhere}.ai-disclosure>summary{width:fit-content;padding:7px 0;cursor:pointer}.ai-disclosure>p{margin:4px 0 12px;white-space:pre-wrap;color:#59665d;font-size:13px;line-height:1.7}.ai-downloads{margin-top:8px}.ai-links{display:flex;flex-wrap:wrap;gap:8px 16px;padding:4px 0;font-size:12px;overflow-wrap:anywhere}.ai-links a,.ai-browser-result a{color:var(--brand-strong,#00752e);text-underline-offset:3px}.ai-trial-message{font-size:13px;line-height:1.7;color:#59665d;white-space:pre-wrap;overflow-wrap:anywhere}
 .ai-records{max-width:720px;margin:0 auto 8px;color:#6b766e}.ai-records>summary{font-size:12px}.ai-note{font-size:12px;line-height:1.7;color:#6b766e;margin:6px 0}.ai-events{padding:0;margin:8px 0;list-style:none;font-size:12px}.ai-events li{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;padding:8px 0;border-bottom:1px solid var(--border-soft,#ecefec)}.ai-events time{flex:none;color:#7d867f;font-size:11px;line-height:20px}
 .ai-browser{padding-bottom:20px;margin-bottom:24px;border-bottom:1px solid var(--border,#dfe3df);font-size:13px;line-height:1.7}.ai-browser-result{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:16px 0}.ai-browser-result strong{font-size:24px;font-weight:600;color:var(--ink,#221814)}.ai-browser-result a{font-size:12px}.ai-browser-prompt{color:#8e5a24}.ai-browser-url{overflow-wrap:anywhere}
-.ai-trial-log{max-height:220px;overflow:auto;padding:12px;border:1px solid var(--border-soft,#ecefec);border-radius:8px;background:#f4f6f3;color:#3b473e;font-size:12px;line-height:1.65;white-space:pre-wrap}
-.ai-code{position:absolute;inset:68px 0 0;display:flex;flex-direction:column;min-height:0;padding:20px 24px;background:#fff;outline:none;z-index:2}.ai-code>header{display:flex;justify-content:space-between;align-items:center;gap:16px;flex:none;font-size:14px}.ai-code pre{flex:1;min-height:0;overflow:auto;padding:20px;margin:16px 0;border:1px solid var(--border-soft,#ecefec);border-radius:8px;background:#f7f8f6;color:#29362d;font-size:13px;line-height:1.7;white-space:pre;tab-size:4}.ai-code p{font-size:12px;color:#657269;white-space:pre-wrap;overflow-wrap:anywhere}
+.ai-trial-log{max-height:220px;overflow:auto;padding:12px;border:1px solid var(--border-soft,#ecefec);border-radius:8px;background:#fff;color:#202520;font-size:var(--log-font-size,15px);line-height:var(--log-line-height,24px);white-space:pre-wrap}
+.ai-code{position:absolute;inset:68px 0 0;display:flex;flex-direction:column;min-height:0;padding:20px 24px;background:#fff;outline:none;z-index:2}.ai-code>header{display:flex;justify-content:space-between;align-items:center;gap:16px;flex:none;font-size:14px}.ai-code pre{flex:1;min-height:0;overflow:auto;padding:20px;margin:16px 0;border:1px solid var(--border-soft,#ecefec);border-radius:8px;background:#fff;color:#202520;font-size:var(--log-font-size,15px);line-height:var(--log-line-height,24px);white-space:pre;tab-size:4}.ai-code p{font-size:12px;color:#657269;white-space:pre-wrap;overflow-wrap:anywhere}
 .ai-dialog :deep(.maintenance-panel){flex:none;max-height:30%;overflow:auto;padding:12px 24px;background:#fafbf9}.ai-dialog :is(button,textarea,summary,[tabindex]):focus-visible{outline:2px solid var(--brand,#009139);outline-offset:3px}.ai-dialog .ai-compose textarea:focus-visible{outline:none}
 @keyframes ai-enter{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}@keyframes ai-pulse{50%{opacity:.4}}
 @media(prefers-reduced-motion:reduce){.ai-dialog,.ai-status i.active{animation:none}.ai-compose,.ai-new-thread{transition:none}}
