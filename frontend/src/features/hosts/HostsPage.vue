@@ -48,11 +48,26 @@ const expandedHosts = ref(new Set())
 let runTrigger = null
 const hostFilter = ref('current')
 const runFilter = ref('all')
-const pendingCount = computed(() => hosts.value.filter((host) => host.approval_status === 'pending').length)
-const readyCount = computed(() => hosts.value.filter((host) => host.state === 'idle').length)
-const activeCount = computed(() => runs.value.filter((run) => activeRunStates.has(run.status)).length)
-const visibleHosts = computed(() => hosts.value.filter((host) => hostFilter.value === 'all'
-  || (hostFilter.value === 'current' ? ['pending', 'approved'].includes(host.approval_status) : host.approval_status === hostFilter.value)))
+const statusFilter = ref('all')
+const hostQuery = ref('')
+const statusOptions = [
+  { value: 'all', label: '全部' }, { value: 'idle', label: '空闲' },
+  { value: 'running', label: '运行中' }, { value: 'offline', label: '离线' },
+]
+const scopedHosts = computed(() => {
+  const query = hostQuery.value.trim().toLowerCase()
+  return hosts.value.filter(host => {
+    const inScope = hostFilter.value === 'all' || (hostFilter.value === 'current'
+      ? ['pending', 'approved'].includes(host.approval_status) : host.approval_status === hostFilter.value)
+    return inScope && (!query || host.name.toLowerCase().includes(query))
+  })
+})
+function matchesStatus(host, status) {
+  return status === 'all' || host.state === status || (status === 'running' && host.state === 'stopping')
+}
+const statusCounts = computed(() => Object.fromEntries(statusOptions.map(({ value }) =>
+  [value, scopedHosts.value.filter(host => matchesStatus(host, value)).length])))
+const visibleHosts = computed(() => scopedHosts.value.filter(host => matchesStatus(host, statusFilter.value)))
 const currentHost = computed(() => viewer.value?.kind === 'agent' ? hosts.value.find(host => host.id === viewer.value.host_id) : null)
 const visibleRuns = computed(() => runs.value.filter((run) => runFilter.value === 'all'
   || (runFilter.value === 'active' ? activeRunStates.has(run.status) : ['failed', 'timed_out', 'uncertain'].includes(run.status))))
@@ -66,9 +81,8 @@ function tone(state) {
 }
 
 function hostHint(host) {
-  if (host.state === 'idle' || host.state === 'offline') return ''
-  if (host.state === 'running') return '已有任务'
-  if (host.state !== 'non_dispatch') return hostStateLabels[host.state]
+  if (host.state === 'stopping') return '正在停止'
+  if (host.state !== 'non_dispatch') return ''
   if (!host.dispatch_enabled) return '主控调度已关闭'
   if (!host.agent_dispatch_enabled) return '本机调度已关闭'
   if (!host.interactive_session) return '桌面会话不可用'
@@ -157,16 +171,24 @@ async function copyCode() {
 
     <template v-else>
       <section class="host-panel host-computers" aria-labelledby="host-list-heading">
-        <header class="host-section-heading host-list-heading">
-          <div class="host-list-title"><h2 id="host-list-heading">电脑</h2><span>{{ visibleHosts.length }} 台</span></div>
+        <h2 id="host-list-heading" class="sr-only">宿主机列表</h2>
+        <div class="host-status-bar" role="group" aria-label="宿主机状态">
+          <button v-for="option in statusOptions" :key="option.value" type="button" :aria-pressed="statusFilter === option.value" @click="statusFilter = option.value">
+            {{ option.label }} <span>{{ statusCounts[option.value] }}</span>
+          </button>
+        </div>
+        <div class="machine-tools">
+          <div class="machine-search">
+            <input v-model="hostQuery" type="search" aria-label="搜索电脑名称" placeholder="搜索电脑名称" />
+            <select id="host-filter" v-model="hostFilter" aria-label="接入范围"><option value="current">当前接入</option><option value="pending">待批准</option><option value="approved">已批准</option><option value="all">全部登记</option></select>
+          </div>
           <div class="host-toolbar">
-            <select id="host-filter" v-model="hostFilter" aria-label="电脑范围"><option value="current">当前接入</option><option value="pending">待批准</option><option value="approved">已批准</option><option value="all">全部电脑</option></select>
-            <button class="host-button" type="button" :disabled="refreshing" @click="refresh()">{{ refreshing ? '正在刷新…' : '刷新' }}</button>
+            <button class="host-button" type="button" :disabled="refreshing" @click="refresh()">{{ refreshing ? '刷新中…' : '刷新' }}</button>
             <button class="host-button" type="button" :aria-expanded="finderOpen" aria-controls="agent-finder" @click="finderOpen = !finderOpen">查找接入程序</button>
             <button class="host-button" :class="{ primary: !connectOpen }" type="button" :aria-expanded="connectOpen" aria-controls="host-enrollment-panel" @click="connectOpen = !connectOpen">{{ connectOpen ? '收起接入' : '接入新电脑' }}</button>
           </div>
-        </header>
-        <div class="host-summary" aria-label="宿主机概况"><span>已登记 <strong>{{ hosts.length }}</strong></span><span>待批准 <strong>{{ pendingCount }}</strong></span><span>可调度 <strong>{{ readyCount }}</strong></span><span>未结束运行 <strong>{{ activeCount }}</strong></span>
+        </div>
+        <div class="host-summary">
           <span v-if="viewer?.kind === 'controller'" class="host-viewer">当前电脑 · 主控本机</span>
           <span v-else-if="currentHost && !visibleHosts.includes(currentHost)">当前电脑 · {{ currentHost.name }}（不在当前筛选内）</span>
           <span v-else-if="viewer?.kind === 'shared'">多台电脑共用连接地址，无法识别当前电脑</span>
@@ -208,32 +230,30 @@ async function copyCode() {
           </div>
         </section>
 
-        <div v-if="!visibleHosts.length" class="host-empty"><strong>{{ hostFilter === 'pending' ? '暂无待批准电脑' : hostFilter === 'approved' ? '暂无已批准电脑' : hostFilter === 'all' ? '暂无已登记电脑' : '暂无当前接入的电脑' }}</strong></div>
+        <div v-if="!visibleHosts.length" class="host-empty" role="status"><strong>{{ hosts.length ? '没有符合条件的电脑' : '暂无已登记电脑' }}</strong></div>
         <div v-else class="host-list">
-          <div class="host-column-labels" aria-hidden="true"><span>电脑</span><span>接单状态</span><span>当前任务</span></div>
-          <article v-for="host in visibleHosts" :key="host.id" class="host-card">
-            <div class="host-row">
-              <div class="host-name"><div class="host-name-line"><h3>{{ host.name }}</h3><span v-if="host.id === currentHost?.id" class="host-viewer" title="浏览器与这台 Agent 最近的局域网连接地址相同">当前电脑</span></div><span class="host-connection">{{ host.online ? '在线' : '离线' }}</span></div>
-              <div class="host-row-state">
-                <span class="host-badge" :class="tone(host.state)"><i aria-hidden="true"></i>{{ host.state === 'idle' ? '可接任务' : '暂不可接' }}</span>
-                <span class="host-card-hint">{{ hostHint(host) }}</span>
-              </div>
-              <div class="host-current-task">
-                <span class="host-task-label">当前任务</span>
-                <button v-if="host.active_run_id" class="host-task-link" type="button" :aria-label="`查看${host.active_task_name || '任务'}运行 #${host.active_run_id} 的日志与结果`" @click="showRun(host.active_run_id, $event)">{{ host.active_task_name || `运行 #${host.active_run_id}` }}</button>
-                <span v-else class="host-card-hint">无任务</span>
-              </div>
+          <article v-for="host in visibleHosts" :key="host.id" class="host-card" :class="{ expanded: expandedHosts.has(host.id) }">
+            <div class="machine-heading">
+              <div class="host-name-line"><h3>{{ host.name }}</h3><span v-if="host.id === currentHost?.id" class="host-viewer">当前电脑</span></div>
+              <span class="host-badge" :class="tone(host.state)"><i aria-hidden="true"></i>{{ host.state === 'idle' ? '空闲' : host.state === 'stopping' ? '运行中' : hostStateLabels[host.state] || host.state }}</span>
+            </div>
+            <dl class="machine-stats">
+              <div><dt>当前任务</dt><dd><button v-if="host.active_run_id" class="host-task-link" type="button" @click="showRun(host.active_run_id, $event)">{{ host.active_task_name || '运行 #' + host.active_run_id }}</button><template v-else>—</template></dd></div>
+              <div><dt>Agent 版本</dt><dd>{{ host.agent_version || '未知' }}</dd></div>
+              <div><dt>最近心跳</dt><dd>{{ host.last_seen_at ? formatTime(host.last_seen_at) : '—' }}</dd></div>
+            </dl>
+            <div class="machine-footer">
+              <span class="host-card-hint">{{ hostHint(host) || (host.state === 'offline' ? '' : host.online ? '在线' : '离线') }}</span>
               <button class="host-button quiet host-details-toggle" type="button" :aria-expanded="expandedHosts.has(host.id)" :aria-controls="`host-machine-${host.id}`" :aria-label="`${host.name}：${expandedHosts.has(host.id) ? '收起' : '查看'}详情`" @click="toggleHostDetails(host.id)">{{ expandedHosts.has(host.id) ? '收起' : '详情' }}</button>
             </div>
             <div v-show="expandedHosts.has(host.id)" :id="`host-machine-${host.id}`" class="host-machine-info">
               <dl class="host-facts">
-                <div><dt>Agent 版本</dt><dd>{{ host.agent_version || '未知' }}</dd></div>
                 <div><dt>主控调度</dt><dd>{{ host.dispatch_enabled ? '已开启' : '已关闭' }}</dd></div>
                 <div><dt>本机调度</dt><dd>{{ host.agent_dispatch_enabled ? '已开启' : '已关闭' }}</dd></div>
                 <div><dt>桌面会话</dt><dd>{{ host.interactive_session ? '可用' : '不可用' }}</dd></div>
               </dl>
               <div class="host-machine-meta">
-                <div><p>电脑 #{{ host.id }} · 机器标识：<code>{{ host.machine_id }}</code></p><p>最近心跳 {{ formatTime(host.last_seen_at) }}</p></div>
+                <div><p>电脑 #{{ host.id }} · 机器标识：<code>{{ host.machine_id }}</code></p></div>
                 <div class="host-card-actions">
                   <template v-if="host.approval_status === 'pending'">
                     <button class="host-button primary" type="button" :disabled="Boolean(busy)" @click="hostAction(host, 'approve')">{{ busy === `host:${host.id}` ? '处理中…' : '批准接入' }}</button>
@@ -338,14 +358,8 @@ async function copyCode() {
 .host-feedback.error { background: #fff4f0; border-color: #efd0c6; color: #a53721; }
 .host-panel { min-width: 0; padding: 20px; border: 1px solid var(--host-border); border-radius: 12px; background: #fff; }
 .host-section-heading { margin-bottom: 16px; align-items: flex-start; }
-.host-list-heading { align-items: center; margin-bottom: 8px; }
-.host-list-title { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
-.host-list-title h2 { font-size: 16px; line-height: 24px; }
-.host-list-title > span, .host-connection { color: var(--host-muted); font-size: 12px; }
 .host-toolbar { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
-.hosts-page .host-toolbar select { width: auto; min-width: 124px; }
 .host-summary { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 20px; padding-bottom: 16px; color: var(--host-muted); font-size: 12px; }
-.host-summary strong { margin-left: 3px; color: var(--host-text); font-weight: 500; font-variant-numeric: tabular-nums; }
 .host-connect { display: grid; gap: 12px; margin-bottom: 16px; padding: 16px; border-radius: 8px; background: var(--host-soft); }
 .host-connect .host-guide { margin-top: 0; }
 .host-found-paths { margin: 4px 0 0; padding-left: 20px; max-height: 160px; overflow: auto; overflow-wrap: anywhere; }
@@ -374,26 +388,35 @@ async function copyCode() {
 .host-inline-warning { padding: 10px 12px; border: 1px solid #e7dca8; border-radius: 8px; background: #fffbeb; color: #715912; font-size: 12px; overflow-wrap: anywhere; }
 .host-filter { display: flex; flex: 0 0 auto; align-items: center; gap: 8px; }
 .host-filter select { width: auto; min-width: 110px; }
-.host-list { display: grid; }
-.host-card { min-width: 0; padding: 16px 0; }
-.host-card:last-child { padding-bottom: 0; }
-.host-card + .host-card { border-top: 1px solid var(--host-border); }
-.host-row, .host-column-labels { display: grid; grid-template-columns: minmax(130px, 1fr) minmax(115px, .8fr) minmax(150px, 1.3fr) 72px; align-items: center; gap: 20px; }
-.host-column-labels { padding: 10px 0; border-top: 1px solid var(--host-border); border-bottom: 1px solid var(--host-border); color: var(--host-muted); font-size: 12px; }
-.host-details-toggle { justify-self: end; }
+.host-status-bar { display: flex; gap: clamp(8px, 2.5vw, 32px); border-bottom: 1px solid var(--host-border); }
+.host-status-bar button { display: flex; gap: 6px; align-items: center; padding: 6px 2px 13px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--host-muted); font: inherit; cursor: pointer; white-space: nowrap; }
+.host-status-bar button[aria-pressed="true"] { color: var(--host-green); border-bottom-color: currentColor; font-weight: 650; }
+.host-status-bar button span { font-size: 12px; font-variant-numeric: tabular-nums; }
+.machine-tools, .machine-search, .machine-heading, .machine-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.machine-tools { flex-wrap: wrap; padding: 16px 0; }
+.machine-search { flex-wrap: wrap; gap: 8px; }
+.machine-search input { width: 196px; }
+.machine-search select { width: auto; }
+.host-summary:empty { display: none; }
+.host-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 265px), 1fr)); align-items: stretch; gap: 14px; }
+.host-card { display: flex; flex-direction: column; min-width: 0; border: 1px solid var(--host-border); border-radius: 10px; padding: 16px 16px 8px; }
+.host-card.expanded { grid-column: 1 / -1; }
+.machine-heading { align-items: flex-start; }
+.machine-heading h3 { overflow-wrap: anywhere; }
+.host-card .machine-stats { display: grid; gap: 8px; margin: 14px 0 12px; }
+.machine-stats > div { display: grid; grid-template-columns: 65px minmax(0, 1fr); align-items: baseline; gap: 8px; }
+.machine-stats dt, .machine-stats dd { font-size: 12px; margin: 0; }
+.machine-stats dt { color: var(--host-muted); }
+.machine-stats dd { overflow-wrap: anywhere; }
+.machine-footer { margin-top: auto; border-top: 1px solid var(--host-border); padding-top: 6px; }
+.machine-footer .host-button { margin-left: auto; min-height: 32px; padding: 3px 4px; }
 .host-details-toggle::after { content: ''; width: 6px; height: 6px; border: solid currentColor; border-width: 0 1.5px 1.5px 0; transform: translateY(-2px) rotate(45deg); }
 .host-details-toggle[aria-expanded="true"]::after { transform: translateY(2px) rotate(225deg); }
-.host-current-task { min-width: 0; }
-.host-task-label { display: none; }
-.host-task-link { max-width: 100%; padding: 2px 0; border: 0; background: transparent; color: var(--host-green); font: inherit; font-size: 13px; text-align: left; overflow-wrap: anywhere; cursor: pointer; }
+.host-task-link { max-width: 100%; padding: 0; border: 0; background: transparent; color: var(--host-green); font: inherit; font-size: 13px; text-align: left; overflow-wrap: anywhere; cursor: pointer; }
 .host-task-link:hover { text-decoration: underline; }
-.host-name h3 { font-size: 14px; line-height: 22px; overflow-wrap: anywhere; }
 .host-name-line { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; }
 .host-viewer { display: inline-flex; align-items: center; padding: 1px 7px; border: 1px solid #c4d8dc; border-radius: 6px; background: #eff6f7; color: #365c66; font-size: 12px; font-weight: 550; line-height: 18px; white-space: nowrap; }
-.host-connection { display: block; margin-top: 3px; }
-.host-row-state { display: grid; justify-items: start; gap: 4px; min-width: 0; }
 .host-card-hint:empty { display: none; }
-.host-name { min-width: 0; }
 .host-badge { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 6px; background: #edf0ed; color: #535f56; font-size: 12px; font-weight: 550; line-height: 18px; white-space: nowrap; }
 .host-badge i { width: 6px; height: 6px; flex: 0 0 auto; border-radius: 50%; background: currentColor; }
 .host-badge.good { background: #eaf6ed; color: #167536; }
@@ -448,12 +471,6 @@ async function copyCode() {
   .host-section-heading { flex-wrap: wrap; }
   .host-toolbar { justify-content: flex-start; }
   .host-button, .hosts-page select { min-height: 44px; }
-  .host-column-labels { display: none; }
-  .host-list { border-top: 1px solid var(--host-border); }
-  .host-row { grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; }
-  .host-details-toggle { grid-column: 2; grid-row: 1; }
-  .host-row-state, .host-current-task { grid-column: 1 / -1; display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px; }
-  .host-task-label { display: inline; color: var(--host-muted); font-size: 12px; }
   .host-facts, .host-run-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .host-runs > li { align-items: flex-start; flex-direction: column; padding: 12px 8px; }
   .host-maintenance { align-items: flex-start; flex-direction: column; }
@@ -461,13 +478,12 @@ async function copyCode() {
   .host-run-summary + .host-card-actions { align-self: stretch; justify-content: space-between; }
 }
 @media (max-width: 540px) {
-  .host-toolbar { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; gap: 8px; }
-  .hosts-page .host-toolbar select { width: 100%; min-width: 0; }
+  .host-toolbar { justify-content: flex-start; gap: 6px; }
 }
 @media (max-width: 400px) {
   .host-panel { padding: 12px; }
   .host-summary { gap: 6px 12px; }
-  .host-summary > span:first-child { display: none; }
+  .machine-search input { width: min(54vw, 196px); }
   .host-button { padding: 7px 10px; }
   .host-enrollment, .host-connect { padding: 12px; }
   .host-detail-summary { flex-wrap: wrap; }

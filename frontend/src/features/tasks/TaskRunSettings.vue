@@ -13,29 +13,37 @@ const notificationSummary = computed(() => [props.form.notify_on_success && '成
 </script>
 
 <template>
-  <section class="editor-aside task-run-settings" aria-label="运行设置">
-    <div class="editor-section-heading"><h3>运行设置</h3></div>
-    <label v-if="showTarget" class="field schedule-target-field"><span>运行电脑</span>
-      <select v-model="form.target_host_id" :disabled="disabled || hostsLoading">
-        <option value="">主控本机</option>
-        <option v-for="host in hosts" :key="host.id" :value="String(host.id)" :disabled="host.approval_status !== 'approved'">{{ host.name }}{{ host.approval_status === 'approved' ? '' : '（不可用）' }}</option>
-      </select>
-      <small v-if="project && hosts.some(host => String(host.id) === String(form.target_host_id) && !host.supports_project_zip)">可先保存计划。目标电脑升级到 Agent 0.5.3 后开始领取项目。</small>
-      <small v-else-if="form.target_host_id">离线或忙碌时排队。</small>
-    </label>
-    <PlanFields :form="form" :remote="Boolean(form.target_host_id)" :disabled="disabled" :identity="identity" @unauthorized="emit('unauthorized')" />
-    <div class="editor-enable-row">
-      <span>{{ creating ? '创建后启用' : '启用任务' }}</span>
-      <button class="switch-row" type="button" role="switch" :aria-label="creating ? '创建后启用' : '启用任务'" :aria-checked="form.enabled" :disabled="disabled" @click="form.enabled = !form.enabled"><i :class="{ active: form.enabled }"><b></b></i><span>{{ form.enabled ? '已启用' : '已停用' }}</span></button>
+  <section :class="creating ? 'create-settings' : 'editor-aside task-run-settings'" aria-label="运行设置">
+    <div v-if="!creating" class="editor-section-heading"><h3>运行设置</h3></div>
+    <div :class="{ 'program-target': creating }">
+      <h3 v-if="creating">执行程序与电脑</h3>
+      <slot name="program" />
+      <label v-if="showTarget" class="field schedule-target-field"><span>运行电脑</span>
+        <select v-model="form.target_host_id" :disabled="disabled || hostsLoading">
+          <option value="">主控本机</option>
+          <option v-for="host in hosts" :key="host.id" :value="String(host.id)" :disabled="host.approval_status !== 'approved'">{{ host.name }}{{ host.approval_status === 'approved' ? '' : '（不可用）' }}</option>
+        </select>
+        <small v-if="project && hosts.some(host => String(host.id) === String(form.target_host_id) && !host.supports_project_zip)">可先保存计划。目标电脑升级到 Agent 0.5.3 后开始领取项目。</small>
+        <small v-else-if="form.target_host_id">离线或忙碌时排队。</small>
+      </label>
     </div>
-    <details v-if="showNotifications" class="editor-disclosure notification-disclosure">
-      <summary><span>飞书通知</span><small>{{ notificationSummary }}</small></summary>
-      <div class="notification-options">
-        <label><input v-model="form.notify_on_success" type="checkbox" :disabled="disabled" />成功时通知</label>
-        <label><input v-model="form.notify_on_failure" type="checkbox" :disabled="disabled" />失败时通知</label>
-        <label :class="{ disabled: !form.notify_on_failure }"><input v-model="form.failure_screenshot" type="checkbox" :disabled="disabled || !form.notify_on_failure" />失败附带截图</label>
+    <PlanFields :form="form" :remote="Boolean(form.target_host_id)" :disabled="disabled" :identity="identity" @unauthorized="emit('unauthorized')" />
+    <component :is="creating ? 'details' : 'div'" class="run-options">
+      <summary v-if="creating">高级设置</summary>
+      <slot name="advanced" />
+      <div class="editor-enable-row">
+        <span>{{ creating ? '创建后启用' : '启用任务' }}</span>
+        <button class="switch-row" type="button" role="switch" :aria-label="creating ? '创建后启用' : '启用任务'" :aria-checked="form.enabled" :disabled="disabled" @click="form.enabled = !form.enabled"><i :class="{ active: form.enabled }"><b></b></i><span>{{ form.enabled ? '已启用' : '已停用' }}</span></button>
       </div>
-    </details>
+      <details v-if="showNotifications" class="editor-disclosure notification-disclosure">
+        <summary><span>飞书通知</span><small>{{ notificationSummary }}</small></summary>
+        <div class="notification-options">
+          <label><input v-model="form.notify_on_success" type="checkbox" :disabled="disabled" />成功时通知</label>
+          <label><input v-model="form.notify_on_failure" type="checkbox" :disabled="disabled" />失败时通知</label>
+          <label :class="{ disabled: !form.notify_on_failure }"><input v-model="form.failure_screenshot" type="checkbox" :disabled="disabled || !form.notify_on_failure" />失败附带截图</label>
+        </div>
+      </details>
+    </component>
     <p v-if="!creating" class="editor-footnote">最长运行 10 分钟，排队不计时。</p>
   </section>
 </template>
@@ -48,4 +56,11 @@ const notificationSummary = computed(() => [props.form.notify_on_success && '成
 .notification-options { display: flex; flex-wrap: wrap; gap: 12px 16px; border: 0; background: transparent; padding: 12px 0 0; }
 .notification-options label { font-size: 12px; white-space: normal; }
 .notification-options input { width: 15px; height: 15px; margin: 0; }
+.create-settings, .program-target, .run-options { display: grid; gap: 12px; min-width: 0; }
+.create-settings { gap: 20px; }
+.program-target { padding: 14px 16px; border: 1px solid var(--border); border-radius: 10px; }
+.program-target h3 { margin: 0; font-size: 14px; }
+details.run-options { display: block; border-top: 1px solid var(--border-soft); padding-top: 12px; }
+details.run-options > summary { cursor: pointer; font-size: 13px; font-weight: 600; }
+details.run-options[open] > :not(summary) { margin-top: 12px; }
 </style>

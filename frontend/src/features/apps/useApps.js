@@ -50,6 +50,8 @@ export function useApps({ aiOpen, aiSourceThread, aiTaskId, appForm, isAdmin, lo
     const generation = session
     const owner = me?.value
     const file = event.target.files?.[0] || null
+    appForm.requirements_text = ''
+    appForm.requirements_filename = ''
     appForm.script = file
     appForm.project_entry = ''
     appForm.project_entries = []

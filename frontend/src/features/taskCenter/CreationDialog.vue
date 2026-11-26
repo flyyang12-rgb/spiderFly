@@ -32,7 +32,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <WorkflowDialog title="新建任务" wide :close-disabled="uploading" @close="close">
+  <WorkflowDialog title="新建任务" :close-disabled="uploading" @close="close">
     <CreateTaskPage embedded form-id="unified-create-task" :disabled="uploading" @submit="finish(uploadApp)" />
     <div v-if="uploadUncertain" class="creation-recovery">
       <button type="button" class="button secondary" :disabled="uploading" @click="finish(resolveUpload)">核对创建结果</button>

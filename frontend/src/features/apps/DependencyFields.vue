@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { request } from '../../lib/api'
-const props = defineProps({ script: Object, requirements: { type: String, default: '' },
+const props = defineProps({ script: Object, manualInput: { type: Boolean, default: true }, requirements: { type: String, default: '' },
   target: [String, Number], taskId: Number, modelValue: { type: Array, default: () => [] }, disabled: Boolean })
 const emit = defineEmits(['update:modelValue', 'update:requirements', 'state', 'unauthorized'])
 const result = ref(null), lastItems = ref([]), error = ref(''), status = ref('idle'), reading = ref(false)
@@ -71,9 +71,9 @@ async function readFile(event) {
 onBeforeUnmount(() => { alive = false; sequence++; fileSequence++; controller?.abort(); clearTimeout(timer) })
 </script>
 <template>
-  <section class="dependency-fields" aria-label="Python 依赖">
+  <section v-if="manualInput || pending.length || error || status === 'loading' || (result && !result.ready)" class="dependency-fields" aria-label="Python 依赖">
     <p v-if="status === 'loading'" class="dependency-status" role="status">正在识别依赖…</p>
-    <p v-else-if="result" class="dependency-status" :class="{ ready: result.ready }" role="status">{{ result.ready ? result.requirements.trim() ? `已识别 ${result.requirements.split('\n').filter(Boolean).length} 项依赖` : '无需安装额外依赖' : `${result.unresolved.length} 项依赖待补充` }}</p>
+    <p v-else-if="result && (manualInput || !result.ready)" class="dependency-status" :class="{ ready: result.ready }" role="status">{{ result.ready ? result.requirements.trim() ? `已识别 ${result.requirements.split('\n').filter(Boolean).length} 项依赖` : '无需安装额外依赖' : `${result.unresolved.length} 项依赖待补充` }}</p>
     <div v-if="error" class="dependency-error" role="alert">{{ error }} <button type="button" class="text-button" :disabled="disabled" @click="invalidate(); analyze()">重新分析</button></div>
     <div v-if="pending.length" class="dependency-pending">
       <article v-for="item in pending" :key="item.id">
@@ -87,8 +87,8 @@ onBeforeUnmount(() => { alive = false; sequence++; fileSequence++; controller?.a
       </article>
       <small>单文件上传不包含其他业务模块；排除后需自行准备相应文件。</small>
     </div>
-    <details v-if="result"><summary>识别明细</summary><ul><li v-for="item in result.items" :key="item.id">{{ item.module }} · {{ item.kind === 'stdlib' ? '标准库' : item.kind === 'type_only' ? '仅类型检查' : item.requirement || item.package || item.exclusion_reason || '待补充' }} · 第 {{ item.lines.join('、') }} 行</li></ul><pre v-if="result.requirements">{{ result.requirements }}</pre><small>{{ result.target?.kind === 'agent' ? '目标 Python 待实际准备时核验' : `Python ${result.target?.version || '3.12'}` }}</small></details>
-    <details class="dependency-manual"><summary>补充依赖 <small>{{ requirements.trim() ? '已填写' : '可选' }}</small></summary>
+    <details v-if="manualInput && result"><summary>识别明细</summary><ul><li v-for="item in result.items" :key="item.id">{{ item.module }} · {{ item.kind === 'stdlib' ? '标准库' : item.kind === 'type_only' ? '仅类型检查' : item.requirement || item.package || item.exclusion_reason || '待补充' }} · 第 {{ item.lines.join('、') }} 行</li></ul><pre v-if="result.requirements">{{ result.requirements }}</pre><small>{{ result.target?.kind === 'agent' ? '目标 Python 待实际准备时核验' : `Python ${result.target?.version || '3.12'}` }}</small></details>
+    <details v-if="manualInput" class="dependency-manual"><summary>补充依赖 <small>{{ requirements.trim() ? '已填写' : '可选' }}</small></summary>
       <label class="dependency-import"><span>{{ reading ? '正在读取…' : '导入 requirements.txt' }}</span><input class="sr-only" type="file" accept=".txt,text/plain" :disabled="disabled || reading" @change="readFile"></label>
       <label class="field"><span>包名和版本约束</span><textarea :value="requirements" maxlength="20000" rows="3" :disabled="disabled || reading" placeholder="每行一个，例如：openpyxl>=3.1" @input="emit('update:requirements', $event.target.value)"></textarea></label>
     </details>

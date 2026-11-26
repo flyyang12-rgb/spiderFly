@@ -23,7 +23,7 @@ const filtersExpanded = ref(false)
 const hasWorkflows = computed(() => workflows.value.some(flow => !flow.archived))
 const kind = computed(() => definitionsLoaded.value && !hasWorkflows.value ? 'task' : taskCenterKind.value)
 const activeFilterCount = computed(() => Number(hasWorkflows.value && taskCenterKind.value !== 'all')
-  + Number(Boolean(filters.name.trim())) + Number(filters.trigger_type !== 'all')
+  + Number(targetFilter.value !== 'all') + Number(Boolean(filters.name.trim())) + Number(filters.trigger_type !== 'all')
   + (kind.value === 'task' ? Number(filters.enabled !== 'all') + Number(filters.owner !== 'all') : 0))
 let filterMedia = null
 function updateFilterViewport(event) { filterIsMobile.value = event.matches }
@@ -39,6 +39,15 @@ onBeforeUnmount(() => {
   else filterMedia?.removeListener?.(updateFilterViewport)
   filterMedia = null
 })
+const targetFilter = ref('all')
+const expandedRow = ref('')
+const targetOptions = computed(() => {
+  const options = new Map()
+  for (const task of tasks.value) {
+    if (task.target_host_id) options.set(String(task.target_host_id), task.target_host_name || '宿主机 #' + task.target_host_id)
+  }
+  return [...options].sort((a, b) => nameCollator.compare(a[1], b[1]))
+})
 const planTarget = ref(null)
 const triggerTarget = ref(null)
 const nameCollator = new Intl.Collator('zh-CN', { numeric: true, sensitivity: 'base' })
@@ -48,6 +57,7 @@ const rows = computed(() => {
   const items = []
   if (kind.value !== 'workflow') {
     for (const task of tasks.value) {
+      if (targetFilter.value !== 'all' && String(task.target_host_id || 'local') !== targetFilter.value) continue
       if (query && !String(task.name || '').toLowerCase().includes(query)) continue
       if (filters.trigger_type !== 'all' && task.trigger_type !== filters.trigger_type) continue
       if (kind.value === 'task') {
@@ -57,7 +67,7 @@ const rows = computed(() => {
       items.push({ kind: 'task', id: Number(task.id), key: `task:${task.id}`, object: task })
     }
   }
-  if (kind.value !== 'task') {
+  if (kind.value !== 'task' && ['all', 'local'].includes(targetFilter.value)) {
     for (const flow of workflows.value) {
       if (flow.archived) continue
       if (query && !String(flow.name || '').toLowerCase().includes(query)) continue
@@ -75,6 +85,13 @@ function scheduleText({ kind, object }) {
   if (object.trigger_type === 'cron') return triggerLabel('cron')
   return triggerDetail(object)
 }
+function nextRunText({ kind, object }) {
+  const enabled = kind === 'workflow' ? object.schedule_enabled : object.enabled
+  if (!enabled || object.trigger_type === 'manual') return '—'
+  if (object.next_run_at) return formatTime(object.next_run_at)
+  if (kind === 'task' && object.first_environment_ready === 0 && !object.target_host_id) return '依赖准备中'
+  return object.trigger_type === 'interval' ? '本次结束后计算' : '待计算'
+}
 async function refreshAll() {
   if (refreshBusy.value) return
   refreshBusy.value = true
@@ -83,6 +100,7 @@ async function refreshAll() {
 }
 function resetCenterFilters() {
   resetFilters()
+  targetFilter.value = 'all'
   taskCenterKind.value = 'all'
 }
 function choosePlan(row) { planTarget.value = { kind: row.kind, id: row.id, created: false } }
@@ -104,10 +122,6 @@ watch(me, (user, previous) => { if (!user || user.id !== previous?.id) { planTar
 <template>
   <section class="view-stack task-center-page">
     <section class="panel center-objects">
-      <header class="panel-heading">
-        <div class="center-count" role="status">{{ countLabel }}</div>
-        <div class="center-header-actions"><button v-if="isAdmin" class="button secondary compact" type="button" @click="openAi()">AI 创建</button><button v-if="isAdmin" class="button primary compact" type="button" :disabled="Boolean(busy)" @click="openCreate()">新建</button></div>
-      </header>
       <div class="center-filter-region">
       <div v-if="filterIsMobile" class="center-mobile-filter-tools">
         <button class="button secondary compact" type="button" :aria-expanded="filtersExpanded" aria-controls="task-center-filters" @click="filtersExpanded = !filtersExpanded">{{ filtersExpanded ? '收起筛选' : '筛选' }}{{ activeFilterCount ? ' · ' + activeFilterCount : '' }}</button>
@@ -115,70 +129,83 @@ watch(me, (user, previous) => { if (!user || user.id !== previous?.id) { planTar
       </div>
       <div id="task-center-filters" class="filter-bar center-filter-bar" :hidden="filterIsMobile && !filtersExpanded">
         <label v-if="hasWorkflows" class="filter-field"><span>类型</span><select v-model="taskCenterKind"><option value="all">全部</option><option value="task">任务</option><option value="workflow">工作流</option></select></label>
-        <label class="filter-field"><span>名称</span><input v-model="filters.name" type="search" placeholder="搜索名称" /></label>
+        <label class="filter-field"><span>任务名称</span><input v-model="filters.name" type="search" placeholder="搜索任务名称" /></label>
         <label class="filter-field"><span>触发方式</span><select v-model="filters.trigger_type"><option value="all">全部</option><option v-for="option in triggerOptions" :key="option.value" :value="option.value">{{ option.label }}</option></select></label>
         <template v-if="kind === 'task'">
           <label class="filter-field"><span>启用状态</span><select v-model="filters.enabled"><option value="all">全部状态</option><option value="enabled">已启用</option><option value="disabled">已停用</option></select></label>
           <label class="filter-field"><span>归属人</span><select v-model="filters.owner"><option value="all">全部</option><option v-for="owner in ownerOptions" :key="owner.value" :value="owner.value">{{ owner.label }}</option></select></label>
         </template>
+        <label class="filter-field"><span>执行电脑</span><select v-model="targetFilter" aria-label="执行电脑"><option value="all">全部</option><option value="local">主控本机</option><option v-for="[id, name] in targetOptions" :key="id" :value="id">{{ name }}</option></select></label>
         <div class="filter-actions"><button v-if="!filterIsMobile" class="button secondary compact" type="button" :disabled="refreshBusy || refreshing" @click="refreshAll">{{ refreshBusy || refreshing ? '刷新中…' : '刷新' }}</button><button class="button ghost compact" type="button" @click="resetCenterFilters">清空筛选</button></div>
       </div>
       </div>
+      <header class="panel-heading">
+        <div class="center-count" role="status">{{ countLabel }}</div>
+        <div class="center-header-actions"><button v-if="isAdmin" class="button secondary compact" type="button" @click="openAi()">AI 创建</button><button v-if="isAdmin" class="button primary compact" type="button" :disabled="Boolean(busy)" @click="openCreate()">新建</button></div>
+      </header>
     <div v-if="tasksLoadError || !tasksLoaded" class="center-feedback error" role="alert">{{ tasksLoadError ? '任务加载失败：' + tasksLoadError : '正在加载任务…' }}<span v-if="tasks.length">当前保留已取得的任务。</span><button class="text-button" type="button" :disabled="refreshBusy" @click="refreshAll">重试读取</button></div>
     <div v-if="loadError || !definitionsLoaded" class="center-feedback" :class="loadError ? 'error' : 'loading'" :role="loadError ? 'alert' : 'status'">{{ loadError ? '工作流未完整载入：' + loadError : '正在读取工作流…' }}<span v-if="workflows.length">当前保留已取得的工作流。</span><button v-if="loadError" class="text-button" type="button" :disabled="refreshing" @click="refresh()">重试读取</button></div>
     <div v-if="actionError" class="center-feedback error" role="alert">{{ actionError }}</div>
     <div v-if="notice" class="center-feedback success" role="status">{{ notice }}</div>
-      <ul v-if="rows.length" class="center-object-list" aria-label="任务与工作流列表">
-        <li v-for="row in rows" :key="row.key" :data-object-key="row.key">
-          <div class="center-object-main">
-            <div class="center-object-name"><strong>{{ row.object.name }}</strong><span v-if="row.kind === 'workflow'" class="center-kind-badge">工作流</span></div>
-            <p v-if="row.kind === 'workflow' && row.object.description" class="center-description">{{ row.object.description }}</p>
-            <div class="center-object-facts">
-              <span>运行电脑：{{ row.kind === 'workflow' ? '主控本机' : row.object.target_host_name || '主控本机' }}</span>
-              <span>{{ scheduleText(row) }}</span>
-              <span v-if="row.kind === 'task' && row.object.last_status" class="status-badge"><i class="status-dot" :class="row.object.last_status"></i>最近：{{ statusLabel(row.object.last_status) }}</span>
-              <span v-else-if="row.kind === 'workflow' && row.object.last_run" class="status-badge"><i class="status-dot" :class="row.object.last_run.status"></i>最近：{{ workflowStatusLabel(row.object.last_run?.status) }}</span>
-              <span v-if="row.kind === 'task' && row.object.enabled && row.object.trigger_type !== 'manual' && row.object.next_run_at">下次：{{ formatTime(row.object.next_run_at) }}</span>
-            </div>
-            <template v-if="row.kind === 'task'">
-              <p v-if="row.object.environment_status === 'failed' && row.object.environment_error" class="center-description danger-text">{{ row.object.environment_error }}</p>
-            </template>
-            <template v-else>
-              <div class="center-object-facts"><span>{{ row.object.steps?.some(step => step.available === false) ? '成员不可用' : '成员可用' }}</span><span v-if="row.object.schedule_enabled">下次运行：{{ row.object.next_run_at ? formatTime(row.object.next_run_at) : row.object.trigger_type === 'interval' ? '本次结束后计算' : '未知' }}</span></div>
-              <ol class="center-flow-steps" aria-label="执行顺序"><li v-for="step in row.object.steps" :key="step.position" :class="{ 'danger-text': step.available === false }"><span>{{ step.position }}</span>{{ step.task_name }}{{ step.available === false ? '（不可用）' : '' }}</li></ol>
-            </template>
-          </div>
-          <div class="center-object-actions">
-            <template v-if="row.kind === 'task'">
-              <button class="plan-state" :class="{ enabled: row.object.enabled }" type="button" @click="toggleTask(row.object)"><i></i>{{ row.object.enabled ? '已启用' : '已停用' }}</button>
-              <button v-if="taskIsActive(row.object)" class="button secondary compact" type="button" @click="viewTaskExecution(row.object)">查看运行</button>
-              <button v-else class="button secondary compact" type="button" :disabled="!row.object.enabled || (row.object.target_host_id ? !isAdmin : row.object.environment_status !== 'ready')" :title="row.object.target_host_id && !isAdmin ? '远程任务需由管理员运行' : '将在 ' + (row.object.target_host_name || '主控本机') + ' 运行'" @click="runTask(row.object)">运行</button>
-              <button class="button ghost compact" type="button" :disabled="taskIsActive(row.object)" @click="openEdit(row.object)">编辑</button>
-              <details class="center-more">
-                <summary>更多</summary>
-                <p v-if="row.object.description" class="center-description">{{ row.object.description }}</p>
-                <div class="center-object-facts">
-                  <span :class="'env-' + row.object.environment_status">{{ row.object.target_host_id ? '运行时准备环境' : envStatusLabel(row.object.environment_status) }}</span>
-                  <span>归属人：{{ row.object.created_by_name || '系统迁移' }}</span>
-                  <span v-if="row.object.enabled && row.object.trigger_type !== 'manual' && !row.object.next_run_at">下次运行：{{ row.object.first_environment_ready === 0 && !row.object.target_host_id ? '依赖准备中' : row.object.trigger_type === 'interval' ? '本次结束后计算' : '未知' }}</span>
+      <div v-if="rows.length" class="plan-scroll" tabindex="0" aria-label="任务计划表格">
+        <table class="plans-table">
+          <thead><tr><th scope="col">任务名称</th><th scope="col">执行程序</th><th scope="col">触发方式</th><th scope="col">启用状态</th><th scope="col">下次执行</th><th scope="col">执行电脑</th><th scope="col">操作</th></tr></thead>
+          <tbody>
+            <template v-for="row in rows" :key="row.key">
+              <tr :data-object-key="row.key">
+                <th scope="row"><span class="plan-name" :title="row.object.name">{{ row.object.name }}</span><span v-if="row.kind === 'workflow'" class="center-kind-badge">工作流</span></th>
+                <td><span class="plan-program" :title="row.object.project_entry || row.object.script_filename">{{ row.kind === 'workflow' ? (row.object.steps?.length || 0) + ' 个步骤' : row.object.project_entry || row.object.script_filename || '—' }}</span></td>
+                <td>{{ scheduleText(row) }}</td>
+                <td><button v-if="row.kind === 'task'" class="plan-state" :class="{ enabled: row.object.enabled }" type="button" role="switch" :aria-checked="row.object.enabled" :aria-label="row.object.name + '启用状态'" @click="toggleTask(row.object)"><i></i>{{ row.object.enabled ? '已启用' : '已停用' }}</button>
+                  <span v-else>{{ row.object.schedule_enabled ? '定时已启用' : '手动运行' }}</span></td>
+                <td class="plan-time">{{ nextRunText(row) }}</td>
+                <td>{{ row.object.target_host_name || '主控本机' }}</td>
+                <td><div class="center-object-actions">
+                  <template v-if="row.kind === 'task'">
+                    <button v-if="taskIsActive(row.object)" type="button" @click="viewTaskExecution(row.object)">查看运行</button>
+                    <button v-else type="button" :disabled="!row.object.enabled || (row.object.target_host_id ? !isAdmin : row.object.environment_status !== 'ready')" @click="runTask(row.object)">运行</button>
+                    <button type="button" :disabled="taskIsActive(row.object)" @click="openEdit(row.object)">编辑</button>
+                  </template>
+                  <template v-else>
+                    <button v-if="row.object.active_run_id" type="button" @click="openRun(row.object.active_run_id)">查看运行</button>
+                    <button v-if="isAdmin" type="button" :disabled="Boolean(busy) || (Boolean(row.object.active_run_id) && !pendingStarts.has(row.id))" @click="startWorkflow(row.object)">{{ busy === 'start:' + row.id ? '提交中…' : pendingStarts.has(row.id) ? '重试启动' : '运行' }}</button>
+                    <button v-if="isAdmin" type="button" :disabled="Boolean(busy)" @click="openEditor(row.object)">编辑</button>
+                  </template>
+                  <button type="button" :aria-expanded="expandedRow === row.key" @click="expandedRow = expandedRow === row.key ? '' : row.key">{{ expandedRow === row.key ? '收起' : '更多' }}</button>
+                </div></td>
+              </tr>
+              <tr v-if="expandedRow === row.key" class="plan-expanded"><td colspan="7">
+                <div class="plan-details">
+                  <p v-if="row.object.description" class="center-description">{{ row.object.description }}</p>
+                  <template v-if="row.kind === 'task'">
+                    <div class="center-object-facts">
+                      <span>{{ row.object.target_host_id ? '运行时准备环境' : envStatusLabel(row.object.environment_status) }}</span>
+                      <span>归属人：{{ row.object.created_by_name || '系统迁移' }}</span>
+                      <span v-if="row.object.last_status">最近：{{ statusLabel(row.object.last_status) }}</span>
+                    </div>
+                    <p v-if="row.object.environment_status === 'failed' && row.object.environment_error" class="center-description danger-text">{{ row.object.environment_error }}</p>
+                    <div v-if="isAdmin" class="center-more-actions">
+                      <button class="text-button" type="button" @click="choosePlan(row)">设置定时</button>
+                      <button class="text-button" type="button" @click="openAi(row.object)">AI 助手</button>
+                      <button v-if="row.object.environment_status === 'failed'" class="text-button" type="button" @click="rebuildTaskEnvironment(row.object)">修复环境</button>
+                      <button class="text-button danger-text" type="button" @click="deletingTask = row.object">删除</button>
+                    </div>
+                  </template>
+                  <template v-else>
+                    <ol v-if="row.object.steps?.length" class="center-flow-steps" aria-label="执行顺序"><li v-for="step in row.object.steps" :key="step.position" :class="{ 'danger-text': step.available === false }"><span>{{ step.position }}</span>{{ step.task_name }}{{ step.available === false ? '（不可用）' : '' }}</li></ol>
+                    <div class="center-more-actions">
+                      <button v-if="row.object.last_run" class="text-button" type="button" @click="openRun(row.object.last_run.id)">最近结果 · {{ workflowStatusLabel(row.object.last_run.status) }}</button>
+                      <button v-if="isAdmin" class="text-button" type="button" :disabled="Boolean(busy)" @click="choosePlan(row)">设置定时</button>
+                      <button class="text-button" type="button" @click="triggerTarget = row.object">触发记录</button>
+                      <button v-if="isAdmin" class="text-button danger-text" type="button" :disabled="Boolean(busy) || Boolean(row.object.active_run_id)" @click="askConfirmation({ type: 'delete', id: row.id, name: row.object.name })">删除</button>
+                    </div>
+                  </template>
                 </div>
-                <div v-if="isAdmin" class="center-more-actions"><button class="button ghost compact" type="button" @click="choosePlan(row)">设置定时</button>
-              <button v-if="isAdmin" class="button ghost compact" type="button" @click="openAi(row.object)">AI 助手</button>
-              <button v-if="isAdmin && row.object.environment_status === 'failed'" class="button ghost compact" type="button" @click="rebuildTaskEnvironment(row.object)">修复环境</button>
-              <button v-if="isAdmin" class="button ghost compact archive-button" type="button" title="同时删除程序、独立环境和运行记录；流程简要历史按原规则保留" @click="deletingTask = row.object">删除</button></div></details>
+              </td></tr>
             </template>
-            <template v-else>
-              <button v-if="row.object.active_run_id" class="button secondary compact" type="button" @click="openRun(row.object.active_run_id)">查看运行</button>
-              <button v-else-if="row.object.last_run" class="button ghost compact" type="button" @click="openRun(row.object.last_run.id)">查看最近结果</button>
-              <button v-if="isAdmin" class="button secondary compact" type="button" :disabled="Boolean(busy) || (Boolean(row.object.active_run_id) && !pendingStarts.has(row.object.id))" @click="startWorkflow(row.object)">{{ busy === 'start:' + row.object.id ? '正在提交…' : pendingStarts.has(row.object.id) ? '重试启动' : '运行' }}</button>
-              <button v-if="isAdmin" class="button ghost compact" type="button" :disabled="Boolean(busy)" @click="openEditor(row.object)">编辑</button>
-              <details class="center-more"><summary>更多</summary><div class="center-more-actions"><button v-if="isAdmin" class="button ghost compact" type="button" :disabled="Boolean(busy)" @click="choosePlan(row)">设置定时</button>
-              <button class="button ghost compact" type="button" @click="triggerTarget = row.object">触发记录</button>
-              <button v-if="isAdmin" class="button ghost compact archive-button" type="button" :disabled="Boolean(busy) || Boolean(row.object.active_run_id)" @click="askConfirmation({ type: 'delete', id: row.id, name: row.object.name })">删除</button></div></details>
-            </template>
-          </div>
-        </li>
-      </ul>
+          </tbody>
+        </table>
+      </div>
       <div v-else class="empty-state compact-empty"><strong>{{ !complete ? '暂无匹配结果' : tasks.length || workflows.length ? '没有匹配的记录' : '还没有任务' }}</strong><p>{{ !complete ? '部分资料仍未取得，请重试读取。' : tasks.length || workflows.length ? '调整筛选条件后再试。' : '点击“新建”，上传 Python 脚本或项目 ZIP。' }}</p></div>
     </section>
     <CreationDialog v-if="createObjectOpen && isAdmin" @created="createdTask" />
@@ -205,24 +232,31 @@ watch(me, (user, previous) => { if (!user || user.id !== previous?.id) { planTar
 .center-filter-bar > .filter-field { flex: 1 1 160px; min-width: 0; }
 .center-filter-bar input, .center-filter-bar select { font-size: var(--workspace-body, 13px); }
 .center-count { color: var(--muted); font-size: var(--workspace-caption, 12px); }
-.center-header-actions, .center-object-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.center-object-list { margin: 0; padding: 0; list-style: none; }
-.center-object-list > li { display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, 340px); gap: 20px; padding: 16px 18px; border-bottom: 1px solid var(--border-soft); }
-.center-object-list > li:last-child { border-bottom: 0; }
-.center-object-main { display: grid; gap: 8px; min-width: 0; }
-.center-object-name { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.center-object-name strong { font-size: var(--workspace-item-title, 14px); overflow-wrap: anywhere; }
+.center-header-actions, .center-object-actions { display: flex; align-items: center; gap: 8px; }
+.plan-scroll { max-width: 100%; overflow-x: auto; }
+.plans-table { width: 100%; min-width: 870px; border-collapse: collapse; text-align: left; font-size: 13px; }
+.plans-table th, .plans-table td { padding: 12px; border-bottom: 1px solid var(--border-soft); }
+.plans-table :is(th, td):first-child { padding-left: 18px; }
+.plans-table :is(th, td):last-child { padding-right: 18px; }
+.plans-table thead th { font-size: 12px; font-weight: 550; background: var(--surface-subtle); color: var(--muted); white-space: nowrap; }
+.plans-table tbody th { background: transparent; color: var(--ink); }
+.plans-table tbody td { height: 50px; }
+.plans-table tbody tr:last-child > * { border-bottom: 0; }
+.plans-table tbody tr:hover { background: var(--surface-subtle); }
+.plan-name, .plan-program { display: inline-block; max-width: 20em; vertical-align: middle; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.plan-name { font-size: 14px; font-weight: 600; }
+.plan-program { max-width: 14em; color: var(--muted); }
+.plan-time, .center-object-actions { white-space: nowrap; }
+.plan-time { font-variant-numeric: tabular-nums; }
+.center-object-actions button { padding: 6px 2px; border: 0; background: transparent; color: var(--brand-strong); font: inherit; cursor: pointer; }
+.center-object-actions button:hover { text-decoration: underline; }
+.center-object-actions button:disabled { color: var(--faint); cursor: not-allowed; }
+.plan-details { display: grid; justify-items: start; gap: 8px; }
+.plan-expanded { background: var(--surface-subtle); }
 .center-kind-badge { border: 1px solid var(--border); border-radius: 6px; padding: 3px 6px; color: var(--muted); background: var(--surface-subtle); font-size: var(--workspace-caption, 11px); }
 .center-description { margin: 0; color: var(--muted); font-size: var(--workspace-body, 12px); line-height: 20px; overflow-wrap: anywhere; }
 .center-object-facts { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 16px; color: var(--muted); font-size: var(--workspace-caption, 11px); overflow-wrap: anywhere; }
-.center-object-actions { align-content: center; justify-content: flex-end; }
-.center-more { max-width: 100%; color: var(--muted); font-size: 13px; }
-.center-more summary { cursor: pointer; padding: 7px 10px; border-radius: 8px; }
-.center-more summary:hover { background: var(--surface-subtle); color: var(--text); }
-.center-more summary:focus-visible { outline: 2px solid rgba(0,145,57,.3); outline-offset: 2px; }
-.center-more[open] { flex-basis: 100%; }
-.center-more[open] summary { width: fit-content; margin-left: auto; }
-.center-more-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 4px; padding-top: 4px; }
+.center-more-actions { display: flex; flex-wrap: wrap; gap: 14px; }
 .center-flow-steps { display: flex; flex-wrap: wrap; gap: 6px 12px; margin: 0; padding: 0; list-style: none; }
 .center-flow-steps li { display: inline-flex; gap: 6px; align-items: center; font-size: 12px; overflow-wrap: anywhere; }
 .center-flow-steps li + li:before { content: '→'; color: var(--faint); }
@@ -230,7 +264,5 @@ watch(me, (user, previous) => { if (!user || user.id !== previous?.id) { planTar
 .center-feedback { padding: 12px 14px; border: 1px solid var(--border); border-radius: 8px; color: var(--muted); font-size: 12px; line-height: 20px; overflow-wrap: anywhere; }
 .center-feedback.error { border-color: #f0c2b7; background: var(--coral-soft); color: #ad4935; }
 .center-feedback.success { border-color: #c9e2d2; background: var(--brand-soft); color: var(--brand-strong); }
-@media (max-width: 1000px) { .center-object-list > li { grid-template-columns: minmax(0, 1fr); gap: 12px; } .center-object-actions { justify-content: flex-start; } .center-more[open] summary { margin-left: 0; } .center-more-actions { justify-content: flex-start; } }
-@media (max-width: 720px) { .center-objects > .panel-heading { align-items: flex-start; flex-wrap: wrap; } .center-header-actions { width: 100%; } }
-@media (max-width: 420px) { .center-filter-bar > .filter-field { flex-basis: 100%; } .center-object-list > li { padding: 14px; } .center-object-actions { gap: 6px; } }
+@media (max-width: 420px) { .center-filter-bar > .filter-field { flex-basis: 100%; } }
 </style>
