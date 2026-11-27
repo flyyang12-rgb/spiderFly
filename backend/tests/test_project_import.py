@@ -89,8 +89,8 @@ class ProjectImportApiTests(unittest.TestCase):
                     'request_id':'project-import-check-20261127'}, files={'project_archive':('project.zip',content)})
                 self.assertEqual(saved.status_code,201,saved.text)
                 self.assertEqual(saved.json()['requirements_text'],'requests')
-                missing = archive({'main.py':'import missing_business_module'})
+                missing = archive({'main.py':'from 公共库 import run'})
                 result = client.post('/api/apps',data={'name':'不可保存缺项','project_entry':'main.py'},
                     files={'project_archive':('missing.zip',missing)})
                 self.assertEqual(result.status_code,400,result.text)
-                self.assertIn('missing_business_module',result.json()['detail'])
+                self.assertIn('公共库',result.json()['detail'])

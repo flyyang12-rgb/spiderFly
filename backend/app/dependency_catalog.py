@@ -27,3 +27,26 @@ PROJECTS = {
     'DrissionPage': (('DrissionPage',), 'https://www.drissionpage.cn/get_start/installation/'),
 }
 IMPORT_TO_PACKAGE = {module: package for package, (modules, _) in PROJECTS.items() for module in modules}
+
+
+# Automatic preparation defaults to portable CPU runtimes. Explicit manifests win.
+AUTOMATIC_MAPPING_VERSION = '2026-11-27.1'
+AUTOMATIC_PROJECTS = {
+    'opencv-python': (('cv2',), 'https://pypi.org/project/opencv-python/'),
+    'onnxruntime': (('onnxruntime',), 'https://onnxruntime.ai/docs/install/'),
+    'torch': (('torch',), 'https://docs.pytorch.org/get-started/locally/'),
+    'torchvision': (('torchvision',), 'https://pypi.org/project/torchvision/'),
+    'paddleocr': (('paddleocr',), 'https://www.paddleocr.ai/main/en/quick_start.html'),
+    'paddlepaddle': (('paddle',), 'https://www.paddlepaddle.org.cn/en/install/quick'),
+    'scikit-learn': (('sklearn',), 'https://scikit-learn.org/stable/install.html'),
+    'python-dotenv': (('dotenv',), 'https://pypi.org/project/python-dotenv/'),
+    'pycryptodome': (('Crypto',), 'https://www.pycryptodome.org/src/installation'),
+    'PyMuPDF': (('fitz', 'pymupdf'), 'https://pymupdf.readthedocs.io/en/latest/installation.html'),
+}
+AUTOMATIC_IMPORT_TO_PACKAGE = {**IMPORT_TO_PACKAGE,
+    **{module: package for package, (modules, _) in AUTOMATIC_PROJECTS.items() for module in modules}}
+PACKAGE_FAMILIES = {
+    'cv2': ('opencv-python', 'opencv-python-headless', 'opencv-contrib-python', 'opencv-contrib-python-headless'),
+    'onnxruntime': ('onnxruntime', 'onnxruntime-gpu', 'onnxruntime-directml'),
+    'paddle': ('paddlepaddle', 'paddlepaddle-gpu'),
+}

@@ -285,7 +285,65 @@ def analyze(source, filename, requirements='', decisions=None, target=None, sour
     try: payload = json.loads(result.stdout)
     except (ValueError, TypeError): raise ValueError('依赖分析未完成，请重试或检查脚本结构') from None
     if 'error' in payload: raise ValueError(payload['error'])
-    return payload['result']
+    return automatic_preparation(payload['result'])
+
+def automatic_preparation(analysis):
+    """Resolve installer choices without executing code or retrying business runs."""
+    if __package__:
+        from .dependency_catalog import AUTOMATIC_IMPORT_TO_PACKAGE, AUTOMATIC_MAPPING_VERSION, PACKAGE_FAMILIES
+    else:
+        from dependency_catalog import AUTOMATIC_IMPORT_TO_PACKAGE, AUTOMATIC_MAPPING_VERSION, PACKAGE_FAMILIES
+    final = parse_requirements(analysis['requirements'])
+    pending = set(analysis['unresolved'])
+    blocked, deferred = [], []
+    for item in analysis['items']:
+        if item['id'] not in pending:
+            continue
+        module = item['module']
+        if item['kind'] == 'self':
+            item.update(status='excluded', exclusion_reason='入口文件自身模块')
+            continue
+        if item['kind'] == 'dynamic' and module.startswith('<'):
+            item.update(status='deferred', reason='动态模块由程序运行时确定')
+            deferred.append(item['id'])
+            continue
+        if item['kind'] == 'relative' or not module.isascii():
+            item.update(status='missing', reason='未找到随程序提供的业务模块')
+            blocked.append(item['id'])
+            continue
+        if not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', module):
+            # Variable import names and exec are runtime behavior, not package names.
+            # Keep this fact in the analysis; never run the uploaded script to guess.
+            item.update(status='deferred', reason='动态模块由程序运行时确定')
+            deferred.append(item['id'])
+            continue
+        family = PACKAGE_FAMILIES.get(module, ())
+        selected = next((final[canonical(package)] for package in family if canonical(package) in final), None)
+        package = AUTOMATIC_IMPORT_TO_PACKAGE.get(module, module)
+        requirement = selected or final.get(canonical(package), package)
+        final.update(parse_requirements(requirement))
+        item.update(status='automatic', package=package, requirement=requirement,
+                    resolution='catalog' if module in AUTOMATIC_IMPORT_TO_PACKAGE else 'package-name')
+    # PaddleOCR needs a separate inference engine, as documented by the project.
+    if any(item['module'] == 'paddleocr' and item['status'] not in ('excluded', 'missing') for item in analysis['items']):
+        if not any(canonical(name) in final for name in ('paddlepaddle', 'paddlepaddle-gpu')):
+            final.setdefault('paddlepaddle', 'paddlepaddle')
+        # PaddleX OCR installs the contrib flavor; avoid two distributions owning cv2.
+        declared = parse_requirements(analysis.get('user_requirements', ''))
+        if not any(canonical(name) in declared for name in PACKAGE_FAMILIES['cv2']):
+            final.pop('opencv-python', None)
+            final.setdefault('opencv-contrib-python', 'opencv-contrib-python')
+            for item in analysis['items']:
+                if item['module'] == 'cv2' and item['status'] == 'automatic':
+                    item.update(package='opencv-contrib-python', requirement='opencv-contrib-python')
+    manifest = '\n'.join(final[key] for key in sorted(final))
+    if len(manifest) > 20_000:
+        raise ValueError('自动生成的依赖清单超过 20,000 个字符')
+    analysis.update(requirements=manifest, requirements_hash=digest(manifest),
+                    unresolved=blocked, deferred=deferred, ready=not blocked,
+                    automatic=True, automatic_mapping_version=AUTOMATIC_MAPPING_VERSION)
+    return analysis
+
 
 @lru_cache(maxsize=4)
 def local_python_info(python):
@@ -309,7 +367,7 @@ def target_context(target_host_id=None):
 def require_resolved(analysis):
     if not analysis['ready']:
         names = ', '.join(item['module'] for item in analysis['items'] if item['id'] in analysis['unresolved'])
-        raise ValueError('依赖待补充：' + names[:500] + '。请填写包名或排除理由')
+        raise ValueError(('项目缺少模块：' if analysis.get('automatic') else '依赖待补充：') + names[:500] + ('。请随完整项目提供相关文件。' if analysis.get('automatic') else '。请填写包名或排除理由'))
 
 def freeze(conn, version_id, analysis):
     conn.execute('INSERT OR IGNORE INTO dependency_analyses(version_id,analysis,created_at) VALUES(?,?,?)',

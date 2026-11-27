@@ -177,7 +177,7 @@ class DependencyLifecycleTests(unittest.TestCase):
 
     def test_forged_summary_unresolved_and_syntax_do_not_create_task(self):
         before=database.fetch_one('SELECT COUNT(*) n FROM tasks')['n']
-        for source,values in [('import unknown_biz',{'analysis':'{"ready":true}'}),('if True print(1)',{}),('pass',{'requirements_text':'--index-url x'})]:
+        for source,values in [('from . import helper',{'analysis':'{"ready":true}'}),('if True print(1)',{}),('pass',{'requirements_text':'--index-url x'})]:
             code,_=self.multipart('/api/apps',source,{'name':'bad-input',**values});self.assertEqual(code,400)
         self.assertEqual(database.fetch_one('SELECT COUNT(*) n FROM tasks')['n'],before)
 
