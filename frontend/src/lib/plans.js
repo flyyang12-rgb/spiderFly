@@ -25,7 +25,7 @@ export function validatePlan(form, remote = false) {
   if (form.trigger_type === 'interval' && !['seconds', 'minutes', 'hours', 'days'].includes(form.interval_unit)) return '请选择间隔单位'
   if (form.trigger_type === 'weekly' && !form.weekly_days.length) return '请至少选择一个星期'
   if (form.trigger_type === 'monthly' && form.monthly_day !== 'last' && (!Number.isInteger(Number(form.monthly_day)) || Number(form.monthly_day) < 1 || Number(form.monthly_day) > 31)) return '请选择每月执行日期'
-  if (form.trigger_type === 'cron' && remote) return 'Cron 仅支持主控本机，请修改运行电脑'
+  if (form.trigger_type === 'cron' && remote) return 'Cron 仅支持主控服务器，请修改运行电脑'
   if (form.trigger_type === 'cron' && !form.cron_expression.trim()) return '请填写 Cron 表达式'
   return ''
 }

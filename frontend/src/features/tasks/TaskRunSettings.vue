@@ -20,9 +20,10 @@ const notificationSummary = computed(() => [props.form.notify_on_success && '成
       <h3 v-if="creating">执行程序与电脑</h3>
       <slot name="program" />
       <label v-if="showTarget" class="field schedule-target-field"><span>运行电脑</span>
-        <UiSelect v-model="form.target_host_id" label="运行电脑" :disabled="disabled || hostsLoading" :options="[{ value: '', label: '主控本机' }, ...hosts.map(host => ({ value: String(host.id), label: host.name + (host.approval_status === 'approved' ? '' : '（不可用）'), disabled: host.approval_status !== 'approved' }))]" />
+        <UiSelect v-model="form.target_host_id" label="运行电脑" :disabled="disabled || hostsLoading" :options="[{ value: '', label: '主控服务器' }, ...hosts.map(host => ({ value: String(host.id), label: host.name + (host.approval_status === 'approved' ? '' : '（不可用）'), disabled: host.approval_status !== 'approved' }))]" />
         <small v-if="project && hosts.some(host => String(host.id) === String(form.target_host_id) && !host.supports_project_zip)">ZIP 任务需 Agent 0.5.3 或以上，当前可保存计划。</small>
         <small v-else-if="form.target_host_id">离线或忙碌时排队。</small>
+        <small v-else>部署 SpiderFly 的电脑。</small>
       </label>
     </div>
     <PlanFields :form="form" :remote="Boolean(form.target_host_id)" :disabled="disabled" :identity="identity" @unauthorized="emit('unauthorized')" />

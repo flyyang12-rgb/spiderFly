@@ -233,7 +233,7 @@ async function copyCode() {
           </div>
         </div>
         <div class="host-summary">
-          <span v-if="viewer?.kind === 'controller'" class="host-viewer">当前电脑 · 主控本机</span>
+          <span v-if="viewer?.kind === 'controller'" class="host-viewer">当前电脑 · 主控服务器</span>
           <span v-else-if="currentHost && !visibleHosts.includes(currentHost)">当前电脑 · {{ currentHost.name }}（不在当前筛选内）</span>
           <span v-else-if="viewer?.kind === 'shared'">多台电脑共用连接地址，无法识别当前电脑</span>
           <span v-else-if="viewer?.kind === 'unknown'" title="请确认这台电脑的 Agent 在线，且浏览器直连同一主控。">未识别到当前电脑</span>
