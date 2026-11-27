@@ -87,7 +87,8 @@ def _public_task(task: dict) -> dict:
     with connection() as conn:
         project = for_app(conn, item.get("app_id"))
     if project:
-        item["project_entry"] = project["entry"]
+        from ..project_archive import display_name
+        item["project_entry"] = display_name(project["entry"])
     item["runtime_ready"] = runtime_ready(
         {
             "script_path": item.get("app_script_path") or item.get("script_path") or "",

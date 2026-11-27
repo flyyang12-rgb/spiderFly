@@ -269,7 +269,8 @@ def get_execution(
     with connection() as conn:
         project = for_execution(conn, execution_id)
     if project:
-        item.update(project_entry=project["entry"], project_version=project["digest"][:12])
+        from ..project_archive import display_name
+        item.update(project_entry=display_name(project["entry"]), project_version=project["digest"][:12])
     item["maintenance"] = maintenance.execution_note(execution_id)
     item.pop("python_path_snapshot", None)
     if item.get("retryable") is not None:

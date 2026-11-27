@@ -1,4 +1,5 @@
 <script setup>
+import UiSelect from '../../components/UiSelect.vue'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useWorkspaceContext } from '../../workspace/context'
 import { formatTime, taskOwnerKey, triggerDetail, triggerLabel } from '../../lib/format'
@@ -128,14 +129,14 @@ watch(me, (user, previous) => { if (!user || user.id !== previous?.id) { planTar
         <button class="button ghost compact" type="button" :disabled="refreshBusy || refreshing" @click="refreshAll">{{ refreshBusy || refreshing ? '刷新中…' : '刷新' }}</button>
       </div>
       <div id="task-center-filters" class="filter-bar center-filter-bar" :hidden="filterIsMobile && !filtersExpanded">
-        <label v-if="hasWorkflows" class="filter-field"><span>类型</span><select v-model="taskCenterKind"><option value="all">全部</option><option value="task">任务</option><option value="workflow">工作流</option></select></label>
+        <label v-if="hasWorkflows" class="filter-field"><span>类型</span><UiSelect v-model="taskCenterKind" label="类型" :options="[{value:'all',label:'全部'},{value:'task',label:'任务'},{value:'workflow',label:'工作流'}]" /></label>
         <label class="filter-field"><span>任务名称</span><input v-model="filters.name" type="search" placeholder="搜索任务名称" /></label>
-        <label class="filter-field"><span>触发方式</span><select v-model="filters.trigger_type"><option value="all">全部</option><option v-for="option in triggerOptions" :key="option.value" :value="option.value">{{ option.label }}</option></select></label>
+        <label class="filter-field"><span>触发方式</span><UiSelect v-model="filters.trigger_type" label="触发方式" :options="[{value:'all',label:'全部'}, ...triggerOptions]" /></label>
         <template v-if="kind === 'task'">
-          <label class="filter-field"><span>启用状态</span><select v-model="filters.enabled"><option value="all">全部状态</option><option value="enabled">已启用</option><option value="disabled">已停用</option></select></label>
-          <label class="filter-field"><span>归属人</span><select v-model="filters.owner"><option value="all">全部</option><option v-for="owner in ownerOptions" :key="owner.value" :value="owner.value">{{ owner.label }}</option></select></label>
+          <label class="filter-field"><span>启用状态</span><UiSelect v-model="filters.enabled" label="启用状态" :options="[{value:'all',label:'全部状态'},{value:'enabled',label:'已启用'},{value:'disabled',label:'已停用'}]" /></label>
+          <label class="filter-field"><span>归属人</span><UiSelect v-model="filters.owner" label="归属人" :options="[{value:'all',label:'全部'}, ...ownerOptions]" /></label>
         </template>
-        <label class="filter-field"><span>执行电脑</span><select v-model="targetFilter" aria-label="执行电脑"><option value="all">全部</option><option value="local">主控本机</option><option v-for="[id, name] in targetOptions" :key="id" :value="id">{{ name }}</option></select></label>
+        <label class="filter-field"><span>执行电脑</span><UiSelect v-model="targetFilter" label="执行电脑" :options="[{value:'all',label:'全部'},{value:'local',label:'主控本机'}, ...targetOptions.map(([value,label]) => ({value,label}))]" /></label>
         <div class="filter-actions"><button v-if="!filterIsMobile" class="button secondary compact" type="button" :disabled="refreshBusy || refreshing" @click="refreshAll">{{ refreshBusy || refreshing ? '刷新中…' : '刷新' }}</button><button class="button ghost compact" type="button" @click="resetCenterFilters">清空筛选</button></div>
       </div>
       </div>
@@ -223,7 +224,7 @@ watch(me, (user, previous) => { if (!user || user.id !== previous?.id) { planTar
 
 <style scoped>
 .task-center-page { min-width: 0; grid-template-columns: minmax(0, 1fr); }
-.task-center-page > .panel { min-width: 0; max-width: 100%; }
+.task-center-page > .panel { min-width: 0; max-width: 100%; overflow: visible; }
 .center-filter-region { border-bottom: 1px solid var(--border-soft); }
 .center-objects > .center-feedback { margin: 12px 18px; }
 .center-mobile-filter-tools { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 12px 14px; }
@@ -234,7 +235,7 @@ watch(me, (user, previous) => { if (!user || user.id !== previous?.id) { planTar
 .center-count { color: var(--muted); font-size: var(--workspace-caption, 12px); }
 .center-header-actions, .center-object-actions { display: flex; align-items: center; gap: 8px; }
 .plan-scroll { max-width: 100%; overflow-x: auto; }
-.plans-table { width: 100%; min-width: 870px; border-collapse: collapse; text-align: left; font-size: var(--workspace-body); }
+.plans-table { width: 100%; min-width: 960px; border-collapse: collapse; text-align: left; font-size: var(--workspace-body); }
 .plans-table th, .plans-table td { padding: 12px; border-bottom: 1px solid var(--border-soft); }
 .plans-table :is(th, td):first-child { padding-left: 18px; }
 .plans-table :is(th, td):last-child { padding-right: 18px; }
@@ -248,8 +249,8 @@ watch(me, (user, previous) => { if (!user || user.id !== previous?.id) { planTar
 .plan-program { max-width: 14em; color: var(--muted); }
 .plan-time, .center-object-actions { white-space: nowrap; }
 .plan-time { font-variant-numeric: tabular-nums; }
-.center-object-actions button { padding: 6px 2px; border: 0; background: transparent; color: var(--brand-strong); font: inherit; cursor: pointer; }
-.center-object-actions button:hover { text-decoration: underline; }
+.center-object-actions button { padding: 5px 9px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); color: var(--brand-strong); font: inherit; cursor: pointer; }
+.center-object-actions button:hover { background: var(--brand-soft); border-color: #b8d6c2; }
 .center-object-actions button:disabled { color: var(--faint); cursor: not-allowed; }
 .plan-details { display: grid; justify-items: start; gap: 8px; }
 .plan-expanded { background: var(--surface-subtle); }

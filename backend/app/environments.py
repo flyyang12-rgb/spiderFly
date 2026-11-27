@@ -772,7 +772,10 @@ def _create_managed_app_locked(
                     raise HTTPException(409, '该请求对应的任务已删除，不能重复创建')
                 return {**dict(saved), 'active_task_count': 1, 'creation_replayed': True}
             # Re-evaluate submitted content; client summaries/hashes are never trusted.
-            analysis = None
+            analysis = project.get('analysis') if project else None
+            if analysis is not None:
+                from . import dependency_analysis as deps
+                deps.require_resolved(analysis)
             if create_manual_task and not project:
                 from . import dependency_analysis as deps
                 analysis = deps.analyze(source, safe_name, requirements_text, dependency_decisions,

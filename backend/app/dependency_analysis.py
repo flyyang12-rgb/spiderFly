@@ -77,7 +77,19 @@ def parse_requirements(value: str) -> dict[str, str]:
 def _label(node):
     return ast.unparse(node)[:160]
 
-def analyze_source(source: str, filename: str, requirements: str = '', decisions=None, target=None) -> dict:
+def local_import(module, filename, modules):
+    package = list(Path(filename).parts[:-1])
+    if module.startswith('.'):
+        level = len(module) - len(module.lstrip('.'))
+        if level > len(package):
+            return False
+        prefix = package[:len(package) - level + 1]
+        candidate = '.'.join(prefix + [module.lstrip('.')]).strip('.')
+        return candidate in modules
+    return module in modules or '.'.join(package + [module]) in modules
+
+
+def analyze_source(source: str, filename: str, requirements: str = '', decisions=None, target=None, local_modules=None) -> dict:
     started = time.monotonic()
     if not isinstance(source, str) or not source or len(source.encode('utf-8')) > MAX_SOURCE:
         raise ValueError('Python 文件不能为空且不能超过 2MB')
@@ -126,7 +138,9 @@ def analyze_source(source: str, filename: str, requirements: str = '', decisions
         root = module.split('.')[0] if not module.startswith('.') else module
         kind = 'type_only' if context == 'type_only' else 'stdlib' if root in STDLIB else context or 'import'
         package = IMPORT_TO_PACKAGE.get(root, '')
-        if root == Path(filename).stem and kind not in {'type_only'}:
+        if local_modules is not None and local_import(module, filename, local_modules):
+            kind, reason = 'local', '包内模块'
+        elif root == Path(filename).stem and kind not in {'type_only'}:
             kind, reason = 'self', '与脚本同名；单文件上传不包含其他业务模块'
         elif root.startswith('.') and kind != 'type_only':
             kind, reason = 'relative', '相对导入；单文件上传不包含其他业务模块'
@@ -170,6 +184,18 @@ def analyze_source(source: str, filename: str, requirements: str = '', decisions
 
     try: walk(tree)
     except RecursionError: raise ValueError('Python 语法结构过于复杂，请拆简后上传') from None
+    final, exclusions, unresolved, decisions = resolve_items(items, user, decisions)
+    manifest = '\n'.join(final[key] for key in sorted(final))
+    if len(manifest) > 20_000: raise ValueError('合并后的依赖清单超过 20,000 个字符，请精简后保存')
+    return dict(source_hash=digest(source), user_requirements_hash=digest(requirements),
+                filename=filename, target=target or {}, parser_version=PARSER_VERSION,
+                mapping_version=MAPPING_VERSION, stdlib_version=STDLIB_VERSION,
+                items=list(items.values()), unresolved=unresolved, exclusions=exclusions,
+                decisions=decisions, user_requirements=requirements, requirements=manifest,
+                requirements_hash=digest(manifest), ready=not unresolved)
+
+def resolve_items(items, user, decisions):
+    final = dict(user)
     decisions = decisions or []
     if not isinstance(decisions, list) or len(decisions) > MAX_ITEMS or len(json.dumps(decisions)) > 60_000:
         raise ValueError('依赖处理记录无效或过长')
@@ -182,7 +208,7 @@ def analyze_source(source: str, filename: str, requirements: str = '', decisions
     for item in items.values():
         kind, package = item['kind'], item['package']
         item['lines'].sort()
-        if kind in {'stdlib', 'type_only'}:
+        if kind in {'stdlib', 'type_only', 'local'}:
             item['status'] = 'excluded'
             if item['id'] in choices: raise ValueError('标准库和纯类型导入无需处理')
         elif kind == 'import':
@@ -191,6 +217,8 @@ def analyze_source(source: str, filename: str, requirements: str = '', decisions
             if item['id'] in choices: raise ValueError('已验证依赖无需逐项处理，请通过补充清单指定版本')
         else:
             choice = choices.get(item['id'])
+            if not choice and canonical(item['module']) in user:
+                choice = {'action': 'package', 'requirement': user[canonical(item['module'])]}
             if choice and choice.get('action') == 'exclude':
                 reason = str(choice.get('reason', '')).strip()
                 if not reason or len(reason) > 500: raise ValueError('排除依赖需填写理由，最多 500 字')
@@ -211,23 +239,45 @@ def analyze_source(source: str, filename: str, requirements: str = '', decisions
             else:
                 item['status'] = 'unresolved'
                 unresolved.append(item['id'])
-    manifest = '\n'.join(final[key] for key in sorted(final))
-    if len(manifest) > 20_000: raise ValueError('合并后的依赖清单超过 20,000 个字符，请精简后保存')
-    return dict(source_hash=digest(source), user_requirements_hash=digest(requirements),
-                filename=filename, target=target or {}, parser_version=PARSER_VERSION,
-                mapping_version=MAPPING_VERSION, stdlib_version=STDLIB_VERSION,
-                items=list(items.values()), unresolved=unresolved, exclusions=exclusions,
-                decisions=decisions, user_requirements=requirements, requirements=manifest,
-                requirements_hash=digest(manifest), ready=not unresolved)
+    return final, exclusions, unresolved, decisions
 
-def analyze(source, filename, requirements='', decisions=None, target=None):
+def analyze_project_sources(sources, filename, requirements='', decisions=None, target=None):
+    if not isinstance(sources, dict) or len(sources) > 2000 or sum(len(s.encode('utf8')) for s in sources.values()) > 4 * MAX_SOURCE:
+        raise ValueError('项目 Python 源码过多')
+    # Package files are inspected statically. No uploaded code is imported.
+    modules = set()
+    for path in sources:
+        parts = Path(path).with_suffix('').parts
+        modules.add('.'.join(parts))
+        for count in range(1, len(parts)):
+            modules.add('.'.join(parts[:count]))
+    items = {}
+    for path, source in sources.items():
+        result = analyze_source(source, path, requirements, local_modules=modules)
+        for item in result['items']:
+            previous = items.setdefault(item['id'], {**item, 'files': [], 'lines': []})
+            previous['files'].append(path)
+            previous['lines'] = sorted(set(previous['lines'] + item['lines']))
+    final, exclusions, unresolved, decisions = resolve_items(items, parse_requirements(requirements), decisions)
+    manifest = '\n'.join(final[key] for key in sorted(final))
+    if len(manifest) > 20_000:
+        raise ValueError('合并后的依赖清单超过 20,000 个字符')
+    return dict(filename=filename, source_hash=digest(json.dumps(sources, sort_keys=True)),
+                user_requirements=requirements, user_requirements_hash=digest(requirements),
+                requirements=manifest, requirements_hash=digest(manifest), target=target or {},
+                parser_version=PARSER_VERSION, mapping_version=MAPPING_VERSION, stdlib_version=STDLIB_VERSION,
+                items=list(items.values()), unresolved=unresolved, exclusions=exclusions,
+                decisions=decisions, ready=not unresolved)
+
+
+def analyze(source, filename, requirements='', decisions=None, target=None, sources=None):
     """Hard wall-time bound includes parsing; uploaded source is stdin JSON only."""
     if len(source.encode('utf-8')) > MAX_SOURCE: raise ValueError('Python 文件不能超过 2MB')
     env = {key:value for key,value in os.environ.items() if not key.upper().startswith(
         ('SPIDERFLY_', 'DEEPSEEK_', 'OPENAI_', 'FEISHU_', 'LARK_')) and key.upper() not in {'PYTHONPATH','PYTHONHOME'}}
     try:
         result = subprocess.run([sys.executable, '-I', '-X', 'utf8', str(Path(__file__).resolve()), '--worker'],
-            input=json.dumps(dict(source=source, filename=filename, requirements=requirements, decisions=decisions, target=target)),
+            input=json.dumps(dict(source=source, filename=filename, requirements=requirements, decisions=decisions, target=target, **({'sources': sources} if sources is not None else {}))),
             capture_output=True, encoding='utf-8', timeout=ANALYSIS_TIMEOUT, env=env,
             creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
     except subprocess.TimeoutExpired:
@@ -267,8 +317,12 @@ def freeze(conn, version_id, analysis):
 
 if __name__ == '__main__':
     try:
-        payload = json.loads(sys.stdin.read(3 * MAX_SOURCE))
-        answer = {'result':analyze_source(**payload)}
+        payload = json.loads(sys.stdin.read(12 * MAX_SOURCE))
+        if 'sources' in payload:
+            payload.pop('source', None)
+            answer = {'result': analyze_project_sources(**payload)}
+        else:
+            answer = {'result': analyze_source(**payload)}
     except (ValueError, TypeError, RecursionError, MemoryError) as exc:
         answer = {'error':str(exc)[:1000]}
     print(json.dumps(answer,ensure_ascii=False))

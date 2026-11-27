@@ -56,6 +56,8 @@ export function useApps({ aiOpen, aiSourceThread, aiTaskId, appForm, isAdmin, lo
     appForm.project_entry = ''
     appForm.project_entries = []
     appForm.project_loading = false
+    appForm.dependency_status = ''
+    appForm.dependency_decisions = []
     if (!appForm.name && file) appForm.name = file.name.replace(/\.(py|zip)$/i, '')
     uploadError.value = ''
     if (!file || !/\.zip$/i.test(file.name)) return
@@ -136,7 +138,7 @@ export function useApps({ aiOpen, aiSourceThread, aiTaskId, appForm, isAdmin, lo
       uploadError.value = '请选择项目的 Python 入口'
       return null
     }
-    if (!project && !pendingUpload && appForm.dependency_status && appForm.dependency_status !== 'ready') {
+    if (!pendingUpload && appForm.dependency_status && appForm.dependency_status !== 'ready') {
       uploadError.value = appForm.dependency_status === 'loading' ? '依赖识别尚未完成' : '请先处理依赖分析中的待补充项'; return null
     }
     const planError = validatePlan(appForm, Boolean(appForm.target_host_id))

@@ -2,29 +2,31 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { request } from '../../lib/api'
 const props = defineProps({ script: Object, manualInput: { type: Boolean, default: true }, requirements: { type: String, default: '' },
-  target: [String, Number], taskId: Number, modelValue: { type: Array, default: () => [] }, disabled: Boolean })
+  projectEntry: { type: String, default: '' }, target: [String, Number], taskId: Number, modelValue: { type: Array, default: () => [] }, disabled: Boolean })
 const emit = defineEmits(['update:modelValue', 'update:requirements', 'state', 'unauthorized'])
 const result = ref(null), lastItems = ref([]), error = ref(''), status = ref('idle'), reading = ref(false)
-const pending = computed(() => lastItems.value.filter(item => !['stdlib', 'type_only', 'import'].includes(item.kind)))
+const pending = computed(() => lastItems.value.filter(item => !['stdlib', 'type_only', 'import', 'local'].includes(item.kind)))
 let sequence = 0, fileSequence = 0, controller, timer, alive = true
 function invalidate() {
   sequence++; clearTimeout(timer); controller?.abort(); result.value = null; error.value = ''
   status.value = props.script ? 'loading' : 'idle'; emit('state', { status: status.value, ready: false })
 }
 async function analyze() {
-  if (!props.script || !alive) return
+  if (!props.script || !alive || (/\.zip$/i.test(props.script.name) && !props.projectEntry)) return
   if (props.modelValue.some(item => item.action === 'package' ? !item.requirement?.trim() : !item.reason?.trim())) {
     status.value = 'unresolved'; emit('state', { status: 'unresolved', ready: false }); return
   }
   const own = sequence
   controller = new AbortController()
   const form = new FormData()
-  form.append('script', props.script); form.append('requirements_text', props.requirements)
+  const project = /\.zip$/i.test(props.script.name)
+  form.append(project ? 'project_archive' : 'script', props.script);
+  if (project) form.append('project_entry', props.projectEntry); form.append('requirements_text', props.requirements)
   form.append('dependency_decisions', JSON.stringify(props.modelValue))
   if (props.taskId) form.append('task_id', String(props.taskId))
   else if (props.target) form.append('target_host_id', String(props.target))
   try {
-    const value = await request('/apps/analyze-dependencies', { method: 'POST', body: form, signal: controller.signal })
+    const value = await request(project ? '/apps/analyze-project-dependencies' : '/apps/analyze-dependencies', { method: 'POST', body: form, signal: controller.signal })
     if (!alive || own !== sequence) return
     if (!Array.isArray(value.items) || !Array.isArray(value.unresolved) || typeof value.requirements !== 'string' || typeof value.ready !== 'boolean') throw new Error('依赖分析响应不完整，请重试')
     result.value = value; lastItems.value = value.items; status.value = value.ready ? 'ready' : 'unresolved'
@@ -35,11 +37,11 @@ async function analyze() {
     emit('state', { status: 'error', ready: false }); if (e.status === 401) emit('unauthorized')
   }
 }
-watch(() => [props.script, props.target, props.taskId], () => {
+watch(() => [props.script, props.projectEntry, props.target, props.taskId], () => {
   lastItems.value = []
   if (props.modelValue.length) emit('update:modelValue', [])
 }, { flush: 'sync' })
-watch(() => [props.script, props.requirements, props.target, props.taskId, JSON.stringify(props.modelValue)], () => {
+watch(() => [props.script, props.projectEntry, props.requirements, props.target, props.taskId, JSON.stringify(props.modelValue)], () => {
   invalidate(); if (props.script) timer = setTimeout(analyze, 300)
 }, { immediate: true, flush: 'sync' })
 function choice(id) { return props.modelValue.find(item => item.id === id) || { id, action: '', requirement: '', reason: '' } }
@@ -71,9 +73,9 @@ async function readFile(event) {
 onBeforeUnmount(() => { alive = false; sequence++; fileSequence++; controller?.abort(); clearTimeout(timer) })
 </script>
 <template>
-  <section v-if="manualInput || pending.length || error || status === 'loading' || (result && !result.ready)" class="dependency-fields" aria-label="Python 依赖">
+  <section v-if="manualInput || pending.length || error || status === 'loading' || result" class="dependency-fields" aria-label="Python 依赖">
     <p v-if="status === 'loading'" class="dependency-status" role="status">正在识别依赖…</p>
-    <p v-else-if="result && (manualInput || !result.ready)" class="dependency-status" :class="{ ready: result.ready }" role="status">{{ result.ready ? result.requirements.trim() ? `已识别 ${result.requirements.split('\n').filter(Boolean).length} 项依赖` : '无需安装额外依赖' : `${result.unresolved.length} 项依赖待补充` }}</p>
+    <p v-else-if="result" class="dependency-status" :class="{ ready: result.ready }" role="status">{{ result.ready ? result.requirements.trim() ? `已识别 ${result.requirements.split('\n').filter(Boolean).length} 项依赖` : '无需安装额外依赖' : `${result.unresolved.length} 项依赖待补充` }}</p>
     <div v-if="error" class="dependency-error" role="alert">{{ error }} <button type="button" class="text-button" :disabled="disabled" @click="invalidate(); analyze()">重新分析</button></div>
     <div v-if="pending.length" class="dependency-pending">
       <article v-for="item in pending" :key="item.id">

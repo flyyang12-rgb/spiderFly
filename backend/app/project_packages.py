@@ -4,7 +4,7 @@ from __future__ import annotations
 import hashlib
 import io
 import re
-from zipfile import BadZipFile, ZipFile
+from zipfile import BadZipFile, ZipFile, ZIP_DEFLATED
 
 from . import config
 
@@ -48,6 +48,45 @@ def require_script_task(conn, task_id):
         raise ValueError("项目按整包保存，请通过项目导入提交程序，单脚本版本操作不适用")
 
 
+def normalize(content):
+    """Write portable UTF-8 names before freezing a new upload for old Agents."""
+    output = io.BytesIO()
+    with ZipFile(io.BytesIO(content)) as archive, ZipFile(output, 'w', compression=ZIP_DEFLATED) as target:
+        files, directories = _members(archive)
+        if all('/'.join(parts) == item.orig_filename.replace('\\\\', '/') for parts, item in files.items()):
+            return content
+        for parts in directories:
+            target.writestr('/'.join(parts) + '/', b'')
+        for parts, item in files.items():
+            target.writestr('/'.join(parts), archive.read(item))
+    result = output.getvalue()
+    if len(result) > MAX_ARCHIVE_BYTES:
+        raise ValueError('规范化后的项目 ZIP 超过 50 MB')
+    return result
+
+
+def analyze_dependencies(content, entry, requirements='', decisions=None, target=None):
+    from . import dependency_analysis as deps
+    from .project_archive import display_name
+    with ZipFile(io.BytesIO(content)) as archive:
+        files, directories = _members(archive)
+        root = _root_parts(files, directories)
+        if _parts(display_name(entry)) not in files:
+            raise ValueError('请选择压缩包内实际存在的 Python 入口')
+        sources = {}
+        for parts, item in files.items():
+            if parts[-1].lower().endswith('.py') and '__pycache__' not in parts:
+                if item.file_size > deps.MAX_SOURCE:
+                    raise ValueError('项目中的 Python 文件超过 2 MB')
+                sources['/'.join(parts[len(root):])] = archive.read(item).decode('utf-8-sig')
+        if sum(len(value.encode('utf8')) for value in sources.values()) > 4 * deps.MAX_SOURCE:
+            raise ValueError('项目 Python 源码总量超过 8 MB')
+        package = inspect(content, entry)
+    declared = deps.parse_requirements(package['requirements'])
+    declared.update(deps.parse_requirements(requirements))
+    return deps.analyze('', entry, '\n'.join(declared.values()), decisions, target, sources=sources)
+
+
 def inspect(content, entry):
     if not content or len(content) > MAX_ARCHIVE_BYTES:
         raise ValueError("项目 ZIP 不能为空且不能超过 50 MB")
@@ -59,7 +98,8 @@ def inspect(content, entry):
                 raise ValueError("项目中没有 Python 文件")
             if not entry:
                 return {"entries": entries}
-            parts = _parts(entry)
+            from .project_archive import display_name
+            parts = _parts(display_name(entry))
             if "/".join(parts) not in entries:
                 raise ValueError("请选择压缩包内实际存在的 Python 入口")
             from .environments import MAX_SCRIPT_BYTES, MAX_REQUIREMENTS_CHARS, validate_python_upload

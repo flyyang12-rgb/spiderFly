@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import sqlite3
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from typing import Annotated
@@ -45,6 +46,28 @@ async def analyze_dependencies(
         return await asyncio.to_thread(analyze, source, filename, requirements_text,
                                        json.loads(dependency_decisions), context)
     except (ValueError, UnicodeError) as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@router.post('/api/apps/analyze-project-dependencies')
+async def analyze_project_dependencies(
+    project_archive: UploadFile = File(...), project_entry: str = Form(..., max_length=200),
+    requirements_text: str = Form(default=''), dependency_decisions: str = Form(default='[]', max_length=60000),
+    target_host_id: int | None = Form(default=None), user: dict = Depends(admin_user),
+):
+    import json
+    from ..dependency_analysis import target_context
+    from ..services.task_queries import validate_target_host
+    try:
+        with transaction() as conn:
+            validate_target_host(conn, target_host_id)
+        content = await project_archive.read(project_packages.MAX_ARCHIVE_BYTES + 1)
+        if len(content) > project_packages.MAX_ARCHIVE_BYTES:
+            raise ValueError('项目 ZIP 超过 50 MB')
+        context = await asyncio.to_thread(target_context, target_host_id)
+        return await asyncio.to_thread(project_packages.analyze_dependencies, content, project_entry,
+                                       requirements_text, json.loads(dependency_decisions), context)
+    except (ValueError, UnicodeError, project_packages.BadZipFile) as exc:
         raise HTTPException(400, str(exc)) from exc
 
 
@@ -174,18 +197,26 @@ async def create_app(
                 raise ValueError("请选择项目入口，模板随项目上传")
             project_content = await project_archive.read(project_packages.MAX_ARCHIVE_BYTES + 1)
             try:
+                if len(project_content) > project_packages.MAX_ARCHIVE_BYTES:
+                    raise ValueError('项目 ZIP 超过 50 MB')
+                project_content = await asyncio.to_thread(project_packages.normalize, project_content)
                 project = await asyncio.to_thread(project_packages.inspect, project_content, project_entry)
+                from .. import dependency_analysis as deps
+                analysis = await asyncio.to_thread(project_packages.analyze_dependencies, project_content, project['entry'],
+                                                   requirements_text, json.loads(dependency_decisions),
+                                                   await asyncio.to_thread(deps.target_context, target_host_id))
+                deps.require_resolved(analysis)
+                project['analysis'] = analysis
             except OSError as exc:
                 raise ValueError('无法读取项目 ZIP') from exc
             filename = project["entry"].rsplit("/", 1)[-1]
             content = project["source"]
-            requirements_text = project["requirements"]
+            requirements_text = project["analysis"]["requirements"]
             notify_on_success = notify_on_failure = failure_screenshot = False
         else:
             filename = script.filename or "main.py"
             content = await script.read(MAX_SCRIPT_BYTES + 1)
         template_content = await template.read(MAX_TEMPLATE_BYTES + 1) if template is not None else None
-        import json
         decisions = json.loads(dependency_decisions)
         created = await asyncio.to_thread(
             create_managed_task_bundle,
@@ -214,7 +245,7 @@ async def create_app(
         )
     except sqlite3.IntegrityError as exc:
         raise HTTPException(status_code=409, detail="这个任务名称已经存在") from exc
-    except ValueError as exc:
+    except (ValueError, project_packages.BadZipFile) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc

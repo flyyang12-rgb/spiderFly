@@ -113,11 +113,11 @@ code, pre, .code-input { font-family: "SFMono-Regular", Consolas, monospace; }
 .button.primary:hover:not(:disabled) { background: var(--brand-strong); }
 .button.secondary { border-color: var(--border); background: var(--surface); color: var(--text); }
 .button.secondary:hover:not(:disabled), .button.ghost:hover:not(:disabled) { background: var(--surface-subtle); }
-.button.ghost { background: transparent; color: var(--muted); }
+.button.ghost { border-color: var(--border); background: var(--surface); color: var(--muted); }
 .button.danger { border-color: #f4c5ba; background: var(--coral-soft); color: #ad4935; }
 .button:disabled { cursor: not-allowed; opacity: .5; }
 .button.compact { min-height: 38px; padding: 0 12px; }
-.text-button { padding: 4px; border: 0; background: transparent; color: var(--brand-strong); cursor: pointer; font-size: var(--workspace-body); font-weight: 650; }
+.text-button { padding: 6px 10px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); color: var(--brand-strong); cursor: pointer; font-size: var(--workspace-body); font-weight: 650; }
 .text-button:hover { text-decoration: underline; }
 .icon-button { display: grid; width: 30px; height: 30px; place-items: center; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); cursor: pointer; color: var(--muted); font-size: 14px; }
 .icon-button:hover { background: var(--surface-subtle); color: var(--ink); }

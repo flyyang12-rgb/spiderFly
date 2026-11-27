@@ -1,4 +1,5 @@
 <script setup>
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { maintenanceResult } from '../../maintenanceSummary'
 import { useWorkspaceContext } from '../../workspace/context'
 import MaintenanceLog from '../../MaintenanceLog.vue'
@@ -22,11 +23,39 @@ const {
   stoppingBusy,
   stoppingExecution,
 } = useWorkspaceContext()
+const drawer = ref(null)
+let previousFocus, previousInert, previousOverflow, shell
+function keydown(event) {
+  if (stoppingExecution.value) return
+  if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); detail.value = null; return }
+  if (event.key !== 'Tab' || !drawer.value) return
+  const controls = [...drawer.value.querySelectorAll('button:not(:disabled), a[href], summary, [tabindex="0"]')].filter(e => e.getClientRects().length)
+  const first = controls[0], last = controls.at(-1), active = document.activeElement
+  if (!first) { event.preventDefault(); drawer.value.focus() }
+  else if (event.shiftKey && (active === first || !drawer.value.contains(active) || active === drawer.value)) { event.preventDefault(); last.focus() }
+  else if (!event.shiftKey && (active === last || !drawer.value.contains(active))) { event.preventDefault(); first.focus() }
+}
+watch(stoppingExecution, value => { if (shell) shell.inert = value ? previousInert : true })
+onMounted(async () => {
+  previousFocus = document.activeElement
+  shell = document.getElementById('app'); previousInert = shell?.inert
+  previousOverflow = document.body.style.overflow
+  if (shell) shell.inert = true
+  document.body.style.overflow = 'hidden'
+  document.addEventListener('keydown', keydown)
+  await nextTick(); drawer.value?.focus()
+})
+onBeforeUnmount(() => {
+  document.removeEventListener('keydown', keydown)
+  if (shell) shell.inert = previousInert
+  document.body.style.overflow = previousOverflow
+  previousFocus?.isConnected && previousFocus.focus({ preventScroll: true })
+})
 </script>
 
 <template>
-  <div class="modal-layer" @mousedown.self="detail = null">
-    <section class="modal log-modal" role="dialog" aria-modal="true" aria-label="执行日志">
+  <Teleport to="body"><div class="execution-drawer-layer" :style="{ zIndex: stoppingExecution ? 90 : 100 }" @mousedown.self="detail = null">
+    <section ref="drawer" class="modal log-modal execution-drawer" role="dialog" aria-modal="true" aria-label="执行日志" tabindex="-1" :inert="Boolean(stoppingExecution)">
       <header>
         <div>
           <span class="execution-id">运行 #{{ detail.id }}</span>
@@ -60,7 +89,7 @@ const {
         <span v-else>飞书 <strong>{{ notificationLabel(detail.notification_status) }}</strong></span>
       </div>
       <div class="modal-body log-body">
-        <CollectionProgress :progress="detail.collection_progress" :status="detail.status" />
+        <CollectionProgress v-if="detail.collection_progress" :progress="detail.collection_progress" :status="detail.status" />
         <div
           v-if="detail.maintenance"
           class="notice execution-maintenance"
@@ -153,15 +182,15 @@ const {
             {{ artifactDownload.message }}
           </p>
         </div>
-        <div>
+        <div v-if="detail.stdout || !(detail.stderr || detail.error_message)">
           <span class="log-label">运行日志</span>
-          <pre>{{
+          <pre tabindex="0">{{
             detail.stdout || (['pending', 'running'].includes(detail.status) ? '等待日志…' : '暂无日志')
           }}</pre>
         </div>
         <div v-if="detail.stderr || (detail.error_message && detail.status !== 'pending')">
           <span class="log-label danger-text">错误日志</span>
-          <pre class="error-log">{{ detail.stderr || detail.error_message }}</pre>
+          <pre class="error-log" tabindex="0">{{ detail.stderr || detail.error_message }}</pre>
         </div>
         <div v-if="detail.notification_error" class="notice warning">
           <span class="notice-icon">!</span>
@@ -191,10 +220,19 @@ const {
         <button class="button secondary" type="button" @click="detail = null">关闭</button>
       </footer>
     </section>
-  </div>
+  </div></Teleport>
 </template>
 
 <style scoped>
+.execution-drawer-layer{position:fixed;inset:0;z-index:100;display:flex;justify-content:flex-end;background:#17261d52;animation:execution-backdrop 180ms ease-out}
+.execution-drawer{width:min(1360px,calc(100% - 72px));height:100dvh;max-height:none;border:0;border-radius:0;box-shadow:-12px 0 48px #16301f24;outline:none;animation:execution-slide 180ms ease-out}
+.execution-drawer pre{background:#fff;border-color:var(--border);color:var(--text);font-size:var(--log-font-size);line-height:var(--log-line-height);max-height:calc(100dvh - 360px);min-height:72px}
+.execution-drawer pre.error-log{background:#fff8f6;border-color:#eed3c9;color:#9f3825}
+.execution-drawer>header{align-items:center}.execution-drawer .modal-body{align-content:start}
+@keyframes execution-slide{from{transform:translateX(100%)}to{transform:translateX(0)}}@keyframes execution-backdrop{from{background:transparent}}
+@media(max-width:720px){.execution-drawer{width:100%}.execution-drawer>header,.execution-drawer .modal-body{padding:16px}.execution-drawer pre{max-height:45dvh}}
+@media(prefers-reduced-motion:reduce){.execution-drawer-layer,.execution-drawer{animation:none}}
+
 .execution-id { display: block; margin-bottom: 4px; color: var(--muted); font-size: var(--workspace-caption); }
 .execution-maintenance{align-items:flex-start;padding:12px 14px;gap:10px}
 .execution-maintenance .notice-icon{margin-top:1px}

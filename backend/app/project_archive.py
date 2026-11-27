@@ -26,6 +26,15 @@ def _parts(name):
     return tuple(parts)
 
 
+def display_name(name, utf8=False):
+    if utf8 or name.isascii():
+        return name
+    try:
+        return name.encode('cp437').decode('gb18030')
+    except UnicodeError:
+        return name
+
+
 def _members(archive):
     members = archive.infolist()
     if len(members) > MAX_ENTRIES or sum(item.file_size for item in members) > MAX_EXPANDED_BYTES:
@@ -33,7 +42,7 @@ def _members(archive):
     paths = {}
     files = {}
     for item in members:
-        name = item.orig_filename.replace("\\", "/")
+        name = display_name(item.orig_filename, bool(item.flag_bits & 0x800)).replace("\\", "/")
         folder = name.endswith("/")
         kind = stat.S_IFMT(item.external_attr >> 16) if item.create_system == 3 else 0
         if item.external_attr & 0x400 or kind not in (0, stat.S_IFREG, stat.S_IFDIR) or (kind == stat.S_IFDIR and not folder):
@@ -66,7 +75,7 @@ def extract_project(archive_file, entry, destination):
     destination.mkdir()
     with ZipFile(archive_file) as archive:
         files, directories = _members(archive)
-        entry_parts = _parts(entry)
+        entry_parts = _parts(display_name(entry))
         if entry_parts not in files or not entry_parts[-1].lower().endswith(".py"):
             raise ValueError("当前执行的项目入口不存在")
         root = _root_parts(files, directories)

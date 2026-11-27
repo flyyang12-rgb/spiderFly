@@ -1,4 +1,5 @@
 <script setup>
+import UiSelect from '../../components/UiSelect.vue'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { request } from '../../lib/api'
 import { triggerConfig, formatTime } from '../../lib/format'
@@ -46,10 +47,10 @@ onBeforeUnmount(invalidate)
     <div class="plan-mode"><button type="button" :class="{ active: !scheduled }" :aria-pressed="!scheduled" @click="mode(false)">手动</button><button type="button" :class="{ active: scheduled }" :aria-pressed="scheduled" @click="mode(true)">定时</button></div>
     <template v-if="scheduled">
       <div class="plan-input-grid" :class="{ monthly: form.trigger_type === 'monthly' }">
-      <label class="field plan-type-field"><span>定时方式</span><select v-model="form.trigger_type"><option v-if="form.trigger_type === 'cron'" value="cron" disabled hidden>保留原计划</option><option value="interval">间隔运行</option><option value="daily">每日</option><option value="weekly">每周</option><option value="monthly">每月</option></select></label>
+      <label class="field plan-type-field"><span>定时方式</span><UiSelect v-model="form.trigger_type" label="定时方式" :options="[{value:'interval',label:'间隔运行'},{value:'daily',label:'每日'},{value:'weekly',label:'每周'},{value:'monthly',label:'每月'},...(form.trigger_type === 'cron' ? [{value:'cron',label:'保留原计划',disabled:true}] : [])]" /></label>
       <label v-if="form.trigger_type === 'interval'" class="field"><span>间隔时长</span><input v-model.number="form.interval_value" type="number" min="1" max="100000" step="1" required /></label>
-      <label v-if="form.trigger_type === 'interval'" class="field"><span>间隔单位</span><select v-model="form.interval_unit"><option value="seconds">秒</option><option value="minutes">分钟</option><option value="hours">小时</option><option value="days">天</option></select></label>
-      <label v-if="form.trigger_type === 'monthly'" class="field"><span>执行日期</span><select v-model.number="form.monthly_day" required><option v-if="form.monthly_day !== 'last' && Number(form.monthly_day) > 1" :value="form.monthly_day" disabled hidden>原计划：每月 {{ form.monthly_day }} 号</option><option :value="1">每月一号</option><option value="last">每月最后一天</option></select></label>
+      <label v-if="form.trigger_type === 'interval'" class="field"><span>间隔单位</span><UiSelect v-model="form.interval_unit" label="间隔单位" :options="[{value:'seconds',label:'秒'},{value:'minutes',label:'分钟'},{value:'hours',label:'小时'},{value:'days',label:'天'}]" /></label>
+      <label v-if="form.trigger_type === 'monthly'" class="field"><span>执行日期</span><UiSelect v-model="form.monthly_day" label="执行日期" required :options="[{value:1,label:'每月一号'},{value:'last',label:'每月最后一天'},...(form.monthly_day !== 'last' &amp;&amp; Number(form.monthly_day) > 1 ? [{value:form.monthly_day,label:'原计划：每月 ' + form.monthly_day + ' 号',disabled:true}] : [])]" /></label>
       <label v-if="form.trigger_type === 'daily'" class="field"><span>执行时间</span><input v-model="form.daily_time" type="time" required /></label>
       <label v-else-if="form.trigger_type === 'weekly'" class="field"><span>执行时间</span><input v-model="form.weekly_time" type="time" required /></label>
       <label v-else-if="form.trigger_type === 'monthly'" class="field"><span>执行时间</span><input v-model="form.monthly_time" type="time" required /></label>

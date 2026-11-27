@@ -1,4 +1,5 @@
 <script setup>
+import UiSelect from '../../components/UiSelect.vue'
 import { computed, onMounted } from 'vue'
 import { useWorkspaceContext } from '../../workspace/context'
 import TaskRunSettings from '../tasks/TaskRunSettings.vue'
@@ -32,12 +33,9 @@ function submit() { if (props.embedded) emit('submit'); else uploadApp() }
               </label>
               <label v-if="project" class="field">
                 <span>项目入口</span>
-                <select v-model="appForm.project_entry" :disabled="appForm.project_loading" required>
-                  <option value="" disabled>{{ appForm.project_loading ? '正在读取项目文件…' : '选择要启动的 Python 文件' }}</option>
-                  <option v-for="entry in appForm.project_entries" :key="entry" :value="entry">{{ entry }}</option>
-                </select>
+                <UiSelect v-model="appForm.project_entry" label="项目入口" :options="appForm.project_entries.map(entry => ({ value: entry, label: entry }))" :disabled="appForm.project_loading" :placeholder="appForm.project_loading ? '正在读取项目文件…' : '选择要启动的 Python 文件'" required />
               </label>
-              <DependencyFields v-else-if="appForm.script" :manual-input="false" :key="uploadKey" :script="appForm.script" v-model:requirements="appForm.requirements_text" v-model="appForm.dependency_decisions" :target="appForm.target_host_id" :disabled="disabled || uploading || uploadUncertain" @state="appForm.dependency_status = $event.status" @unauthorized="handleSessionExpired" />
+              <DependencyFields v-if="appForm.script && (!project || appForm.project_entry)" :project-entry="appForm.project_entry" :manual-input="false" :key="uploadKey" :script="appForm.script" v-model:requirements="appForm.requirements_text" v-model="appForm.dependency_decisions" :target="appForm.target_host_id" :disabled="disabled || uploading || uploadUncertain" @state="appForm.dependency_status = $event.status" @unauthorized="handleSessionExpired" />
             </template>
             <template #advanced><label class="field"><span>任务说明</span><input v-model="appForm.description" type="text" maxlength="500" placeholder="选填" /></label></template>
           </TaskRunSettings>
