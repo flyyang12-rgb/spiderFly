@@ -266,7 +266,7 @@ export function useTasks({
       pendingRuns.delete(task.id)
       if (result?.run_type === 'remote') {
         showToast('success', '任务已提交到 ' + result.target_host_name,
-          result.waiting_reason || '只会在这台电脑执行，不会转到主控服务器')
+          result.waiting_reason || '只会在这台电脑执行，不会转到主控部署机')
         remoteRunTarget.value = result.remote_run_id
         navigateTo('management', 'hosts')
         return
@@ -274,8 +274,8 @@ export function useTasks({
       const position = result?.queue_position
       showToast(
         'success',
-        position ? '任务已加入主控服务器队列' : '已提交到主控服务器',
-        position ? '当前排在第 ' + position + ' 位' : '主控服务器会按顺序执行',
+        position ? '任务已加入主控部署机队列' : '已提交到主控部署机',
+        position ? '当前排在第 ' + position + ' 位' : '主控部署机会按顺序执行',
       )
       navigateTo('runtime', 'active')
       if (result?.execution_id) openExecution?.({ id: result.execution_id, task_name: task.name })

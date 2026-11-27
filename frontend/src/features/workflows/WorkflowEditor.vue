@@ -46,7 +46,7 @@ const props = defineProps({ state: { type: Object, required: true } })
         <div v-else class="workflow-empty-steps">尚未添加步骤</div>
       </section>
       <p v-if="state.editor.value.active_run_id" class="workflow-help">当前运行沿用原步骤与版本。</p>
-      </section><section class="editor-aside" aria-label="运行设置"><div class="editor-section-heading"><h3>运行设置</h3></div><div class="editor-target"><span>运行电脑</span><strong>主控服务器</strong></div>
+      </section><section class="editor-aside" aria-label="运行设置"><div class="editor-section-heading"><h3>运行设置</h3></div><div class="editor-target"><span>运行电脑</span><strong>主控部署机</strong></div>
       <PlanFields :form="state.form" :disabled="state.busy.value === 'save'" :identity="state.editor.value.id" />
       <p class="editor-footnote">整轮共用一个计划。</p></section></div>
       </fieldset>

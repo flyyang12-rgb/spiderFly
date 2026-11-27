@@ -136,7 +136,7 @@ watch(me, (user, previous) => { if (!user || user.id !== previous?.id) { planTar
           <label class="filter-field"><span>启用状态</span><UiSelect v-model="filters.enabled" label="启用状态" :options="[{value:'all',label:'全部状态'},{value:'enabled',label:'已启用'},{value:'disabled',label:'已停用'}]" /></label>
           <label class="filter-field"><span>归属人</span><UiSelect v-model="filters.owner" label="归属人" :options="[{value:'all',label:'全部'}, ...ownerOptions]" /></label>
         </template>
-        <label class="filter-field"><span>执行电脑</span><UiSelect v-model="targetFilter" label="执行电脑" :options="[{value:'all',label:'全部'},{value:'local',label:'主控服务器'}, ...targetOptions.map(([value,label]) => ({value,label}))]" /></label>
+        <label class="filter-field"><span>执行电脑</span><UiSelect v-model="targetFilter" label="执行电脑" :options="[{value:'all',label:'全部'},{value:'local',label:'主控部署机'}, ...targetOptions.map(([value,label]) => ({value,label}))]" /></label>
         <div class="filter-actions"><button v-if="!filterIsMobile" class="button secondary compact" type="button" :disabled="refreshBusy || refreshing" @click="refreshAll">{{ refreshBusy || refreshing ? '刷新中…' : '刷新' }}</button><button class="button ghost compact" type="button" @click="resetCenterFilters">清空筛选</button></div>
       </div>
       </div>
@@ -160,7 +160,7 @@ watch(me, (user, previous) => { if (!user || user.id !== previous?.id) { planTar
                 <td><button v-if="row.kind === 'task'" class="plan-state" :class="{ enabled: row.object.enabled }" type="button" role="switch" :aria-checked="row.object.enabled" :aria-label="row.object.name + '启用状态'" @click="toggleTask(row.object)"><i></i>{{ row.object.enabled ? '已启用' : '已停用' }}</button>
                   <span v-else>{{ row.object.schedule_enabled ? '定时已启用' : '手动运行' }}</span></td>
                 <td class="plan-time">{{ nextRunText(row) }}</td>
-                <td>{{ row.object.target_host_name || '主控服务器' }}</td>
+                <td>{{ row.object.target_host_name || '主控部署机' }}</td>
                 <td><div class="center-object-actions">
                   <template v-if="row.kind === 'task'">
                     <button v-if="taskIsActive(row.object)" type="button" @click="viewTaskExecution(row.object)">查看运行</button>

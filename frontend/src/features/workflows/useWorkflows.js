@@ -296,7 +296,7 @@ export function useWorkflows({ isAdmin, me, onSessionExpired, workflowPendingSta
       const result = await api(`/workflows/${flow.id}/runs`, { method: 'POST', body: JSON.stringify(pending) })
       if (!live() || session !== sessionSequence) return
       pendingStarts.delete(flow.id)
-      notice.value = `流程运行 #${result.id} 已提交，按步骤在主控服务器执行。`
+      notice.value = `流程运行 #${result.id} 已提交，按步骤在主控部署机执行。`
       await Promise.all([refresh(true), openRun(result.id)])
     } catch (error) {
       if (session !== sessionSequence) return

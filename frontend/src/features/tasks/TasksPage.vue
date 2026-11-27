@@ -134,7 +134,7 @@ const {
                 <div class="primary-cell">
                   <strong>{{ triggerLabel(task.trigger_type) }}</strong
                   ><small>{{ triggerDetail(task) }}</small>
-                  <small>{{ '运行电脑：' + (task.target_host_name || '主控服务器') }}</small>
+                  <small>{{ '运行电脑：' + (task.target_host_name || '主控部署机') }}</small>
                 </div>
               </td>
               <td>
@@ -172,7 +172,7 @@ const {
                     class="button primary compact"
                     type="button"
                     :disabled="!task.enabled || (task.target_host_id ? !isAdmin : task.environment_status !== 'ready')"
-                    :title="task.target_host_id && !isAdmin ? '远程电脑上的任务需由管理员运行' : '将在 ' + (task.target_host_name || '主控服务器') + ' 运行'"
+                    :title="task.target_host_id && !isAdmin ? '远程电脑上的任务需由管理员运行' : '将在 ' + (task.target_host_name || '主控部署机') + ' 运行'"
                     @click="runTask(task)"
                   >
                     运行
