@@ -50,7 +50,7 @@ const {
     </div>
 
     <div class="two-column queue-overview">
-      <section class="panel">
+      <section class="panel overview-panel">
         <header class="panel-heading">
           <div><h2>当前队列</h2></div>
           <button class="text-button" type="button" @click="navigateTo('runtime', 'active')">
@@ -100,7 +100,7 @@ const {
         </div>
       </section>
 
-      <section class="panel">
+      <section class="panel overview-panel">
         <header class="panel-heading">
           <div><h2>最近运行</h2></div>
           <button class="text-button" type="button" @click="navigateTo('runtime', 'executions')">
@@ -132,6 +132,31 @@ const {
 </template>
 
 <style scoped>
-.overview-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-@media (max-width: 720px) { .overview-metrics { grid-template-columns: 1fr; } }
+.overview-page { gap: 20px; }
+.overview-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.overview-metrics .metric-card { display: flex; min-height: 124px; flex-direction: column; align-items: flex-start; gap: 4px; padding: 18px 20px; }
+.overview-metrics .metric-card > span { color: var(--muted); font-size: 14px; }
+.overview-metrics .metric-card > strong { margin: 0; font-size: 32px; font-weight: 500; line-height: 1.3; font-variant-numeric: tabular-nums; }
+.overview-metrics .metric-card small { line-height: 20px; }
+.queue-overview { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; align-items: stretch; }
+.overview-panel .panel-heading { min-height: 64px; padding: 14px 20px; }
+.overview-panel .panel-heading h2 { font-size: 18px; font-weight: 600; }
+.overview-panel .text-button { min-height: var(--control-row-height); padding: 4px 10px; }
+.overview-panel .run-list > button { min-height: 72px; padding: 14px 20px; gap: 12px; }
+.overview-panel .run-copy { gap: 4px; }
+.overview-panel .run-copy strong { color: var(--text); font-size: 15px; font-weight: 400; line-height: 1.6; }
+.overview-panel .run-result { gap: 4px; }
+.overview-panel .run-result strong { color: var(--muted); font-size: 14px; font-weight: 400; line-height: 24px; }
+.overview-panel .run-copy small, .overview-panel .run-result small { font-size: 13px; line-height: 20px; }
+.overview-panel .run-list .run-copy strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.overview-panel .compact-empty { min-height: 260px; height: calc(100% - 64px); }
+.overview-panel .compact-empty strong { color: var(--muted); font-size: 14px; font-weight: 400; }
+@media (max-width: 1100px) { .queue-overview { grid-template-columns: minmax(0, 1fr); } .overview-panel .compact-empty { height: auto; min-height: 180px; } }
+
+@media (max-width: 720px) {
+  .overview-metrics { grid-template-columns: 1fr; gap: 12px; }
+  .overview-metrics .metric-card { min-height: 112px; padding: 16px 18px; }
+  .overview-panel .run-list > button { padding: 12px 16px; }
+  .overview-panel .run-copy small { font-size: 13px; }
+}
 </style>

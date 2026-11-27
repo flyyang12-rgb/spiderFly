@@ -123,6 +123,10 @@ watch(me, (user, previous) => { if (!user || user.id !== previous?.id) { planTar
 <template>
   <section class="view-stack task-center-page">
     <section class="panel center-objects">
+      <header class="panel-heading">
+        <div class="center-count" role="status">{{ countLabel }}</div>
+        <div class="center-header-actions"><button v-if="isAdmin" class="button secondary compact" type="button" @click="openAi()">AI 创建</button><button v-if="isAdmin" class="button primary compact" type="button" :disabled="Boolean(busy)" @click="openCreate()">新建</button></div>
+      </header>
       <div class="center-filter-region">
       <div v-if="filterIsMobile" class="center-mobile-filter-tools">
         <button class="button secondary compact" type="button" :aria-expanded="filtersExpanded" aria-controls="task-center-filters" @click="filtersExpanded = !filtersExpanded">{{ filtersExpanded ? '收起筛选' : '筛选' }}{{ activeFilterCount ? ' · ' + activeFilterCount : '' }}</button>
@@ -140,10 +144,7 @@ watch(me, (user, previous) => { if (!user || user.id !== previous?.id) { planTar
         <div class="filter-actions"><button v-if="!filterIsMobile" class="button secondary compact" type="button" :disabled="refreshBusy || refreshing" @click="refreshAll">{{ refreshBusy || refreshing ? '刷新中…' : '刷新' }}</button><button class="button ghost compact" type="button" @click="resetCenterFilters">清空筛选</button></div>
       </div>
       </div>
-      <header class="panel-heading">
-        <div class="center-count" role="status">{{ countLabel }}</div>
-        <div class="center-header-actions"><button v-if="isAdmin" class="button secondary compact" type="button" @click="openAi()">AI 创建</button><button v-if="isAdmin" class="button primary compact" type="button" :disabled="Boolean(busy)" @click="openCreate()">新建</button></div>
-      </header>
+
     <div v-if="tasksLoadError || !tasksLoaded" class="center-feedback error" role="alert">{{ tasksLoadError ? '任务加载失败：' + tasksLoadError : '正在加载任务…' }}<span v-if="tasks.length">显示上次结果。</span><button class="text-button" type="button" :disabled="refreshBusy" @click="refreshAll">重试</button></div>
     <div v-if="loadError || !definitionsLoaded" class="center-feedback" :class="loadError ? 'error' : 'loading'" :role="loadError ? 'alert' : 'status'">{{ loadError ? '工作流加载失败。' + loadError : '正在加载工作流…' }}<span v-if="workflows.length">显示上次结果。</span><button v-if="loadError" class="text-button" type="button" :disabled="refreshing" @click="refresh()">重试</button></div>
     <div v-if="actionError" class="center-feedback error" role="alert">{{ actionError }}</div>
@@ -225,7 +226,14 @@ watch(me, (user, previous) => { if (!user || user.id !== previous?.id) { planTar
 <style scoped>
 .task-center-page { min-width: 0; grid-template-columns: minmax(0, 1fr); }
 .task-center-page > .panel { min-width: 0; max-width: 100%; overflow: visible; }
-.center-filter-region { border-bottom: 1px solid var(--border-soft); }
+.center-objects > .panel-heading { min-height: 64px; padding: 14px 20px; border-bottom: 0; }
+.center-filter-region { border-top: 1px solid var(--border-soft); border-bottom: 1px solid var(--border-soft); }
+.center-filter-bar { padding: 18px 20px 20px; }
+.center-filter-bar .filter-field > span { font-size: 13px; font-weight: 400; color: var(--muted); line-height: 20px; }
+.center-filter-bar .filter-field { gap: 8px; }
+.center-filter-bar .filter-field input { height: var(--control-height); }
+.center-filter-bar :deep(.ui-select-trigger) { min-height: var(--control-height); height: var(--control-height); padding: 7px 11px; }
+.center-filter-bar .filter-actions .button { min-height: var(--control-height); height: var(--control-height); font-size: 14px; }
 .center-objects > .center-feedback { margin: 12px 18px; }
 .center-mobile-filter-tools { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 12px 14px; }
 .center-filter-bar[hidden] { display: none; }
@@ -235,21 +243,21 @@ watch(me, (user, previous) => { if (!user || user.id !== previous?.id) { planTar
 .center-count { color: var(--muted); font-size: var(--workspace-caption, 12px); }
 .center-header-actions, .center-object-actions { display: flex; align-items: center; gap: 8px; }
 .plan-scroll { max-width: 100%; overflow-x: auto; }
-.plans-table { width: 100%; min-width: 960px; border-collapse: collapse; text-align: left; font-size: var(--workspace-body); }
+.plans-table { width: 100%; min-width: 1040px; border-collapse: collapse; text-align: left; font-size: var(--workspace-body); }
 .plans-table th, .plans-table td { padding: 12px; border-bottom: 1px solid var(--border-soft); }
 .plans-table :is(th, td):first-child { padding-left: 18px; }
 .plans-table :is(th, td):last-child { padding-right: 18px; }
-.plans-table thead th { font-size: 14px; font-weight: 550; background: var(--surface-subtle); color: var(--muted); white-space: nowrap; }
-.plans-table tbody th { background: transparent; color: var(--ink); }
-.plans-table tbody td { height: 56px; }
+.plans-table thead th { font-size: 13px; font-weight: 400; background: var(--surface-subtle); color: var(--muted); white-space: nowrap; }
+.plans-table tbody th { background: transparent; color: var(--ink); font-weight: 400; }
+.plans-table tbody td { height: 68px; }
 .plans-table tbody tr:last-child > * { border-bottom: 0; }
 .plans-table tbody tr:hover { background: var(--surface-subtle); }
 .plan-name, .plan-program { display: inline-block; max-width: 20em; vertical-align: middle; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.plan-name { font-size: var(--ui-heading); font-weight: 600; }
-.plan-program { max-width: 14em; color: var(--muted); }
+.plan-name { max-width: clamp(180px, 16vw, 280px); font-size: 15px; font-weight: 500; }
+.plan-program { max-width: clamp(150px, 14vw, 240px); color: var(--muted); font-size: 14px; }
 .plan-time, .center-object-actions { white-space: nowrap; }
-.plan-time { font-variant-numeric: tabular-nums; }
-.center-object-actions button { padding: 5px 9px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); color: var(--brand-strong); font: inherit; cursor: pointer; }
+.plan-time { font-size: 14px; font-variant-numeric: tabular-nums; }
+.center-object-actions button { min-height: var(--control-row-height); padding: 4px 8px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); color: var(--brand-strong); font: inherit; font-size: 14px; font-weight: 400; line-height: 22px; cursor: pointer; }
 .center-object-actions button:hover { background: var(--brand-soft); border-color: #b8d6c2; }
 .center-object-actions button:disabled { color: var(--faint); cursor: not-allowed; }
 .plan-details { display: grid; justify-items: start; gap: 8px; }
@@ -265,5 +273,8 @@ watch(me, (user, previous) => { if (!user || user.id !== previous?.id) { planTar
 .center-feedback { padding: 12px 14px; border: 1px solid var(--border); border-radius: 8px; color: var(--muted); font-size: var(--workspace-body); line-height: 20px; overflow-wrap: anywhere; }
 .center-feedback.error { border-color: #f0c2b7; background: var(--coral-soft); color: #ad4935; }
 .center-feedback.success { border-color: #c9e2d2; background: var(--brand-soft); color: var(--brand-strong); }
+@media (max-width: 720px) {
+  .plan-name { width: 220px; max-width: none; white-space: normal; overflow: visible; overflow-wrap: anywhere; text-wrap: balance; line-height: 1.6; }
+}
 @media (max-width: 420px) { .center-filter-bar > .filter-field { flex-basis: 100%; } }
 </style>
