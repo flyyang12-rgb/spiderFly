@@ -16,7 +16,8 @@ export function createWorkspaceDataState() {
   const overview = ref({})
   const settings = ref({})
   const saving = ref(false)
-  const toast = reactive({ visible: false, type: 'success', title: '', message: '' })
+  const toast = reactive({ visible: false, type: 'success', title: '', message: '', sticky: false,
+    actionLabel: '', action: null, onDismiss: null, remaining: 0 })
   return { view, runtimeTab, managementTab, remoteRunTarget, loading, overview, settings, saving, toast,
     taskCenterKind, createObjectOpen, runHistoryKind, tasksLoaded, tasksLoadError }
 }
@@ -66,6 +67,7 @@ export function useWorkspaceData({
   refreshExecutionDetail,
 }) {
   let toastTimer = 0
+  const toastQueue = []
 
   let pollTimer = 0
   let sessionGeneration = 0
@@ -93,16 +95,39 @@ export function useWorkspaceData({
 
   const recentExecutions = computed(() => completedExecutions.value.slice(0, 6))
 
-  function showToast(type, title, message = '') {
-    Object.assign(toast, { visible: true, type, title, message })
+  function displayToast(notice) {
     window.clearTimeout(toastTimer)
-    toastTimer = window.setTimeout(() => {
-      toast.visible = false
-    }, 3600)
+    Object.assign(toast, notice, { visible: true, remaining: toastQueue.length })
+    if (!toast.sticky) toastTimer = window.setTimeout(dismissToast, 3600)
+  }
+
+  function showToast(type, title, message = '', options = {}) {
+    const notice = { type, title, message, sticky: Boolean(options.sticky),
+      actionLabel: options.actionLabel || '', action: options.action || null,
+      onDismiss: options.onDismiss || null }
+    if (toast.visible && toast.sticky) {
+      toastQueue.push(notice)
+      toast.remaining = toastQueue.length
+    } else displayToast(notice)
+  }
+
+  function dismissToast() {
+    window.clearTimeout(toastTimer)
+    toast.onDismiss?.()
+    if (toastQueue.length) displayToast(toastQueue.shift())
+    else Object.assign(toast, { visible: false, action: null, onDismiss: null, remaining: 0 })
+  }
+
+  function openToastAction() {
+    toast.action?.()
+    dismissToast()
   }
 
   function clearSharedData() {
     invalidateRequests()
+    window.clearTimeout(toastTimer)
+    toastQueue.length = 0
+    Object.assign(toast, { visible: false, action: null, onDismiss: null, remaining: 0 })
     resetCreateSession?.()
     resetExecutionSession?.()
     resetTaskSession?.()
@@ -245,7 +270,7 @@ export function useWorkspaceData({
     detail.value = null
     deletingTask.value = null
     changePasswordOpen.value = false
-    toast.visible = false
+    if (!toast.sticky) dismissToast()
   }
 
   function stopPolling() {
@@ -266,6 +291,8 @@ export function useWorkspaceData({
     pageTitle,
     recentExecutions,
     showToast,
+    dismissToast,
+    openToastAction,
     clearSharedData,
     handleSessionExpired,
     loadAll,

@@ -4,6 +4,7 @@ import * as format from '../lib/format'
 import * as constants from '../lib/constants'
 import { createAuthState, useAuth } from '../features/auth/useAuth'
 import { createExecutionsState, useExecutions } from '../features/executions/useExecutions'
+import { useRunFeedback } from '../features/executions/useRunFeedback'
 import { createTasksState, useTasks } from '../features/tasks/useTasks'
 import { createScheduleState, useSchedule } from '../features/schedule/useSchedule'
 import { createMembersState, useMembers } from '../features/members/useMembers'
@@ -70,6 +71,7 @@ export function useWorkspace() {
     navigateTo: (...args) => workspace.navigateTo(...args),
     remoteRunTarget: workspaceState.remoteRunTarget,
     openExecution: (...args) => executions.openExecution(...args),
+    trackRun: (...args) => runFeedback.trackRun(...args),
     saving: workspaceState.saving,
     showToast: (...args) => workspace.showToast(...args),
     taskForm: tasksState.taskForm,
@@ -168,6 +170,19 @@ export function useWorkspace() {
     resetExecutionSession: (...args) => executions.resetExecutionSession(...args),
     resetTaskSession: (...args) => tasks.resetTaskSession(...args),
     refreshExecutionDetail: (...args) => executions.refreshExecutionDetail(...args),
+  })
+
+  const runFeedback = useRunFeedback({
+    me: authState.me,
+    showToast: workspace.showToast,
+    openExecution: executions.openExecution,
+    openRemoteRun: (id) => {
+      executionsState.detail.value = null
+      workspaceState.remoteRunTarget.value = id
+      workspace.navigateTo('management', 'hosts')
+    },
+    navigateTo: workspace.navigateTo,
+    handleSessionExpired: workspace.handleSessionExpired,
   })
 
   watch(() => executionsState.detail.value?.id, executions.resetArtifactDownload, { flush: 'sync' })

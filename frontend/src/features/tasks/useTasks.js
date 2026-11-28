@@ -61,6 +61,7 @@ export function useTasks({
   tasks,
   targetHosts,
   targetHostsLoading,
+  trackRun,
 }) {
   const pendingRuns = new Map()
   let sessionGeneration = 0
@@ -265,6 +266,7 @@ export function useTasks({
       if (!current()) return
       pendingRuns.delete(task.id)
       if (result?.run_type === 'remote') {
+        trackRun?.('remote', result.remote_run_id, task.name)
         showToast('success', '任务已提交到 ' + result.target_host_name,
           result.waiting_reason || '只会在这台电脑执行，不会转到主控部署机')
         remoteRunTarget.value = result.remote_run_id
@@ -272,6 +274,7 @@ export function useTasks({
         return
       }
       const position = result?.queue_position
+      trackRun?.('local', result.execution_id, task.name)
       showToast(
         'success',
         position ? '任务已加入主控部署机队列' : '已提交到主控部署机',

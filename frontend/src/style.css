@@ -354,9 +354,10 @@ pre.error-log { border-color: #56332d; background: #231a18; color: #f4cbc2; }
 .toast-icon { display: grid; width: 28px; height: 28px; place-items: center; border-radius: 50%; background: var(--brand-soft); color: var(--brand); font-size: 12px; font-weight: 800; }
 .toast.error .toast-icon { background: var(--coral-soft); color: #ad4935; }
 .toast > span:nth-child(2) { display: grid; gap: 2px; }
-.toast strong { font-size: 12px; }
-.toast small { color: var(--muted); font-size: 11px; line-height: 16px; }
-.toast button { border: 0; background: transparent; color: var(--faint); cursor: pointer; font-size: 18px; }
+.toast strong { font-size: 15px; }
+.toast small { color: var(--muted); font-size: 13px; line-height: 20px; overflow-wrap: anywhere; }
+.toast-close { align-self: start; border: 0; background: transparent; color: var(--faint); cursor: pointer; font-size: 20px; }
+.toast-action { justify-self: start; margin-top: 8px; padding: 5px 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--brand); font: inherit; font-size: 13px; cursor: pointer; }
 
 @keyframes pulse { 0%, 100% { background: transparent; } 50% { background: var(--brand); } }
 @keyframes spin { to { transform: rotate(360deg); } }
