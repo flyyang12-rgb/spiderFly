@@ -27,6 +27,12 @@ def function(name: str, description: str, properties: dict, required: list) -> d
 
 TEXT = {"type": "string"}
 TOOLS = [
+    function('read_uploaded_program', '读取本对话上传程序的元数据和选定入口源码；仅静态读取，不执行。ZIP 入口可传空字符串使用明确的建议入口。',
+             {'program_id': TEXT, 'project_entry': TEXT}, ['program_id', 'project_entry']),
+    function('list_run_hosts', '列出可选择的主控部署机和已批准宿主机。指定其他电脑前核对编号；空编号表示主控部署机。', {}, []),
+    function('create_task_from_program', '按用户明确的安排创建一项普通任务及计划。使用本对话已上传程序或已保存草稿，保留源码，自动准备独立环境；此工具不试跑，也不立即执行业务代码。缺少具体时间先询问。重复调用返回原任务，不重复创建。',
+             {key: TEXT for key in ['source_kind', 'source_id', 'name', 'description', 'trigger_type', 'trigger_config', 'target_host_id', 'project_entry', 'request_quote']},
+             ['source_kind', 'source_id', 'name', 'description', 'trigger_type', 'trigger_config', 'target_host_id', 'project_entry', 'request_quote']),
     function("scrape_collect_options", "在原生持久会话批量选择已观察的公开筛选项并从真实列表JSON保存结果，减少重复模型调用。menu为展开菜单的唯一悬停选择器；options为同一级选项元素CSS；values为实际选项文字JSON数组，最多20项；reset_text为该级重置选项文字；dismiss为已确认普通关闭按钮CSS，不需要传空串。response_id为已捕获且带分页字段的只读列表响应。rows/fields/filters/unique_by/limit同scrape_json_extract。每项先重置再选择，保持原城市/关键词；遇错误或110秒上限返回已保存结果与remaining，可处理原因后续采。", {"menu": TEXT, "options": TEXT, "values": TEXT, "reset_text": TEXT, "dismiss": TEXT, "response_id": TEXT, "rows": TEXT, "fields": TEXT, "filters": TEXT, "unique_by": TEXT, "limit": TEXT}, ["menu", "options", "values", "reset_text", "dismiss", "response_id", "rows", "fields", "filters", "unique_by", "limit"]),
     function("browser_refine_results", "按需求修正已保存CSV，去除混入的无关记录。action=filter时，filters为已有字段到equals/contains_any/excludes_any规则的JSON；传完整条件，例如排除实习。后续提取自动沿用这些条件。返回真实保留数量，保存最近一次筛选前备份。action=undo、filters={}可撤销上次筛选及规则（包括其后的新增记录，先核对）。", {"action": TEXT, "filters": TEXT}, ["action", "filters"]),
     function("scrape_api_page", "在同一原生无头浏览器内验证实际列表接口的下一页。response_id 来自已捕获搜索/列表 JSON；pagination 为已存在的分页字段到整数的 JSON，例如{\"page\":2}。只可修改 page/pageSize/offset/limit，城市、关键词等原条件保持不变，不允许构造任意请求。返回真实状态、记录数和新 response_id；无数据、重复或明确限制时调整依据，不盲目重试。", {"response_id": TEXT, "pagination": TEXT}, ["response_id", "pagination"]),

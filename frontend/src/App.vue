@@ -36,6 +36,7 @@ const {
   isAdmin,
   isSuperAdmin,
   loading,
+  loadAll,
   logout,
   managementTab,
   managementTabs,
@@ -237,6 +238,8 @@ function closeAccountMenu(event) {
       :task-id="aiTaskId"
       @close="aiOpen = false"
       @use-draft="prepareAiDraft"
+      @task-created="() => loadAll({ quiet: true })"
+      @open-task="() => { aiOpen = false; navigateTo('tasks') }"
       @open-execution="
         (id) => {
           aiOpen = false

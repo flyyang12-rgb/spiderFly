@@ -3,8 +3,10 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import AiMaintenance from './AiMaintenance.vue'
 import AiThreadPicker from './AiThreadPicker.vue'
 import AiMessageContent from './AiMessageContent.vue'
+import AiProgramUpload from './AiProgramUpload.vue'
+import { triggerDetail } from './lib/format'
 const props = defineProps({ taskId: { type: Number, default: null } })
-const emit = defineEmits(['close', 'use-draft', 'open-execution'])
+const emit = defineEmits(['close', 'use-draft', 'open-execution', 'task-created', 'open-task'])
 const thread = ref(null)
 const threads = ref([])
 const message = ref('')
@@ -14,6 +16,7 @@ const selectedDraft = ref(null)
 const setting = ref(null)
 const showHistory = ref(false)
 const composer = ref(null)
+const programUpload = ref(null)
 const dialog = ref(null)
 const codePanel = ref(null)
 const outputPanel = ref(null)
@@ -25,11 +28,12 @@ const hasBrowser = computed(() => thread.value?.browser && (thread.value.browser
 const hasOutput = computed(() => Boolean(thread.value?.drafts?.length || hasBrowser.value))
 let previousFocus = null
 let previousOverflow = ''
-const emptyThread = computed(() => Boolean(thread.value) && !thread.value.task_id && !thread.value.messages?.length && !thread.value.turns?.length && !thread.value.drafts?.length && (!thread.value.browser || (thread.value.browser.status === 'closed' && !thread.value.browser.row_count && !thread.value.browser.message)))
+const emptyThread = computed(() => Boolean(thread.value) && !thread.value.task_id && !thread.value.program && !thread.value.messages?.length && !thread.value.turns?.length && !thread.value.drafts?.length && (!thread.value.browser || (thread.value.browser.status === 'closed' && !thread.value.browser.row_count && !thread.value.browser.message)))
 const visibleDrafts = computed(() => showHistory.value ? thread.value?.drafts || [] : (thread.value?.drafts || []).slice(0, 1))
 let timer
 let alive = true
 let generation = 0
+let notifiedTaskId = null
 const active = computed(() => thread.value?.turns?.find(item => ['pending', 'running'].includes(item.status)))
 const canSend = computed(() => Boolean(thread.value && message.value.trim() && !active.value && !busy.value && setting.value?.key_configured))
 const latest = computed(() => thread.value?.turns?.[0])
@@ -97,6 +101,10 @@ async function load(id = thread.value?.id) {
   const value = await api('/threads/' + id)
   if (alive && token === generation) {
     thread.value = value
+    if (value.created_task && value.created_task.id !== notifiedTaskId) {
+      notifiedTaskId = value.created_task.id
+      emit('task-created', value.created_task)
+    }
     threads.value = threads.value.map(item => item.id === value.id ? { ...item, title: value.title } : item)
   }
 }
@@ -240,11 +248,15 @@ onBeforeUnmount(() => { alive = false; generation++; window.clearInterval(timer)
       <div class="ai-layout" :class="{ 'has-output': hasOutput && showOutput, 'show-output': showOutput }" :inert="Boolean(selectedDraft)">
         <main class="ai-chat">
           <div ref="messageList" class="ai-messages" aria-label="对话内容" @scroll="trackScroll">
-            <div v-if="!thread?.messages?.length" class="ai-intro"><h3>想让任务做什么？</h3></div>
+            <div v-if="!thread?.messages?.length" class="ai-intro"><h3>{{ thread?.program ? '想什么时候运行？' : '想让任务做什么？' }}</h3></div>
             <article v-for="item in thread?.messages || []" :key="item.id" class="ai-message" :class="item.role" :aria-label="item.role === 'user' ? '我的消息' : 'AI 回复'">
               <span class="ai-message-author">{{ item.role === 'user' ? '你' : 'AI 助手' }}</span>
               <div v-if="item.role === 'user'" class="ai-user-content">{{ item.content }}</div>
               <AiMessageContent v-else :content="item.content" />
+            </article>
+            <article v-if="thread?.created_task" class="ai-created-task" aria-label="已创建任务">
+              <div><span class="ai-created-label">任务已创建</span><strong>{{ thread.created_task.name }}</strong><p>{{ triggerDetail(thread.created_task) }} · {{ thread.created_task.host_name }}</p><small>{{ thread.created_task.environment_status === 'ready' ? '环境就绪' : thread.created_task.environment_status === 'failed' ? '环境准备失败' : thread.created_task.target_host_id ? '运行时自动准备环境' : '正在自动准备环境' }}</small></div>
+              <button class="button secondary" type="button" @click="emit('open-task')">查看任务</button>
             </article>
             <details v-if="thread?.events?.length || tokens" class="ai-disclosure ai-records">
               <summary>处理记录</summary>
@@ -254,12 +266,16 @@ onBeforeUnmount(() => { alive = false; generation++; window.clearInterval(timer)
           </div>
           <p v-if="turnError && turnError !== error" class="ai-turn-error" role="alert">{{ turnError }}</p>
           <form class="ai-compose" @submit.prevent="send">
+            <AiProgramUpload ref="programUpload" :thread-id="thread?.id" :program="thread?.program" :readonly="Boolean(thread?.task_id)" :disabled="busy || Boolean(active)" @busy="value => busy = value" @changed="load()" @error="value => error = value" />
             <textarea ref="composer" v-model="message" rows="2" maxlength="12000" aria-label="任务需求" aria-describedby="ai-compose-hint" placeholder="描述任务或继续提问…" :disabled="!thread" @keydown="composeKeydown"></textarea>
             <div class="ai-compose-footer">
               <span id="ai-compose-hint" class="ai-compose-hint">Enter 发送 · Shift+Enter 换行</span>
               <span v-if="latest && latest.status !== 'completed'" class="ai-status" aria-live="polite"><i :class="{ active: Boolean(active) }" aria-hidden="true"></i>{{ active?.stop_requested ? '正在停止…' : labels[latest.status] }}</span>
-              <button v-if="active" class="button secondary ai-send" type="button" :disabled="active.stop_requested" @click="stop">停止</button>
-              <button v-else class="button primary ai-send" type="submit" :disabled="!canSend">发送 <span aria-hidden="true">↑</span></button>
+              <div class="ai-compose-actions">
+                <button v-if="!thread?.task_id" class="button secondary ai-upload-action" type="button" :disabled="!thread || busy || Boolean(active)" @click="programUpload?.open()">{{ programUpload?.uploading ? '正在上传…' : thread?.program ? '更换程序' : '上传 PY / ZIP' }}</button>
+                <button v-if="active" class="button secondary ai-send" type="button" :disabled="active.stop_requested" @click="stop">停止</button>
+                <button v-else class="button primary ai-send" type="submit" :disabled="!canSend">发送 <span aria-hidden="true">↑</span></button>
+              </div>
             </div>
           </form>
         </main>
@@ -316,6 +332,8 @@ onBeforeUnmount(() => { alive = false; generation++; window.clearInterval(timer)
 .ai-intro{display:grid;place-content:center;min-height:100%;padding:32px 0}.ai-intro h3{margin:0;color:var(--ink,#221814);font-size:24px;font-weight:500;line-height:1.5;letter-spacing:-.02em}
 .ai-compose{flex:none;margin:0 auto;width:100%;max-width:760px;padding:12px;border:1px solid #d9dfd9;border-radius:12px;background:#fff;transition:border-color 140ms ease,box-shadow 140ms ease}.ai-compose:focus-within{border-color:var(--brand,#009139);box-shadow:0 0 0 2px rgb(0 145 57 / 7%)}
 .ai-compose textarea{display:block;width:100%;height:64px;min-height:56px;max-height:160px;resize:vertical;padding:4px;border:0;outline:none;background:transparent;color:var(--text,#292b28);font:inherit;font-size:14px;line-height:1.7}.ai-compose textarea::placeholder{color:#828a83}.ai-compose-footer{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:8px 12px;min-height:36px;margin-top:4px}.ai-compose-hint{margin-right:auto;color:var(--muted);font-size:12px;line-height:1.5}.ai-send{flex:none;min-width:76px;min-height:36px;font-size:13px;border-radius:8px}.ai-send span{margin-left:4px;font-size:17px;font-weight:400}
+.ai-compose-actions{display:flex;align-items:center;gap:8px;flex:none;margin-left:auto}.ai-upload-action{min-height:36px;padding:6px 10px;font-size:13px;font-weight:400;border-radius:8px;white-space:nowrap}
+.ai-created-task{display:flex;align-items:center;justify-content:space-between;gap:16px;max-width:720px;margin:0 auto 24px;padding:16px;border:1px solid var(--border);border-radius:10px;background:var(--surface-subtle)}.ai-created-task>div{min-width:0}.ai-created-label{display:block;margin-bottom:6px;color:var(--brand-strong);font-size:12px}.ai-created-task strong{display:block;font-size:15px;font-weight:500;overflow-wrap:anywhere}.ai-created-task p{margin:6px 0;font-size:13px;line-height:1.6;color:var(--muted);overflow-wrap:anywhere}.ai-created-task small{font-size:12px;color:var(--muted)}.ai-created-task .button{flex:none;font-size:13px;font-weight:400}
 .ai-status{display:flex;align-items:center;gap:8px;margin-right:auto;color:#5e6961;font-size:12px;line-height:18px}.ai-status i{width:6px;height:6px;border-radius:50%;background:#879389;flex:none}.ai-status i.active{background:var(--brand,#009139);animation:ai-pulse 1.6s ease-in-out infinite}
 .ai-error,.ai-turn-error{margin:12px 24px 0;padding:10px 12px;border:1px solid #f2d4c9;border-radius:8px;background:#fff7f3;color:#a13a2d;font-size:13px;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere;max-height:100px;overflow:auto;flex:none}.ai-turn-error{margin:0 0 12px}
 .ai-side{display:none;min-width:0;min-height:0;overflow:auto;overscroll-behavior:contain;padding:24px 20px;border-left:1px solid var(--border-soft,#ecefec);background:#fafbf9;scrollbar-width:thin}.ai-side.mobile-open{display:block}

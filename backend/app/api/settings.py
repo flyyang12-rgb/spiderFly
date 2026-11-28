@@ -71,6 +71,16 @@ def get_feishu_settings(response: Response, user: dict = Depends(admin_user)) ->
         raise HTTPException(400, "飞书配置无法读取，请检查配置目录", headers=_PRIVATE_HEADERS) from None
 
 
+@router.get("/api/settings/feishu/credentials")
+def get_feishu_credentials(response: Response, user: dict = Depends(super_admin_user)) -> dict:
+    del user
+    response.headers.update(_PRIVATE_HEADERS)
+    try:
+        return feishu_settings.private_settings()
+    except Exception:
+        raise HTTPException(400, "飞书配置无法读取，请检查配置目录", headers=_PRIVATE_HEADERS) from None
+
+
 async def _feishu_payload(request: Request) -> dict:
     body = await request.body()
     if len(body) > 4000:

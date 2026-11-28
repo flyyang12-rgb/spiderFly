@@ -1449,9 +1449,11 @@ async def build_environment(app_id: int) -> None:
 
         if not python_path.is_file():
             raise FileNotFoundError("虚拟环境创建后未找到 Python 解释器")
+        # -I ignores PYTHONUTF8/PYTHONIOENCODING; the pipe is decoded as UTF-8.
         code, output = await _run_command(
             str(python_path),
             "-I",
+            "-X", "utf8",
             "-c",
             "import sys; print(sys.executable); print(sys.prefix)",
             cwd=app_dir,
@@ -1480,7 +1482,7 @@ async def build_environment(app_id: int) -> None:
             raise RuntimeError("Python 依赖检查未通过")
 
         code, output = await _run_command(
-            str(python_path), '-I', '-c',
+            str(python_path), '-I', '-X', 'utf8', '-c',
             'import sys,struct,json,importlib.metadata as m;print(json.dumps({"python":sys.version.split()[0],"bits":struct.calcsize("P")*8,"executable":sys.executable,"prefix":sys.prefix,"packages":sorted([{"name":d.metadata["Name"],"version":d.version} for d in m.distributions()],key=lambda d:d["name"].lower())}))',
             cwd=app_dir, timeout_seconds=ENV_VERIFY_TIMEOUT_SECONDS, phase='记录环境')
         if code != 0: raise RuntimeError('读取实际 Python 环境失败')

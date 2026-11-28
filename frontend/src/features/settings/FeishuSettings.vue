@@ -26,10 +26,14 @@ function apply(data) {
   form.app_id = props.canEdit && typeof data.app_id === 'string' ? data.app_id : ''
   form.receiver_id = props.canEdit && typeof data.receiver_id === 'string' ? data.receiver_id : ''
   form.receiver_id_type = data.receiver_id_type === 'open_id' ? 'open_id' : 'mobile'
-  wipeSecrets(); confirmClear.value = false; loaded.value = true
+  wipeSecrets()
+  if (props.canEdit) {
+    for (const name of ['webhook_url', 'webhook_secret', 'app_secret']) form[name] = typeof data[name] === 'string' ? data[name] : ''
+  }
+  confirmClear.value = false; loaded.value = true
 }
-async function request(method, body, state) {
-  const response = await fetch('/api/settings/feishu', { credentials: 'include', method, signal: state.signal, headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined })
+async function request(method, body, state, suffix = '') {
+  const response = await fetch('/api/settings/feishu' + suffix, { credentials: 'include', method, signal: state.signal, headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined })
   let data
   try { data = await response.json() } catch { data = {} }
   if (!current(state)) throw new DOMException('请求已失效', 'AbortError')
@@ -47,7 +51,7 @@ function failure(error, state, secrets = []) {
 function finish(state) { if (current(state)) { operation.value = ''; controller = undefined } }
 async function load() {
   const state = begin('load'); message.value = ''; failed.value = false
-  try { const data = await request('GET', undefined, state); if (current(state)) apply(data) }
+  try { const data = await request('GET', undefined, state, props.canEdit ? '/credentials' : ''); if (current(state)) apply(data) }
   catch (error) { failure(error, state) }
   finally { finish(state) }
 }
@@ -58,7 +62,12 @@ async function save() {
   else Object.assign(body, { app_id: form.app_id.trim(), app_secret: form.app_secret, receiver_id: form.receiver_id.trim(), receiver_id_type: form.receiver_id_type })
   const secrets = [body.webhook_url, body.webhook_secret, body.app_secret].filter(Boolean)
   const state = begin('save'); message.value = ''; failed.value = false
-  try { const data = await request('PUT', body, state); if (current(state)) { apply(data); message.value = '配置已保存'; emit('saved', data) } }
+  try {
+    const data = await request('PUT', body, state)
+    const details = await request('GET', undefined, state, '/credentials')
+    if (details.revision !== data.revision) throw new Error('配置已被其他操作更新，请重新加载')
+    if (current(state)) { apply(details); message.value = '配置已保存'; emit('saved', data) }
+  }
   catch (error) { failure(error, state, secrets) }
   finally { finish(state) }
 }
@@ -79,25 +88,25 @@ onUnmounted(() => { disposed = true; cancel(); wipeSecrets(); form.app_id = ''; 
     <header class="panel-heading service-config-heading">
       <h2 id="feishu-settings-title">飞书通知</h2>
       <span class="mini-badge" :class="saved?.configured ? 'success-badge' : 'neutral-badge'">{{ saved?.configuration_error ? '配置异常' : loaded ? saved?.configured ? '已配置' : '未配置' : '加载中' }}</span>
-      <fieldset v-if="canEdit && !saved?.read_only" class="notification-choice" :disabled="!loaded || pending">
+      <fieldset v-if="canEdit" class="notification-choice" :disabled="!loaded || pending || readOnly">
         <legend class="sr-only">通知方式</legend>
         <label><input v-model="form.mode" class="sr-only" type="radio" value="webhook" name="feishu-mode" /><span>群通知</span></label>
         <label><input v-model="form.mode" class="sr-only" type="radio" value="application" name="feishu-mode" /><span>个人通知</span></label>
       </fieldset>
     </header>
     <form class="service-config-form" @submit.prevent="save">
-      <template v-if="canEdit && !saved?.read_only">
+      <template v-if="canEdit">
         <template v-if="form.mode === 'webhook'">
-          <label class="field credential-field"><span>Webhook 地址</span><input v-model="form.webhook_url" type="password" autocomplete="off" spellcheck="false" maxlength="2048" :disabled="!loaded || pending" :placeholder="saved?.webhook_url_configured ? '留空保留当前地址' : '粘贴群机器人的 Webhook 地址'" /></label>
-          <label class="field credential-field"><span>签名密钥 <small>可选</small></span><input v-model="form.webhook_secret" type="password" autocomplete="new-password" spellcheck="false" maxlength="500" :disabled="!loaded || pending || form.clear_webhook_secret" :placeholder="saved?.webhook_secret_configured ? '留空保留当前密钥' : '未开启签名校验可留空'" /></label>
-          <label v-if="saved?.webhook_secret_configured" class="clear-signature"><input v-model="form.clear_webhook_secret" type="checkbox" :disabled="pending" />清除已保存的签名密钥</label>
+          <label class="field credential-field"><span>Webhook 地址</span><input v-model="form.webhook_url" type="text" autocomplete="off" spellcheck="false" maxlength="2048" :readonly="readOnly" :disabled="!loaded || pending" placeholder="粘贴群机器人的 Webhook 地址" /></label>
+          <label class="field credential-field"><span>签名密钥 <small>可选</small></span><input v-model="form.webhook_secret" type="text" autocomplete="off" spellcheck="false" maxlength="500" :readonly="readOnly" :disabled="!loaded || pending || form.clear_webhook_secret" placeholder="未开启签名校验可留空" /></label>
+          <label v-if="saved?.webhook_secret_configured && !readOnly" class="clear-signature"><input v-model="form.clear_webhook_secret" type="checkbox" :disabled="pending" />清除已保存的签名密钥</label>
         </template>
         <template v-else>
-          <label class="field credential-field"><span>App ID</span><input v-model="form.app_id" autocomplete="off" spellcheck="false" maxlength="200" :disabled="!loaded || pending" /></label>
-          <label class="field credential-field"><span>App Secret</span><input v-model="form.app_secret" type="password" autocomplete="new-password" spellcheck="false" maxlength="500" :disabled="!loaded || pending" :placeholder="saved?.app_secret_configured ? '留空保留当前密钥' : '输入应用密钥'" /></label>
+          <label class="field credential-field"><span>App ID</span><input v-model="form.app_id" autocomplete="off" spellcheck="false" maxlength="200" :readonly="readOnly" :disabled="!loaded || pending" /></label>
+          <label class="field credential-field"><span>App Secret</span><input v-model="form.app_secret" type="text" autocomplete="off" spellcheck="false" maxlength="500" :readonly="readOnly" :disabled="!loaded || pending" placeholder="输入应用密钥" /></label>
           <div class="recipient-row">
-            <label class="field"><span>收件人类型</span><select v-model="form.receiver_id_type" :disabled="!loaded || pending"><option value="mobile">手机号</option><option value="open_id">Open ID</option></select></label>
-            <label class="field"><span>{{ form.receiver_id_type === 'open_id' ? '收件人 Open ID' : '收件人手机号' }}</span><input v-model="form.receiver_id" :inputmode="form.receiver_id_type === 'mobile' ? 'tel' : 'text'" autocomplete="off" spellcheck="false" maxlength="200" :disabled="!loaded || pending" /></label>
+            <label class="field"><span>收件人类型</span><select v-model="form.receiver_id_type" :disabled="!loaded || pending || readOnly"><option value="mobile">手机号</option><option value="open_id">Open ID</option></select></label>
+            <label class="field"><span>{{ form.receiver_id_type === 'open_id' ? '收件人 Open ID' : '收件人手机号' }}</span><input v-model="form.receiver_id" :inputmode="form.receiver_id_type === 'mobile' ? 'tel' : 'text'" autocomplete="off" spellcheck="false" maxlength="200" :readonly="readOnly" :disabled="!loaded || pending" /></label>
           </div>
         </template>
       </template>

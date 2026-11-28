@@ -206,6 +206,63 @@ class HttpSettingsTests(SettingsFixture, unittest.TestCase):
         self.assertEqual(response.headers["cache-control"], "no-store")
         self.assertNotIn(HOOK, str(self.audit.call_args)); self.audit.assert_called_once()
 
+    def test_configuration_owner_reads_saved_profiles_in_plaintext_over_lan_origin(self):
+        self.save(webhook_secret="synthetic-signature")
+        self.save(mode="application", app_id="cli_synthetic", app_secret="synthetic-app-secret", receiver_id="13800000000", receiver_id_type="mobile")
+        with TestClient(self.app, base_url="http://192.168.110.61:8383") as lan_client:
+            result = lan_client.get("/api/settings/feishu/credentials")
+        self.assertEqual(result.status_code, 200)
+        self.assertEqual(result.headers["cache-control"], "no-store")
+        self.assertEqual(result.headers["pragma"], "no-cache")
+        value = result.json()
+        self.assertEqual(value["webhook_url"], HOOK)
+        self.assertEqual(value["webhook_secret"], "synthetic-signature")
+        self.assertEqual(value["app_secret"], "synthetic-app-secret")
+        self.assertEqual(value["revision"], settings.public_settings()["revision"])
+        for secret in (HOOK, "synthetic-signature", "synthetic-app-secret"):
+            self.assertNotIn(secret.encode(), self.path.read_bytes())
+            self.assertNotIn(secret, self.client.get("/api/settings/feishu").text)
+        self.audit.assert_not_called()
+
+    def test_credentials_read_is_denied_before_decryption_for_other_roles(self):
+        self.save(webhook_secret="synthetic-signature")
+        for role in ("admin", "operator"):
+            self.user["role"] = role
+            with patch.object(settings, "private_settings") as read:
+                self.assertEqual(self.client.get("/api/settings/feishu/credentials").status_code, 403)
+            read.assert_not_called()
+        self.app.dependency_overrides.clear()
+        with patch.object(settings, "private_settings") as read:
+            self.assertEqual(self.client.get("/api/settings/feishu/credentials").status_code, 401)
+        read.assert_not_called()
+
+    def test_environment_values_are_visible_readonly_and_clear_removes_saved_values(self):
+        self.save(webhook_secret="synthetic-signature")
+        with patch.dict(os.environ, {"FEISHU_WEBHOOK_URL": HOOK + "-env", "FEISHU_WEBHOOK_SECRET": "env-signature"}):
+            value = self.client.get("/api/settings/feishu/credentials").json()
+            self.assertTrue(value["read_only"])
+            self.assertEqual(value["webhook_url"], HOOK + "-env")
+            self.assertEqual(value["webhook_secret"], "env-signature")
+        cleared = self.client.request("DELETE", "/api/settings/feishu", json={"revision": settings.public_settings()["revision"]})
+        self.assertEqual(cleared.status_code, 200)
+        value = self.client.get("/api/settings/feishu/credentials").json()
+        self.assertFalse(value["configured"])
+        self.assertEqual(value["webhook_url"], "")
+        self.assertEqual(value["webhook_secret"], "")
+
+    def test_broken_credentials_show_recoverable_status_and_errors_hide_values(self):
+        self.save(webhook_secret="synthetic-signature")
+        self.sealed.clear()
+        value = self.client.get("/api/settings/feishu/credentials").json()
+        self.assertTrue(value["configuration_error"])
+        self.assertEqual(value["webhook_url"], "")
+        self.assertEqual(value["webhook_secret"], "")
+        with patch.object(settings, "private_settings", side_effect=ValueError(HOOK)):
+            result = self.client.get("/api/settings/feishu/credentials")
+        self.assertEqual(result.status_code, 400)
+        self.assertNotIn(HOOK, result.text)
+        self.assertEqual(result.headers["cache-control"], "no-store")
+
     def test_admin_only_reads_status_member_and_anonymous_denied_before_decryption(self):
         self.save(mode="application", app_id="cli_private", app_secret="private-secret", receiver_id="13800000000", receiver_id_type="mobile")
         self.user["role"] = "admin"

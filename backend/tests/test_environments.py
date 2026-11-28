@@ -299,6 +299,38 @@ class ManagedAppLifecycleTests(unittest.TestCase):
         )
         return apps_root, envs_root, db_path, user_id
 
+    def test_install_log_preserves_chinese_interpreter_path(self) -> None:
+        from app import maintenance
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "中文任务环境"
+            data_dir = root / "data"
+            apps_root = data_dir / "apps"
+            envs_root = data_dir / "envs"
+            with (
+                patch.object(database, "DATA_DIR", data_dir),
+                patch.object(database, "DB_PATH", data_dir / "spiderfly.db"),
+                patch.object(database, "RPA_APPS_DIR", apps_root),
+                patch.object(database, "RPA_ENVS_DIR", envs_root),
+                patch.object(environments, "RPA_APPS_DIR", apps_root),
+                patch.object(environments, "RPA_ENVS_DIR", envs_root),
+            ):
+                _, _, _, user_id = self._prepare_database(root)
+                maintenance.init_tables()
+                created = environments.create_managed_app(
+                    "中文安装日志", "main.py", b"print('ok')\n", "", user_id
+                )
+                asyncio.run(environments.build_environment(created["id"]))
+                built = database.fetch_one(
+                    "SELECT * FROM rpa_apps WHERE id = ?", (created["id"],)
+                )
+
+            self.assertEqual(built["environment_status"], "ready", built["environment_error"])
+            env_dir = Path(built["env_path"])
+            self.assertIn(str(environments._environment_python(env_dir)), built["install_log"])
+            self.assertIn(str(env_dir), built["install_log"])
+            self.assertNotIn("\ufffd", built["install_log"])
+
     def test_cleanup_old_environments_preserves_current_and_active_execution(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

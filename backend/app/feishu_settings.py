@@ -170,6 +170,16 @@ def public_settings(*, include_details: bool = False) -> dict:
         return result
 
 
+def private_settings() -> dict:
+    """Configuration form values; only the authenticated configuration owner may read."""
+    with _LOCK:
+        result = public_settings(include_details=True)
+        if result["configuration_error"]:
+            return {**result, "webhook_url": "", "webhook_secret": "", "app_secret": ""}
+        values = _environment() if result["source"] == "environment" else _saved(_snapshot()[0])
+        return {**result, **{key: values[key] for key in ("webhook_url", "webhook_secret", "app_secret")}}
+
+
 def _validate_payload(payload, *, clear: bool = False) -> dict:
     allowed = {"revision"} if clear else {"revision", *_DEFAULTS, "clear_webhook_secret"}
     if not isinstance(payload, dict) or set(payload) - allowed:
